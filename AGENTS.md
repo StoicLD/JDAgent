@@ -14,6 +14,7 @@
 
 - 需求与验收：[v0.1 Agent Runtime 需求](docs/requirements/v0.1-agent-runtime.md)
 - 总体架构：[Agent Runtime 架构](docs/architecture/agent-runtime.md)
+- 核心运行契约：[Runtime 核心契约](docs/architecture/runtime-contracts.md)
 - 模型边界：[ModelPort 设计](docs/architecture/model-port.md)
 - 决策记录：[ADR 目录](docs/decisions/)
 - 实施阶段：[v0.1 实施计划](docs/plans/v0.1-implementation.md)

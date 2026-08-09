@@ -8,6 +8,8 @@
 
 模型无关不等于抹平模型差异。通用能力进入稳定领域类型，Provider 特性通过能力声明和受控扩展表达，不能把原始 SDK 对象泄漏给 Core。
 
+本文件只定义模型边界；跨 Runtime 的停止原因、分层错误映射和事件持久化规则见 [Runtime 核心契约](runtime-contracts.md)。
+
 ## 概念接口
 
 ```python
@@ -53,12 +55,14 @@ class ModelPort(Protocol):
 - `ToolCallDelta`：流式工具名称或参数片段，只用于组装，不能执行。
 - `ToolCallCompleted`：具有稳定 call ID、工具名和完整参数的可执行候选。
 - `UsageReported`：输入、输出及 Provider 可用的缓存或推理用量。
-- `ResponseCompleted`：包含稳定 `finish_reason`。
+- `ResponseCompleted`：包含标准化的 Provider 响应 `finish_reason`。
 - `ModelFailed`：包含分类错误和可安全记录的诊断信息。
 
 只有 `ToolCallCompleted` 可以进入 Tool Runtime。重复或冲突的 call ID 必须作为协议错误处理。
 
-## 错误分类
+`finish_reason` 描述一次 Provider 响应为何结束，不等于整个 Turn 的 `StopReason`。最终映射由 Runtime 完成。
+
+## `ModelErrorCategory`
 
 稳定错误类别包括：
 
@@ -72,6 +76,8 @@ class ModelPort(Protocol):
 - `invalid_response`
 - `provider_internal`
 - `cancelled`
+
+这组值只属于模型边界，不作为 Tool、Session 或整个 Runtime 的全局错误枚举。
 
 Adapter 保存可用于诊断的 Provider 状态码和请求 ID，但不得把 API Key、认证 Header 或未经筛选的响应正文写入错误、事件或日志。
 
@@ -90,4 +96,3 @@ Adapter 保存可用于诊断的 Provider 状态码和请求 ID，但不得把 A
 ## 非职责
 
 `ModelPort` 不执行工具、不审批权限、不保存 Session、不压缩上下文、不检索记忆，也不决定 Agent 是否完成任务。
-

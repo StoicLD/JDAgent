@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-v0.1 需求已批准，当前进入架构与工程规范评审。当前没有产品实现。
+v0.1 需求已批准。架构、Runtime 核心契约和实施顺序已根据独立审查意见修订，当前等待用户最终批准。当前没有产品实现。
 
 ## 已批准事实
 
@@ -19,6 +19,7 @@ v0.1 需求已批准，当前进入架构与工程规范评审。当前没有产
 ## 当前提案
 
 - [Agent Runtime 架构](../architecture/agent-runtime.md)
+- [Runtime 核心契约](../architecture/runtime-contracts.md)
 - [ModelPort 设计](../architecture/model-port.md)
 - [v0.1 实施计划](../plans/v0.1-implementation.md)
 - [Python 工程规范](../development/python-style.md)
@@ -27,17 +28,18 @@ v0.1 需求已批准，当前进入架构与工程规范评审。当前没有产
 
 ## 进行中的工作
 
-- 审阅和收敛 Agent Runtime 架构、ModelPort 设计、Python 工程规范与实施顺序。
+- 审阅修订后的 Agent Runtime 架构、Runtime 核心契约、ModelPort 设计、Python 工程规范与实施顺序。
+- 本轮修订已将 ContextBuilder、Session 投影、Tool Runtime 和 Permission 前移，并将 Agent Loop 与 Fake CLI 垂直切片后移。
 
 ## 已知阻塞项
 
-- Agent Runtime 架构、ModelPort 详细设计、Python 工程规范和实施计划尚未获得用户最终批准。
-- Python 包名、项目发布名和首个 DeepSeek 模型配置尚未决定；它们不影响当前设计基线。
+- Agent Runtime 架构、Runtime 核心契约、ModelPort 详细设计、Python 工程规范和实施计划尚未获得用户最终批准。
+- Python 包名和项目发布名须在 M0 前决定；首个 DeepSeek 模型配置只须在 M9 前决定，不阻塞离线 Runtime。
 
 ## 下一步
 
-1. 用户审阅架构、ModelPort、Python 工程规范和实施计划。
-2. 上述提案批准后创建 Python 工程配置，并按实施计划从 Fake Model 和核心循环开始。
+1. 用户审阅架构、Runtime 核心契约、ModelPort、Python 工程规范和修订后的实施计划。
+2. 上述提案批准后确认包名并创建 Python 工程配置，按计划从领域类型、Ports 和可工作 Fake 开始。
 3. 在产生首个可验证行为后更新本文件，不用实现计划代替真实状态。
 
 ## 恢复入口

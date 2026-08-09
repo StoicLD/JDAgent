@@ -16,6 +16,7 @@
 ## 架构
 
 - [Agent Runtime 架构](../architecture/agent-runtime.md) — `Proposed`
+- [Runtime 核心契约](../architecture/runtime-contracts.md) — `Proposed`
 - [ModelPort 设计](../architecture/model-port.md) — `Proposed`
 
 ## 已批准决策
