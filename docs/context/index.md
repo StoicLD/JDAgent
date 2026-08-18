@@ -11,13 +11,13 @@
 ## 需求与计划
 
 - [v0.1 Agent Runtime 需求](../requirements/v0.1-agent-runtime.md) — `Approved`
-- [v0.1 实施计划](../plans/v0.1-implementation.md) — `Proposed`
+- [v0.1 实施计划](../plans/v0.1-implementation.md) — `Approved`，离线范围已实现
 
 ## 架构
 
-- [Agent Runtime 架构](../architecture/agent-runtime.md) — `Proposed`
-- [Runtime 核心契约](../architecture/runtime-contracts.md) — `Proposed`
-- [ModelPort 设计](../architecture/model-port.md) — `Proposed`
+- [Agent Runtime 架构](../architecture/agent-runtime.md) — `Approved`
+- [Runtime 核心契约](../architecture/runtime-contracts.md) — `Approved`
+- [ModelPort 设计](../architecture/model-port.md) — `Approved`
 
 ## 已批准决策
 
@@ -27,6 +27,16 @@
 
 ## 开发规范
 
-- [Python 工程规范](../development/python-style.md) — `Proposed`
+- [Python 工程规范](../development/python-style.md) — `Approved`
 
-当前没有产品实现、测试报告或正式代码评审记录。只在真实文档产生后向本索引增加链接。
+## 评审与证据
+
+- [v0.1 实现审查](../reviews/v0.1-implementation-review.md) — `pass_with_findings`；离线实现
+  无未处理代码 finding，仍缺真实 DeepSeek 验收与 M10b 人工学习出口
+- [v0.1 完成度审计](../reviews/v0.1-completion-audit.md) — 按 FR、验收标准与里程碑逐项核验
+- [v0.1 评审内容快照](../reviews/v0.1-review-snapshot.sha256) — 不 commit 约束下的逐文件
+  SHA-256 固定范围
+
+## 学习出口
+
+- [v0.1 人工学习检查表](../learning/v0.1-learning-checklist.md) — `Ready`，待学习者本人完成

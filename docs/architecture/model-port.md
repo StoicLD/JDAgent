@@ -1,6 +1,8 @@
 # ModelPort 设计
 
-状态：`Proposed`
+状态：`Approved`
+
+批准日期：2026-08-12
 
 ## 目的
 
