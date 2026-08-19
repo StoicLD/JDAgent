@@ -2,13 +2,23 @@
 
 本仓库是需求、架构、决策、代码、测试、验收结果和项目当前状态的唯一权威来源。私有上下文仓库不是产品依赖。
 
-## 启动顺序
+## 固定启动顺序
+
+Codex、Cursor 和 Claude 的日常协作会话都应以本仓库根目录作为工作目录。开始任何任务前依次执行：
 
 1. 阅读本文件。
-2. 如同级 `../JDAgentAgentContext/` 存在，阅读其 `AGENTS.md`、相关 `shared/` 规则和当前 Agent 自己的私有索引。
-3. 阅读 [当前项目状态](docs/context/current.md) 和 [项目文档索引](docs/context/index.md)。
-4. 只打开当前任务需要的权威文档。
-5. 检查相关仓库的 branch、HEAD、remote 和未提交变更。
+2. 如同级 `../JDAgentAgentContext/` 存在，阅读其 [Agent 地图](../JDAgentAgentContext/AGENTS.md)。
+3. 阅读唯一的完整 [协作及目录组织指南](../JDAgentAgentContext/docs/bootstrap-guide.md)。
+4. 阅读 Context 仓库中的 [共享协作规则](../JDAgentAgentContext/shared/collaboration-rules.md)、[用户偏好](../JDAgentAgentContext/shared/user-preferences.md) 和 [评审准则](../JDAgentAgentContext/shared/review-rubric.md)。
+5. 只读取当前 Agent 自己的私有入口和当前恢复文件：
+   - Codex：`../JDAgentAgentContext/codex/index.md`、`../JDAgentAgentContext/codex/current.md`
+   - Cursor：`../JDAgentAgentContext/cursor/index.md`、`../JDAgentAgentContext/cursor/current.md`
+   - Claude：`../JDAgentAgentContext/claude/CLAUDE.md`、`../JDAgentAgentContext/claude/index.md`、`../JDAgentAgentContext/claude/current.md`
+6. 阅读 [当前项目状态](docs/context/current.md) 和 [项目文档索引](docs/context/index.md)。
+7. 只打开当前任务需要的其他权威文档。
+8. 检查相关仓库的 branch、HEAD、remote 和未提交变更。
+
+如果 Context 仓库不存在，跳过第 2 至 5 步，以本仓库的产品事实继续只读恢复，并向用户报告私有上下文缺失。任一 Agent 都不得读取或修改其他 Agent 的私有目录。
 
 ## 文档路由
 
