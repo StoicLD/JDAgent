@@ -4,7 +4,7 @@
 
 ## 固定启动顺序
 
-Codex、Cursor 和 Claude 的日常协作会话都应以本仓库根目录作为工作目录。开始任何任务前依次执行：
+Codex、Cursor 和 Claude 可以直接从本仓库根目录启动，也可以从上级工作区根目录经 `AGENTS.md` 或 `CLAUDE.md` 路由到本仓库。进入本仓库启动链后，开始任何任务前依次执行：
 
 1. 阅读本文件。
 2. 如同级 `../JDAgentAgentContext/` 存在，阅读其 [Agent 地图](../JDAgentAgentContext/AGENTS.md)。
