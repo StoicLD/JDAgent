@@ -2,13 +2,17 @@
 
 状态：`Implemented`
 
-验收状态：工程与真实 DeepSeek 验收通过；M10b 人工学习出口待完成。
+验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 设计已批准，
+尚未开始产品代码。
 
 ## 当前阶段
 
-v0.1 通用 Agent Runtime 已按批准计划实现。离线工程门禁、真实 DeepSeek 流式回答和
-Tool Call 闭环均已通过。当前只剩 M10b 人工学习出口必须由用户本人完成，因此尚不把整个
-v0.1 标记为最终验收完成。
+v0.1 通用 Agent Runtime 已按批准计划实现并于 2026-08-20 完成最终验收。离线工程门禁、
+真实 DeepSeek 流式回答、Tool Call 闭环和 M10b 人工学习出口均已通过。
+
+v0.2 已完成需求 grilling 与设计批准，目标是把 v0.1 薄 CLI 提升为可安装、可在任意 workspace
+日常使用的持久交互式 CLI。当前处于实施前文档基线阶段，尚未修改产品代码；实际命令仍保持
+v0.1 行为。
 
 ## 已批准事实
 
@@ -28,6 +32,16 @@ v0.1 标记为最终验收完成。
   内容。
 - 2026-08-19 用户批准开发期 DeepSeek Key 回退：显式 `DEEPSEEK_API_KEY`/配置值优先，
   缺省读取工作区 `tmp/keys/deepseek-api-key.txt`。该文件位于产品仓库外，不得进入 Git。
+- 2026-08-20 用户批准 [v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md)、
+  [CLI 应用层架构](../architecture/cli-application.md)、
+  [ADR-0004](../decisions/ADR-0004-cli-application-layer.md) 与
+  [v0.2 实施计划](../plans/v0.2-cli-implementation.md)。
+- v0.2 以交互式 CLI 日常可用性为唯一核心结果；Claude Code 与
+  `claude-code-best/claude-code` 仅是非规范性设计参考，不是兼容目标、代码来源或第二事实源。
+- v0.2 默认真实 Provider 为 DeepSeek；Fake 保留为显式测试能力。CLI 使用增强型行式 REPL，
+  不建设全屏 TUI。
+- 一个显式 workspace 可以拥有多个 Session；项目配置可共享，Session、输入历史和 UI 状态
+  存入按 workspace 分区的本机用户数据目录。
 
 ## 已实现范围
 
@@ -55,16 +69,18 @@ v0.1 标记为最终验收完成。
   源码布局的非阻塞判断项；Spec 为 `pass`、0 findings。
 - 完整记录见 [v0.1 实现审查](../reviews/v0.1-implementation-review.md)。
 
-## 剩余验收项
+## v0.1 最终验收
 
-- 用户完成 [M10b 学习检查表](../learning/v0.1-learning-checklist.md)：闭卷画出模块关系、
-  解释 Tool Call 数据流，并使用 Trace 定位一次注入失败。
+- 用户已于 2026-08-20 完成 [M10b 学习检查表](../learning/v0.1-learning-checklist.md)：闭卷
+  模块关系、Tool Call 数据流和 Trace 故障练习均确认完成。
+- v0.1 没有剩余验收项。
 
 ## 下一步
 
-1. 与用户进行 M10b 学习复盘；未理解的机制进入 v0.2 学习输入。
-2. M10b 完成后把 v0.1 状态升级为最终验收完成，并讨论 v0.2，不提前引入 MCP、RAG
-   或求职领域能力。
+1. 从 [v0.2 实施计划](../plans/v0.2-cli-implementation.md) 的 M1 开始测试先行实现 CLI 合同、
+   配置与 Headless 基础。
+2. 先固定 CLI 合同、配置与 Headless 基础，再进入 Session Catalog、异常恢复和真实终端。
+3. v0.2 不提前引入 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
 
 ## 恢复入口
 

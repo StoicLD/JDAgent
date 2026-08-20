@@ -25,14 +25,22 @@ Job Agent
 - Session Event 是历史事实；模型消息、CLI 输出和压缩结果都是投影。
 - 每项机制必须可单独测试、观察失败并由学习者解释。
 - 只为已批准需求增加抽象，不为假设中的未来框架预留空壳。
+- CLI 应用层可以管理交互生命周期和短暂 UI 状态，但不得复制 Agent Loop、Session 事实或权限
+  判断；终端库只能通过 Adapter 接入。
+- 外部成熟 Agent CLI 是非规范性参考，不是项目事实来源、兼容目标或可直接复制的架构模板。
 
 ## 逻辑结构
 
 ```mermaid
 flowchart LR
-    Root["Composition Root"] --> CLI["CLI Adapter"]
+    Root["Composition Root"] --> CLI["CLI Entry / Application"]
+    Root --> Terminal["Terminal / Presenter Adapters"]
+    Root --> Config["Configuration Resolver"]
     Root --> Coordinator["Turn Coordinator"]
     CLI --> Coordinator
+    Terminal --> CLI
+    CLI --> Catalog["Session Catalog"]
+    Catalog --> Session
     Coordinator --> Session["SessionPort"]
     Coordinator --> Core["Agent Core Loop"]
     Core --> Model["ModelPort"]
@@ -59,7 +67,20 @@ flowchart LR
 
 - Composition Root 只负责读取安全配置、选择 Adapter 并组装依赖，不承载 Turn 业务规则。
 - Turn Coordinator 是应用层 use case，负责一次 Turn 的生命周期：追加输入事件、启动 Core Loop、完成最终事件并返回 `StopReason`。
-- CLI 只负责输入输出和实现交互式 `ApprovalPort`，不直接编排 Model、Tool 或 Session。
+- v0.1 CLI 只负责输入输出和实现交互式 `ApprovalPort`，不直接编排 Model、Tool 或 Session。
+- v0.2 CLI 应用层负责 REPL 生命周期、斜杠命令、Session 导航、取消和 Presenter 选择；它通过
+  Coordinator、Session Catalog 与 Permission 用例工作，不直接编排 Model、Tool 或 JSONL。
+
+### CLI Application、Terminal 与 Presentation
+
+- CLI Entry Point 保持薄，只解析启动参数、选择交互/Headless 模式、调用配置解析与 Composition Root，
+  并映射退出码。
+- Interactive Application 管理当前 Session 引用和 `IDLE/RUNNING/CANCELLING/EXITING` 等短暂
+  状态，不保存消息历史副本。
+- Terminal Adapter 将输入转换为有类型用户动作；Prompt Toolkit 类型不越过 Adapter seam。
+- Presentation Module 将同源 Runtime Event 转换为 Rich、纯文本或 JSON 输出；Presenter 不改变事实。
+- Session Catalog 提供发现、选择和命名用例；其索引是可重建投影，不替代 Session 生命周期事实。
+- 详细设计见 [CLI 应用层架构](cli-application.md)。
 
 ### Agent Core
 
@@ -91,6 +112,9 @@ flowchart LR
 - 通过 `SessionPort` 追加和读取不可变事件。
 - JSONL 是 v0.1 的存储 Adapter，不是领域模型。
 - 会话恢复先重放事件，再生成上下文投影；不得从 CLI 文本猜测历史。
+- v0.2 的 Session Catalog、workspace 分区和异常恢复位于应用/存储侧；Core 仍只依赖窄
+  `SessionPort`。最终半行可以在保留备份后有限修复，中间损坏继续 fail closed；副作用状态
+  不确定时不得自动继续。
 
 ### Context Engine
 
@@ -109,9 +133,9 @@ flowchart LR
 ## 依赖方向
 
 ```text
-CLI / Provider / Storage / Tool Adapters
+CLI / Terminal / Provider / Storage / Tool Adapters
                  ↓
-Application Coordination
+CLI Application + Application Coordination
                  ↓
 Agent Core + Domain Types + Ports
 ```
@@ -119,6 +143,7 @@ Agent Core + Domain Types + Ports
 - Core 不得反向导入 Adapter。
 - Provider SDK 类型只能出现在对应 Adapter 内。
 - JSONL 路径和序列化格式只能出现在 Session Adapter 内。
+- Prompt Toolkit、Rich、TOML 路径和 Catalog 索引类型不得进入 Core。
 - Job Domain Pack 只能通过公开端口和工具注册接口扩展 Runtime。
 
 ## v0.1 Turn 流程

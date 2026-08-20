@@ -23,11 +23,14 @@ Codex、Cursor 和 Claude 可以直接从本仓库根目录启动，也可以从
 ## 文档路由
 
 - 需求与验收：[v0.1 Agent Runtime 需求](docs/requirements/v0.1-agent-runtime.md)
+- 当前需求与验收：[v0.2 CLI 体验需求](docs/requirements/v0.2-cli-experience.md)
 - 总体架构：[Agent Runtime 架构](docs/architecture/agent-runtime.md)
+- 当前 CLI 架构：[CLI 应用层架构](docs/architecture/cli-application.md)
 - 核心运行契约：[Runtime 核心契约](docs/architecture/runtime-contracts.md)
 - 模型边界：[ModelPort 设计](docs/architecture/model-port.md)
 - 决策记录：[ADR 目录](docs/decisions/)
 - 实施阶段：[v0.1 实施计划](docs/plans/v0.1-implementation.md)
+- 当前实施阶段：[v0.2 CLI 实施计划](docs/plans/v0.2-cli-implementation.md)
 - Python 规范：[Python 工程规范](docs/development/python-style.md)
 - 正式评审：`docs/reviews/`；目录在产生首份正式评审时创建。
 
