@@ -32,3 +32,9 @@ class InMemorySession:
             snapshot = tuple(self._events[session_id])
         for event in snapshot:
             yield event
+
+    async def list_session_ids(self) -> tuple[str, ...]:
+        """Return stable identifiers for catalog projection tests."""
+
+        async with self._lock:
+            return tuple(sorted(self._events))

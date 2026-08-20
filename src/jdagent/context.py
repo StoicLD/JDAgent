@@ -5,6 +5,7 @@ from collections.abc import Iterable, Sequence
 
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    RecoverySnapshotPayload,
     RuntimeEvent,
     RuntimeEventType,
     ToolExecutionCompletedPayload,
@@ -43,7 +44,12 @@ def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]
 
     messages: list[ModelMessage] = []
     for event in events:
-        if event.event_type is RuntimeEventType.USER_MESSAGE:
+        if event.event_type is RuntimeEventType.RECOVERY_SNAPSHOT:
+            payload = event.payload
+            if not isinstance(payload, RecoverySnapshotPayload):
+                raise TypeError("recovery_snapshot event has the wrong payload")
+            messages.extend(payload.messages)
+        elif event.event_type is RuntimeEventType.USER_MESSAGE:
             payload = event.payload
             if not isinstance(payload, UserMessagePayload):
                 raise TypeError("user_message event has the wrong payload")

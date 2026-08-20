@@ -6,7 +6,7 @@ from typing import Protocol
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType, RuntimePayload
 from jdagent.domain.model import ModelCapabilities, ModelEvent, ModelRequest
 from jdagent.domain.tools import (
-    ApprovalDecision,
+    ApprovalOutcome,
     ApprovalRequest,
     ToolCall,
     ToolExecutionContext,
@@ -31,6 +31,12 @@ class SessionPort(Protocol):
     def read(self, session_id: str) -> AsyncIterator[RuntimeEvent]: ...
 
 
+class SessionDiscoveryPort(Protocol):
+    """Lists identifiers without exposing storage layout to catalog use cases."""
+
+    async def list_session_ids(self) -> Sequence[str]: ...
+
+
 class ToolRuntimePort(Protocol):
     """Validates, authorizes, and executes one complete tool call."""
 
@@ -40,7 +46,7 @@ class ToolRuntimePort(Protocol):
 class ApprovalPort(Protocol):
     """Collects a human answer for an ASK policy decision."""
 
-    async def request(self, request: ApprovalRequest) -> ApprovalDecision: ...
+    async def request(self, request: ApprovalRequest) -> ApprovalOutcome: ...
 
 
 class RuntimeEventSink(Protocol):

@@ -32,7 +32,7 @@ Codex、Cursor 和 Claude 可以直接从本仓库根目录启动，也可以从
 - 实施阶段：[v0.1 实施计划](docs/plans/v0.1-implementation.md)
 - 当前实施阶段：[v0.2 CLI 实施计划](docs/plans/v0.2-cli-implementation.md)
 - Python 规范：[Python 工程规范](docs/development/python-style.md)
-- 正式评审：`docs/reviews/`；目录在产生首份正式评审时创建。
+- 正式评审与处置：`docs/reviews/`。
 
 ## 工作规则
 

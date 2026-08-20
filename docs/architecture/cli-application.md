@@ -4,6 +4,8 @@
 
 批准日期：2026-08-20
 
+评审修订日期：2026-08-20（`REV-20260820-001`）
+
 适用需求：[v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md)
 
 相关决策：[ADR-0004：CLI 应用层与终端 Adapter](../decisions/ADR-0004-cli-application-layer.md)
@@ -25,6 +27,8 @@ v0.2 在现有 Turn Coordinator 与 Agent Runtime 之外建立可安装、可测
 - **Session Catalog**：面向用例的 Session 发现、选择、命名与状态投影。
 - **Recovery Classifier**：根据物理记录和 Runtime Event 前缀判断能否自动恢复。
 - **UI 状态**：输入缓冲、光标、补全、Spinner 和当前交互阶段；不属于 Session 事实。
+- **UserAction**：Terminal 提交给 Interactive Application 的封闭联合类型；v0.2 只包含
+  `PromptAction | CommandAction | CancelAction | ExitAction`。
 
 ## 逻辑结构
 
@@ -74,7 +78,7 @@ Agent Core + Domain Types + Ports
 
 ### 交互 Prompt
 
-1. Terminal Adapter 把键盘输入转换为 `PromptAction`。
+1. Terminal Adapter 把键盘输入转换为 `UserAction` 的 `PromptAction` 变体。
 2. Interactive Application 检查当前状态允许开始 Turn。
 3. Turn Coordinator 将 Prompt 追加为 Runtime Event 并驱动现有 Agent Loop。
 4. Runtime Event 进入 Session Store 和 Presentation Module。
@@ -93,8 +97,8 @@ Agent Core + Domain Types + Ports
 1. Permission Policy 得出 `ASK` 并通过现有 `ApprovalPort` 发出请求。
 2. Interactive Approval Adapter 将请求转换为安全 `ApprovalView`。
 3. Terminal 展示工具、规范化目标、参数摘要、风险和允许范围。
-4. 用户选择转换为 Approval Decision 或窄范围 Session Rule。
-5. Permission 模块持有和匹配规则；Terminal 不维护旁路状态。
+4. 用户选择转换为 `ApprovalOutcome`；一次允许不带规则，Session 级允许带一条窄范围规则。
+5. Permission 模块验证、持久化和匹配规则；Terminal 不维护旁路状态。
 
 ### Headless
 
@@ -152,6 +156,18 @@ RUNNING_TURN
    └──► IDLE
 ```
 
+内部状态名与 Presenter 的稳定 UI 标签一一对应，Presenter 不得自行推断另一套状态：
+
+| Interactive Application 状态 | UI 标签 |
+| --- | --- |
+| `STARTING` | `starting` |
+| `IDLE` | `idle` |
+| `RUNNING_TURN` | `generating` |
+| `WAITING_APPROVAL` | `waiting_approval` |
+| `RUNNING_TOOL` | `running_tool` |
+| `CANCELLING` | `cancelling` |
+| `EXITING` | `exiting` |
+
 它拥有当前 Session 引用、短暂交互状态和取消控制；不保存消息副本，不解释 JSONL，不判断
 工具风险。运行中不允许 `/resume` 或 `/new`；用户必须先完成或取消当前 Turn。
 
@@ -207,7 +223,12 @@ Runtime Event → Presentation Model → Rich / Text / JSON Presenter
 
 Interactive Approval Adapter 继续满足现有 `ApprovalPort`。它只负责将领域请求翻译为终端选择，
 不自行决定 `ALLOW/ASK/DENY`，也不保存 Session 级权限旁路。Session Rule 必须由 Permission
-模块规范化、持有和匹配。
+模块规范化、持有和匹配。目标接口返回结构化 `ApprovalOutcome`，把本次决策与可选的
+`SessionPermissionRule` 分开；Terminal 不构造规则。
+
+Session Rule 是 Session 事实：授权后必须持久化，`/exit` 后恢复同一 Session 时继续有效，并且
+可通过 `/permissions` 查看和撤销。用户配置的写权限上限是 `ASK | DENY`，项目配置只能从 `ASK`
+收紧为 `DENY`；任何 Session Rule 都不得覆盖 `DENY`。
 
 ### Session Store 与 Recovery
 
@@ -259,10 +280,88 @@ OS User Data Directory
     └── input-history
 ```
 
-workspace identity 必须基于规范化绝对路径并处理 Windows 大小写与路径语义；目录名可以使用稳定
-散列，不能泄漏不必要的完整路径。项目配置不得设置 Provider URL、Key 或 Key 文件。
+workspace identity 使用唯一算法：
+
+1. 对显式 workspace 或当前目录执行 `Path.resolve(strict=True)`，解析符号链接与 Windows junction；
+2. 对结果执行 `os.path.normpath`，Windows 再执行 `os.path.normcase`；除文件系统根外去掉尾部分隔符；
+3. 对规范路径的 UTF-8 字节计算 SHA-256，目录名固定为 `sha256-<64 位小写十六进制>`；
+4. 每个分区保存含规范路径的 manifest；散列目录与 manifest 不一致时 fail closed；
+5. workspace 移动或重命名后视为新 workspace，不自动合并旧分区。
+
+平台路径由一个深的 `DataPaths` 模块隐藏，其他模块不得拼接环境变量：
+
+| 平台 | 用户配置 | 用户数据 |
+| --- | --- | --- |
+| Windows | `%APPDATA%\\JDAgent\\config.toml` | `%LOCALAPPDATA%\\JDAgent\\projects\\<identity>\\` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/jdagent/config.toml` | `${XDG_DATA_HOME:-~/.local/share}/jdagent/projects/<identity>/` |
+| macOS | `~/Library/Application Support/JDAgent/config.toml` | `~/Library/Application Support/JDAgent/projects/<identity>/` |
+
+项目配置不得设置 Provider URL、Key 或 Key 文件。
 
 v0.1 的 workspace 内 `.jdagent/sessions` 只读发现或导入必须非破坏性；迁移成功前不删除原文件。
+
+## Headless 公共合同
+
+模式判定只依赖参数，不读取 stdin 猜测意图：
+
+| 位置参数 prompt | `--output` | 模式 |
+| --- | --- | --- |
+| 有 | 未指定 | Headless text |
+| 有 | `text` | Headless text |
+| 有 | `json` | Headless JSON v1 |
+| 无 | 未指定 | Interactive |
+| 无 | 任意值 | 使用错误，退出码 `2` |
+
+v0.1 的可选位置参数 `prompt` 保留；v0.2 不增加仅为模仿其他 CLI 的 `-p` 别名。
+
+稳定退出码如下：
+
+| 退出码 | 语义 |
+| --- | --- |
+| `0` | `SUCCESS` |
+| `1` | `INTERNAL_ERROR`：未分类内部错误 |
+| `2` | `USAGE_OR_CONFIG_ERROR`：参数或配置无效 |
+| `3` | `SESSION_ERROR`：Session 不存在、损坏或不可恢复 |
+| `4` | `RUNTIME_ERROR`：Provider、Tool 或 Turn 失败 |
+| `130` | `CANCELLED`：进程级用户取消 |
+
+交互模式中单个 Turn 失败只呈现错误并回到 prompt；`/exit`、idle EOF 正常退出为 `0`，idle
+`Ctrl+C` 退出为 `130`。
+
+`--output json` 的 v1 stdout 是一个 JSON 对象，必须包含：
+
+```json
+{
+  "schema_version": 1,
+  "status": "success",
+  "session_id": "...",
+  "turn_id": "...",
+  "stop_reason": "completed",
+  "answer": "...",
+  "provider": "deepseek",
+  "model": "...",
+  "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+  "error": null
+}
+```
+
+失败时 `error` 是净化后的结构化对象而非 traceback。`--show-trace` 在 text 模式写安全 trace 到
+stderr；在 JSON 模式可增加安全的 `trace` 字段，不改变必需字段。
+
+v0.1 启动参数按以下规则兼容：
+
+| 参数 | v0.2 合同 |
+| --- | --- |
+| `prompt` | 保留，选择 Headless |
+| `--session-id` | 保留，用于 Headless 显式恢复 |
+| `--provider` | 保留；默认 `deepseek`，显式 `fake` 不读取 Key |
+| `--model`、`--base-url` | 保留为 CLI 覆盖值 |
+| timeout、budget、`--workspace` | 保留 |
+| `--data-dir` | 保留为专家/测试覆盖，不再作为默认 workspace 内目录 |
+| `--show-trace` | 保留，遵守 stdout/stderr 与 JSON 规则 |
+| `--fake-delay` | 仅 `fake` Provider 合法，否则配置错误 |
+| `--output` | 新增，仅 Headless 合法 |
+| `--version` | 新增，从已安装包元数据读取 |
 
 ## 终端依赖
 
@@ -270,6 +369,8 @@ v0.1 的 workspace 内 `.jdagent/sessions` 只读发现或导入必须非破坏�
 - Rich：角色、Markdown、工具状态、审批、警告和错误呈现。
 - 两者只能位于 CLI Adapter 包；Core 和应用用例只接触项目定义的用户动作与展示模型。
 - Scripted Terminal 和 Capture Presenter 是一等测试 Adapter，不是测试专用旁路。
+- M6 开始前必须批准 Windows 终端附录，固定 ConPTY、legacy console、重定向、IME、`Ctrl+C`、
+  EOF、颜色降级和窄窗口的行为与手动测试矩阵。
 
 ## 安全约束
 

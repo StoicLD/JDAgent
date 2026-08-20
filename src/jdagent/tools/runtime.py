@@ -3,15 +3,18 @@
 import asyncio
 import time
 from collections.abc import Iterable
+from pathlib import Path
 
 from jsonschema import Draft202012Validator, ValidationError
 
 from jdagent.domain.events import (
     PermissionRequestedPayload,
     PermissionResolvedPayload,
+    PermissionRuleGrantedPayload,
     RuntimeEventType,
     ToolExecutionStartedPayload,
 )
+from jdagent.domain.json import JsonObject
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
@@ -24,8 +27,31 @@ from jdagent.domain.tools import (
     ToolResultStatus,
 )
 from jdagent.ports import ApprovalPort, RuntimeEventRecorder
-from jdagent.tools.permissions import PermissionPolicy
+from jdagent.tools.permissions import PermissionPolicy, SessionPermissionPolicy
 from jdagent.tools.workspace import WorkspacePathError
+
+
+def _approval_argument_summary(
+    arguments: JsonObject,
+    *,
+    target: str | None,
+) -> JsonObject:
+    """Describe argument shape without retaining user content or secret values."""
+
+    summary: JsonObject = {}
+    for name in sorted(arguments):
+        value = arguments[name]
+        if name == "path" and target is not None:
+            summary[name] = target
+        elif isinstance(value, str):
+            summary[name] = f"<{len(value)} chars>"
+        elif isinstance(value, list):
+            summary[name] = f"<{len(value)} items>"
+        elif isinstance(value, dict):
+            summary[name] = f"<{len(value)} fields>"
+        else:
+            summary[name] = f"<{type(value).__name__}>"
+    return summary
 
 
 class ToolRegistry:
@@ -113,16 +139,58 @@ class ToolRuntime:
                 started,
             )
         if decision is PermissionDecision.ASK:
-            request = ApprovalRequest(call.name, prepared_arguments, definition.risk, call.call_id)
+            prepared_path = prepared_arguments.get("path")
+            target: str | None = None
+            if isinstance(prepared_path, str):
+                try:
+                    target = (
+                        Path(prepared_path)
+                        .relative_to(context.workspace.resolve(strict=True))
+                        .as_posix()
+                    )
+                except (OSError, ValueError):
+                    return self._error(
+                        call,
+                        ToolErrorCode.PATH_OUTSIDE_WORKSPACE,
+                        "Approved path could not be normalized",
+                        started,
+                    )
+            request = ApprovalRequest(
+                call.name,
+                _approval_argument_summary(prepared_arguments, target=target),
+                definition.risk,
+                call.call_id,
+                context.session_id,
+                target,
+            )
             if self._recorder is not None:
                 await self._recorder.record(
                     context.turn_id,
                     RuntimeEventType.PERMISSION_REQUESTED,
                     PermissionRequestedPayload(request),
                 )
-            approval = await self._approval.request(request)
-            await self._record_permission(context, call, decision, approval)
-            if approval is ApprovalDecision.REJECT:
+            outcome = await self._approval.request(request)
+            if outcome.granted_rule is not None:
+                verification = SessionPermissionPolicy(
+                    workspace=context.workspace,
+                    session_id=context.session_id,
+                    rules=(outcome.granted_rule,),
+                ).decide(prepared_call, definition)
+                if verification is not PermissionDecision.ALLOW:
+                    return self._error(
+                        call,
+                        ToolErrorCode.PERMISSION_DENIED,
+                        "Approval returned an invalid Session rule",
+                        started,
+                    )
+                if self._recorder is not None:
+                    await self._recorder.record(
+                        context.turn_id,
+                        RuntimeEventType.PERMISSION_RULE_GRANTED,
+                        PermissionRuleGrantedPayload(outcome.granted_rule),
+                    )
+            await self._record_permission(context, call, decision, outcome.decision)
+            if outcome.decision is ApprovalDecision.REJECT:
                 return self._error(
                     call,
                     ToolErrorCode.APPROVAL_REJECTED,
@@ -137,7 +205,7 @@ class ToolRuntime:
             await self._recorder.record(
                 context.turn_id,
                 RuntimeEventType.TOOL_EXECUTION_STARTED,
-                ToolExecutionStartedPayload(call.call_id, call.name),
+                ToolExecutionStartedPayload(call.call_id, call.name, definition.risk),
             )
         try:
             output = await asyncio.wait_for(

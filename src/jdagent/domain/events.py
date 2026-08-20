@@ -7,11 +7,13 @@ from typing import TypeAlias
 from uuid import uuid4
 
 from jdagent.domain.errors import StopReason
-from jdagent.domain.model import Usage
+from jdagent.domain.model import ModelMessage, Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
     PermissionDecision,
+    RiskLevel,
+    SessionPermissionRule,
     ToolCall,
     ToolResult,
 )
@@ -21,11 +23,15 @@ class RuntimeEventType(StrEnum):
     """Durable event types required for recovery and audit."""
 
     SESSION_STARTED = "session_started"
+    SESSION_RENAMED = "session_renamed"
+    RECOVERY_SNAPSHOT = "recovery_snapshot"
     USER_MESSAGE = "user_message"
     ASSISTANT_MESSAGE_COMPLETED = "assistant_message_completed"
     TOOL_CALL_REQUESTED = "tool_call_requested"
     PERMISSION_REQUESTED = "permission_requested"
     PERMISSION_RESOLVED = "permission_resolved"
+    PERMISSION_RULE_GRANTED = "permission_rule_granted"
+    PERMISSION_RULE_REVOKED = "permission_rule_revoked"
     TOOL_EXECUTION_STARTED = "tool_execution_started"
     TOOL_EXECUTION_COMPLETED = "tool_execution_completed"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
@@ -36,6 +42,25 @@ class RuntimeEventType(StrEnum):
 @dataclass(frozen=True, slots=True)
 class SessionStartedPayload:
     """Marks the creation of a session."""
+
+    name: str | None = None
+    workspace_identity: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRenamedPayload:
+    """Changes the user-visible name of an existing session."""
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecoverySnapshotPayload:
+    """Standalone context copied from a source session through a safe terminal event."""
+
+    parent_session_id: str
+    through_sequence: int
+    messages: tuple[ModelMessage, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,11 +102,26 @@ class PermissionResolvedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class PermissionRuleGrantedPayload:
+    """Persists one active Session permission rule."""
+
+    rule: SessionPermissionRule
+
+
+@dataclass(frozen=True, slots=True)
+class PermissionRuleRevokedPayload:
+    """Deactivates one previously granted Session permission rule."""
+
+    rule_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ToolExecutionStartedPayload:
     """Marks the beginning of an approved tool handler."""
 
     call_id: str
     tool_name: str
+    risk: RiskLevel | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,11 +166,15 @@ class TurnFailedPayload:
 
 RuntimePayload: TypeAlias = (
     SessionStartedPayload
+    | SessionRenamedPayload
+    | RecoverySnapshotPayload
     | UserMessagePayload
     | AssistantMessageCompletedPayload
     | ToolCallRequestedPayload
     | PermissionRequestedPayload
     | PermissionResolvedPayload
+    | PermissionRuleGrantedPayload
+    | PermissionRuleRevokedPayload
     | ToolExecutionStartedPayload
     | ToolExecutionCompletedPayload
     | ModelUsageRecordedPayload

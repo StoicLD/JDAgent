@@ -2,17 +2,19 @@
 
 状态：`Implemented`
 
-验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 设计已批准，
-尚未开始产品代码。
+版本状态：v0.1 `Implemented`；v0.2 `Implemented`（M1–M9 完成，M10 待执行）。
+
+验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 离线工程门禁、
+真实 DeepSeek、PowerShell 主循环和双轴独立审查通过，人工学习出口待执行。
 
 ## 当前阶段
 
 v0.1 通用 Agent Runtime 已按批准计划实现并于 2026-08-20 完成最终验收。离线工程门禁、
 真实 DeepSeek 流式回答、Tool Call 闭环和 M10b 人工学习出口均已通过。
 
-v0.2 已完成需求 grilling 与设计批准，目标是把 v0.1 薄 CLI 提升为可安装、可在任意 workspace
-日常使用的持久交互式 CLI。当前处于实施前文档基线阶段，尚未修改产品代码；实际命令仍保持
-v0.1 行为。
+v0.2 已按批准设计完成 M1–M9：v0.1 薄 CLI 已提升为可安装、可在任意 workspace 日常使用的
+持久交互式 CLI。Cursor 计划审查的 F01–F12 已处置；实现后的 Standards/Spec 双轴审查初轮
+finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学习者完成 M10 人工学习出口。
 
 ## 已批准事实
 
@@ -42,6 +44,8 @@ v0.1 行为。
   不建设全屏 TUI。
 - 一个显式 workspace 可以拥有多个 Session；项目配置可共享，Session、输入历史和 UI 状态
   存入按 workspace 分区的本机用户数据目录。
+- Session 级允许规则是可审计、可撤销的 Session 事实；`/exit` 后恢复同一 Session 时继续有效，
+  但不得覆盖用户或项目的 `DENY`，也不得泄漏到其他 Session。
 
 ## 已实现范围
 
@@ -55,6 +59,16 @@ v0.1 行为。
 - CLI Composition Root；Core 不依赖 Provider SDK、文件系统、环境变量或具体 Session Adapter。
 - CLI 支持安全结构化 `--show-trace`，以及模型/工具超时和硬上下文限制配置；Trace 不输出
   消息正文、工具参数或文件内容。
+- 分层 Configuration Resolver、DeepSeek 默认 Provider、开发 Key 回退和稳定 Headless
+  text/json/退出码合同。
+- Prompt Toolkit 行式 REPL、Rich 流式 Markdown 与持续状态 footer、九条内建斜杠命令、历史、
+  多行输入和 workspace 级 Session Catalog。
+- Session 生命周期事实、名称/短 ID 解析、legacy 非破坏导入、物理尾行修复、逻辑未完成 Turn
+  分类与副作用不确定时的恢复快照。
+- 可取消 Turn 与可恢复主循环；运行中 `Ctrl+C` 返回 idle，空闲 `Ctrl+C` 返回 130，`/exit`/EOF
+  正常保留 Session。
+- 可审计/可撤销的 Session 文件或目录允许规则；恢复同一 Session 后仍有效，新 Session 不继承，
+  且不能放宽用户或项目 `DENY` 上限。
 
 ## 验证与评审证据
 
@@ -68,6 +82,16 @@ v0.1 行为。
 - 2026-08-19 补充审查：Standards 为 `pass_with_findings`、0 个硬违规，仅保留开发路径依赖
   源码布局的非阻塞判断项；Spec 为 `pass`、0 findings。
 - 完整记录见 [v0.1 实现审查](../reviews/v0.1-implementation-review.md)。
+- 2026-08-20：Cursor 对 v0.2 计划 revision `6f34007a4e7bbf66f39c12237ef30c4f51815e5c`
+  完成独立审查；F01–F12 的正式结论和前置门禁见
+  [v0.2 CLI 独立审查处置](../reviews/REV-20260820-001-v0.2-cli-plan-disposition.md)。
+- 2026-08-20：v0.2 最终离线门禁为 `113 passed, 3 skipped`，Ruff format/check、Pyright strict、
+  `git diff --check` 通过；三项显式 opt-in DeepSeek live 测试全部通过。
+- 真实 PowerShell PTY 验证了九条命令的主路径、Session 恢复、运行中取消后继续使用和 `/exit`；
+  最终 `0.2.0` wheel 在源码树外隔离安装后，console script 与 `python -m jdagent` 的 JSON
+  Headless 入口均通过。
+- v0.2 双轴实现审查的 Standards 与 Spec 复核均为 0 Blocker、0 High；完整发现、修复与残余
+  人工环境风险见 [v0.2 实现审查](../reviews/v0.2-implementation-review.md)。
 
 ## v0.1 最终验收
 
@@ -77,10 +101,11 @@ v0.1 行为。
 
 ## 下一步
 
-1. 从 [v0.2 实施计划](../plans/v0.2-cli-implementation.md) 的 M1 开始测试先行实现 CLI 合同、
-   配置与 Headless 基础。
-2. 先固定 CLI 合同、配置与 Headless 基础，再进入 Session Catalog、异常恢复和真实终端。
-3. v0.2 不提前引入 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
+1. 完成 [v0.2 CLI 学习检查表](../learning/v0.2-learning-checklist.md) 的闭卷架构、五条数据流和
+   恢复分类练习。
+2. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
+   恢复仍以已批准的 Session 合同为准。
+3. M10 完成前不启动 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
 
 ## 恢复入口
 

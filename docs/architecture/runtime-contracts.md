@@ -4,9 +4,13 @@
 
 批准日期：2026-08-12
 
+v0.2 契约补充批准日期：2026-08-20
+
 ## 目的与边界
 
-本文固定 v0.1 中 Agent Runtime 各模块之间必须共享的最小语义，避免 Agent Loop、CLI、存储和工具各自发明状态。这里定义的是项目内部契约；在 v0.1 发布前可以通过评审演进，不承诺成为永久公共 API。
+本文固定 Agent Runtime 各模块之间必须共享的最小语义，避免 Agent Loop、CLI、存储和工具
+各自发明状态。主体记录 v0.1 已实现合同；标明 v0.2 的小节是已批准、尚待实现的增量合同。
+这里定义的是项目内部契约，不承诺成为永久公共 API。
 
 Provider 协议细节仍属于各自 Adapter；JSONL、终端交互和文件系统实现也不得进入 Core。
 
@@ -92,6 +96,36 @@ class RuntimeEventSink(Protocol):
 - `RuntimeEventSink` 接收规范事件：恢复相关事件先通过 `SessionPort` 成功追加，再交给 Trace 等观察者；观察者不能回写或改写业务事实。
 - M1 必须提供可工作的 Fake/InMemory Adapter，不使用只会抛出 `NotImplementedError` 的空实现来冻结架构。
 
+### v0.2 ApprovalPort 增量合同
+
+v0.1 `ApprovalDecision.APPROVE | REJECT` 只能表达单次决定。v0.2 将 ApprovalPort 的结果扩展为
+结构化 `ApprovalOutcome`；具体 Python 类型在 M4 实现，但语义现在固定：
+
+```python
+class ApprovalOutcome:
+    decision: ApprovalDecision
+    granted_rule: SessionPermissionRule | None
+
+
+class ApprovalPort(Protocol):
+    async def request(self, request: ApprovalRequest) -> ApprovalOutcome: ...
+```
+
+- `REJECT` 时 `granted_rule` 必须为空，Handler 不执行。
+- “本次允许”使用 `APPROVE + None`，只允许当前 Tool Call。
+- “本 Session 允许”使用 `APPROVE + SessionPermissionRule`。
+- Rule 至少包含稳定 `rule_id`、Session ID、工具名、`file | directory` 目标类型，以及由
+  Tool preflight 和 `WorkspacePathResolver` 得出的规范 workspace-relative 目标。
+- Terminal Adapter 不构造、匹配或保存 Rule；它只把用户选择返回 ApprovalPort Adapter。
+- Permission 模块在应用 Rule 前重新解析目标并 fail closed；字符串前缀匹配仍然禁止。
+- v0.2 用户级写权限上限只有 `ASK | DENY`。项目配置可以把 `ASK` 收紧为 `DENY`，不能配置
+  `ALLOW`；Session Rule 只能把仍为 `ASK` 且目标匹配的调用转换为 `ALLOW`，永远不能覆盖
+  `DENY`。
+- Rule grant/revoke 是 Session 生命周期事实，必须持久化、可审计，并由 `/permissions` 查看和
+  撤销。`/exit` 不结束 Session，因此恢复同一 Session 后 Rule 继续有效。
+- Rule 不跨 Session、workspace 或用户级权限上限传播。具体 grant/revoke event payload 在 M4
+  开工闸门固定；在此之前不得实现旁路白名单。
+
 ## Runtime Event Schema v1
 
 `RuntimeEvent` 是 Session 与 Trace 共享的规范事件词汇。每个可持久化事件至少包含：
@@ -146,6 +180,38 @@ Trace 消费同一条规范事件流并生成面向调试的投影，可以补�
 - 最后一行不完整或无法解析时，返回带字节偏移的 `corrupt_event`；不得静默忽略、自动截断或自动修复。
 - 非尾部坏行、未知 Schema 版本和顺序冲突均 fail closed。
 - 多进程 writer、文件锁恢复、自动修复和事件迁移不属于 v0.1。
+
+### v0.2 显式 Recovery 增量合同
+
+v0.1 的普通 `SessionPort.read` 和 JSONL reader 继续严格 fail closed；不得因为 v0.2 而静默
+忽略或自动截断损坏。v0.2 新增的 Recovery 是显式应用/存储 seam，只能在 Session 打开前运行：
+
+```text
+strict SessionPort.read
+        ↑
+validated repaired file
+        ↑
+explicit Session Recovery
+```
+
+物理恢复合同：
+
+1. Recovery 在排除并发 writer 后读取原始 bytes，不复用“返回部分事件”的宽松 reader。
+2. 只有“至少一个完整有效事件 + 唯一残缺最终记录”可以修复；完整前缀必须通过 JSON、Schema、
+   Session ID 和严格 sequence 全量验证。
+3. 文件从首条记录即残缺、非尾部坏行、未知 Schema、Session ID 冲突或 sequence 冲突全部
+   `UNRECOVERABLE`，原文件不变。
+4. 修复前把原始 bytes 写入同目录 sibling backup；名称包含 Session ID、UTC 时间和原文件
+   SHA-256 前缀。backup 写入、flush、`fsync` 未全部成功时不得修改原文件。
+5. 修复内容写入同目录临时文件，flush、`fsync` 后使用同卷原子替换；失败保留原文件和 backup，
+   并返回稳定 Recovery 错误。
+6. 修复必须返回结构化结果 `NO_REPAIR_NEEDED | REPAIRED_FINAL_PARTIAL_RECORD | UNRECOVERABLE`，
+   包含安全字节偏移、backup 标识和诊断；不得输出记录正文。
+7. 物理修复完成后仍须执行逻辑 Turn 分类；`REPAIRED` 不等于 Session 可以自动继续。
+
+逻辑恢复继续遵循 [CLI 应用层架构](cli-application.md) 的物理×逻辑分类。写风险工具存在
+`tool_execution_started` 而缺少对应 `tool_execution_completed` 时，副作用状态不确定，必须
+阻止自动继续。异常恢复 Session 的持久表示和 ContextBuilder 投影在 M3 开工闸门单独批准。
 
 ## 契约级验收
 

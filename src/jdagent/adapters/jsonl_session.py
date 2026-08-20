@@ -16,9 +16,13 @@ from jdagent.domain.events import (
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
     PermissionResolvedPayload,
+    PermissionRuleGrantedPayload,
+    PermissionRuleRevokedPayload,
+    RecoverySnapshotPayload,
     RuntimeEvent,
     RuntimeEventType,
     RuntimePayload,
+    SessionRenamedPayload,
     SessionStartedPayload,
     ToolCallRequestedPayload,
     ToolExecutionCompletedPayload,
@@ -35,12 +39,14 @@ from jdagent.domain.json import (
     require_object,
     require_string,
 )
-from jdagent.domain.model import Usage
+from jdagent.domain.model import MessageRole, ModelMessage, Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
     PermissionDecision,
+    PermissionTargetKind,
     RiskLevel,
+    SessionPermissionRule,
     ToolCall,
     ToolErrorCode,
     ToolResult,
@@ -52,7 +58,9 @@ _LOCKS_GUARD = threading.Lock()
 _PATH_LOCKS: dict[Path, threading.Lock] = {}
 
 
-def _path_lock(path: Path) -> threading.Lock:
+def session_file_lock(path: Path) -> threading.Lock:
+    """Return the process-local lock shared by session storage adapters."""
+
     normalized = path.resolve(strict=False)
     with _LOCKS_GUARD:
         return _PATH_LOCKS.setdefault(normalized, threading.Lock())
@@ -75,9 +83,30 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
     }
 
 
+def _model_message_to_data(message: ModelMessage) -> JsonObject:
+    return {
+        "role": message.role.value,
+        "content": message.content,
+        "tool_calls": [_tool_call_to_data(call) for call in message.tool_calls],
+        "tool_call_id": message.tool_call_id,
+        "name": message.name,
+    }
+
+
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
     if isinstance(payload, SessionStartedPayload):
-        return {}
+        return {
+            "name": payload.name,
+            "workspace_identity": payload.workspace_identity,
+        }
+    if isinstance(payload, SessionRenamedPayload):
+        return {"name": payload.name}
+    if isinstance(payload, RecoverySnapshotPayload):
+        return {
+            "parent_session_id": payload.parent_session_id,
+            "through_sequence": payload.through_sequence,
+            "messages": [_model_message_to_data(message) for message in payload.messages],
+        }
     if isinstance(payload, UserMessagePayload):
         return {"content": payload.content}
     if isinstance(payload, AssistantMessageCompletedPayload):
@@ -95,6 +124,8 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
                 "arguments": request.arguments,
                 "risk": request.risk.value,
                 "call_id": request.call_id,
+                "session_id": request.session_id,
+                "target": request.target,
             }
         }
     if isinstance(payload, PermissionResolvedPayload):
@@ -103,8 +134,25 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "policy": payload.policy.value,
             "approval": payload.approval.value if payload.approval else None,
         }
+    if isinstance(payload, PermissionRuleGrantedPayload):
+        rule = payload.rule
+        return {
+            "rule": {
+                "rule_id": rule.rule_id,
+                "session_id": rule.session_id,
+                "tool_name": rule.tool_name,
+                "target_kind": rule.target_kind.value,
+                "target": rule.target,
+            }
+        }
+    if isinstance(payload, PermissionRuleRevokedPayload):
+        return {"rule_id": payload.rule_id}
     if isinstance(payload, ToolExecutionStartedPayload):
-        return {"call_id": payload.call_id, "tool_name": payload.tool_name}
+        return {
+            "call_id": payload.call_id,
+            "tool_name": payload.tool_name,
+            "risk": payload.risk.value if payload.risk is not None else None,
+        }
     if isinstance(payload, ToolExecutionCompletedPayload):
         return {"result": _tool_result_to_data(payload.result)}
     if isinstance(payload, ModelUsageRecordedPayload):
@@ -174,9 +222,38 @@ def _tool_result(data: JsonObject) -> ToolResult:
     )
 
 
+def _model_message(data: JsonObject) -> ModelMessage:
+    raw_calls = data.get("tool_calls")
+    if not isinstance(raw_calls, list):
+        raise ValueError("tool_calls must be an array")
+    return ModelMessage(
+        role=MessageRole(require_string(data, "role")),
+        content=require_string(data, "content"),
+        tool_calls=tuple(_tool_call(require_object(item, "tool_call")) for item in raw_calls),
+        tool_call_id=optional_string(data, "tool_call_id"),
+        name=optional_string(data, "name"),
+    )
+
+
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
     if event_type is RuntimeEventType.SESSION_STARTED:
-        return SessionStartedPayload()
+        return SessionStartedPayload(
+            optional_string(data, "name"),
+            optional_string(data, "workspace_identity"),
+        )
+    if event_type is RuntimeEventType.SESSION_RENAMED:
+        return SessionRenamedPayload(require_string(data, "name"))
+    if event_type is RuntimeEventType.RECOVERY_SNAPSHOT:
+        raw_messages = data.get("messages")
+        if not isinstance(raw_messages, list):
+            raise ValueError("messages must be an array")
+        return RecoverySnapshotPayload(
+            parent_session_id=require_string(data, "parent_session_id"),
+            through_sequence=require_integer(data, "through_sequence"),
+            messages=tuple(
+                _model_message(require_object(item, "message")) for item in raw_messages
+            ),
+        )
     if event_type is RuntimeEventType.USER_MESSAGE:
         return UserMessagePayload(require_string(data, "content"))
     if event_type is RuntimeEventType.ASSISTANT_MESSAGE_COMPLETED:
@@ -195,6 +272,8 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
                 require_object(request.get("arguments"), "arguments"),
                 RiskLevel(require_string(request, "risk")),
                 require_string(request, "call_id"),
+                optional_string(request, "session_id") or "",
+                optional_string(request, "target"),
             )
         )
     if event_type is RuntimeEventType.PERMISSION_RESOLVED:
@@ -204,10 +283,25 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
             PermissionDecision(require_string(data, "policy")),
             ApprovalDecision(approval) if approval else None,
         )
+    if event_type is RuntimeEventType.PERMISSION_RULE_GRANTED:
+        rule = require_object(data.get("rule"), "rule")
+        return PermissionRuleGrantedPayload(
+            SessionPermissionRule(
+                rule_id=require_string(rule, "rule_id"),
+                session_id=require_string(rule, "session_id"),
+                tool_name=require_string(rule, "tool_name"),
+                target_kind=PermissionTargetKind(require_string(rule, "target_kind")),
+                target=require_string(rule, "target"),
+            )
+        )
+    if event_type is RuntimeEventType.PERMISSION_RULE_REVOKED:
+        return PermissionRuleRevokedPayload(require_string(data, "rule_id"))
     if event_type is RuntimeEventType.TOOL_EXECUTION_STARTED:
+        risk = optional_string(data, "risk")
         return ToolExecutionStartedPayload(
             require_string(data, "call_id"),
             require_string(data, "tool_name"),
+            RiskLevel(risk) if risk is not None else None,
         )
     if event_type is RuntimeEventType.TOOL_EXECUTION_COMPLETED:
         return ToolExecutionCompletedPayload(
@@ -293,7 +387,7 @@ class JsonlSession:
         self._directory.mkdir(parents=True, exist_ok=True)
 
     async def append(self, event: RuntimeEvent) -> None:
-        path = self._path(event.session_id)
+        path = self.path_for(event.session_id)
         try:
             await asyncio.to_thread(self._append_sync, path, event)
         except SessionError:
@@ -304,12 +398,24 @@ class JsonlSession:
             ) from error
 
     async def read(self, session_id: str) -> AsyncIterator[RuntimeEvent]:
-        path = self._path(session_id)
+        path = self.path_for(session_id)
         events = await asyncio.to_thread(self._read_sync, path, session_id)
         for event in events:
             yield event
 
-    def _path(self, session_id: str) -> Path:
+    async def list_session_ids(self) -> tuple[str, ...]:
+        """List candidate session identifiers without parsing their events."""
+
+        try:
+            paths = await asyncio.to_thread(lambda: tuple(self._directory.glob("*.jsonl")))
+        except OSError as error:
+            raise SessionError(SessionErrorCode.READ_FAILED, "Could not list sessions") from error
+        identifiers = (path.stem for path in paths if _SESSION_ID.fullmatch(path.stem) is not None)
+        return tuple(sorted(identifiers))
+
+    def path_for(self, session_id: str) -> Path:
+        """Resolve a validated session identifier to its storage path."""
+
         if _SESSION_ID.fullmatch(session_id) is None:
             raise SessionError(SessionErrorCode.NOT_FOUND, "Invalid session ID")
         return self._directory / f"{session_id}.jsonl"
@@ -324,7 +430,7 @@ class JsonlSession:
             ).encode("utf-8")
             + b"\n"
         )
-        with _path_lock(path):
+        with session_file_lock(path):
             if path.exists():
                 existing = self._read_sync(path, event.session_id)
                 expected = len(existing) + 1

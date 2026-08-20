@@ -75,8 +75,10 @@ flowchart LR
 
 - CLI Entry Point 保持薄，只解析启动参数、选择交互/Headless 模式、调用配置解析与 Composition Root，
   并映射退出码。
-- Interactive Application 管理当前 Session 引用和 `IDLE/RUNNING/CANCELLING/EXITING` 等短暂
-  状态，不保存消息历史副本。
+- Interactive Application 管理当前 Session 引用和
+  `STARTING/IDLE/RUNNING_TURN/WAITING_APPROVAL/RUNNING_TOOL/CANCELLING/EXITING` 短暂状态，
+  不保存消息历史副本；Presenter 使用的 UI 标签映射以
+  [CLI 应用层架构](cli-application.md#interactive-application)为准。
 - Terminal Adapter 将输入转换为有类型用户动作；Prompt Toolkit 类型不越过 Adapter seam。
 - Presentation Module 将同源 Runtime Event 转换为 Rich、纯文本或 JSON 输出；Presenter 不改变事实。
 - Session Catalog 提供发现、选择和命名用例；其索引是可重建投影，不替代 Session 生命周期事实。

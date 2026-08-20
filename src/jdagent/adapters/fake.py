@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from jdagent.domain.model import ModelCapabilities, ModelEvent, ModelRequest
 from jdagent.domain.tools import (
     ApprovalDecision,
+    ApprovalOutcome,
     ApprovalRequest,
     ToolCall,
     ToolExecutionContext,
@@ -57,13 +58,15 @@ class FakeModelPort:
 class FakeApproval:
     """Returns one decision and records every approval request."""
 
-    def __init__(self, decision: ApprovalDecision) -> None:
-        self._decision = decision
+    def __init__(self, decision: ApprovalDecision | ApprovalOutcome) -> None:
+        self._outcome = (
+            decision if isinstance(decision, ApprovalOutcome) else ApprovalOutcome(decision)
+        )
         self.requests: list[ApprovalRequest] = []
 
-    async def request(self, request: ApprovalRequest) -> ApprovalDecision:
+    async def request(self, request: ApprovalRequest) -> ApprovalOutcome:
         self.requests.append(request)
-        return self._decision
+        return self._outcome
 
 
 class FakeToolRuntime:

@@ -8,7 +8,9 @@ import pytest
 from jdagent.adapters.deepseek import DeepSeekModelPort
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
 from jdagent.adapters.memory import InMemorySession
-from jdagent.composition import RuntimeConfiguration, build_runtime, load_deepseek_api_key
+from jdagent.composition import RuntimeOptions, build_runtime, load_deepseek_api_key
+from jdagent.configuration import ResolvedConfiguration
+from jdagent.data_paths import DataPaths
 from jdagent.domain.events import (
     RuntimeEvent,
     RuntimeEventType,
@@ -30,6 +32,35 @@ T = TypeVar("T")
 
 async def _collect(items: AsyncIterator[T]) -> list[T]:
     return [item async for item in items]
+
+
+def _resolved_configuration(
+    tmp_path: Path,
+    *,
+    provider: str = "fake",
+    api_key: str | None = None,
+    api_key_file: Path | None = None,
+) -> ResolvedConfiguration:
+    paths = DataPaths.for_workspace(
+        tmp_path,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+    )
+    return ResolvedConfiguration(
+        provider=provider,
+        model="deepseek-v4-flash" if provider == "deepseek" else "fake",
+        base_url="https://api.deepseek.com",
+        model_timeout_seconds=30.0,
+        tool_timeout_seconds=10.0,
+        max_context_tokens=None,
+        fake_delay_seconds=0.0,
+        write_permission="ask",
+        api_key=api_key,
+        api_key_file=api_key_file,
+        workspace=tmp_path,
+        session_directory=tmp_path / "sessions",
+        data_paths=paths,
+    )
 
 
 def test_fake_model_replays_scripted_events() -> None:
@@ -76,20 +107,17 @@ def test_fake_approval_records_request() -> None:
     )
     approval = FakeApproval(decision=ApprovalDecision.APPROVE)
 
-    decision = asyncio.run(approval.request(request))
+    outcome = asyncio.run(approval.request(request))
 
-    assert decision is ApprovalDecision.APPROVE
+    assert outcome.decision is ApprovalDecision.APPROVE
+    assert outcome.granted_rule is None
     assert approval.requests == [request]
 
 
 def test_runtime_configuration_rejects_invalid_call_limits(tmp_path: Path) -> None:
     for model_calls, tool_calls in ((0, 1), (1, 0)):
         with pytest.raises(ValueError):
-            RuntimeConfiguration(
-                provider="fake",
-                model="fake",
-                workspace=tmp_path,
-                session_directory=tmp_path / "sessions",
+            RuntimeOptions(
                 max_model_calls=model_calls,
                 max_tool_calls=tool_calls,
             )
@@ -117,12 +145,10 @@ def test_build_runtime_uses_development_key_file_when_explicit_key_is_missing(
 ) -> None:
     key_file = tmp_path / "deepseek-api-key.txt"
     key_file.write_text("file-development-key\n", encoding="utf-8")
-    configuration = RuntimeConfiguration(
+    configuration = _resolved_configuration(
+        tmp_path,
         provider="deepseek",
-        model="deepseek-v4-flash",
-        workspace=tmp_path,
-        session_directory=tmp_path / "sessions",
-        deepseek_api_key_file=key_file,
+        api_key_file=key_file,
     )
 
     composition = build_runtime(
@@ -134,12 +160,10 @@ def test_build_runtime_uses_development_key_file_when_explicit_key_is_missing(
     asyncio.run(composition.aclose())
 
 
-def test_runtime_configuration_repr_does_not_expose_explicit_key(tmp_path: Path) -> None:
-    configuration = RuntimeConfiguration(
+def test_resolved_configuration_repr_does_not_expose_explicit_key(tmp_path: Path) -> None:
+    configuration = _resolved_configuration(
+        tmp_path,
         provider="deepseek",
-        model="deepseek-v4-flash",
-        workspace=tmp_path,
-        session_directory=tmp_path / "sessions",
         api_key="repr-must-not-contain-this-key",
     )
 

@@ -16,7 +16,7 @@
 
 ## 工具基线
 
-首次代码实现前创建可执行配置：
+当前仓库已具备可执行工程配置：
 
 - Python：最低 3.11；具体补丁版本由 `.python-version` 锁定。
 - 环境与依赖：`uv`。
@@ -33,7 +33,8 @@ uv run pyright
 uv run pytest
 ```
 
-本轮不创建 `pyproject.toml`，上述配置在首次实现计划获批后落地。
+`pyproject.toml`、`.python-version` 与锁文件是当前事实；改变 Python、工具或依赖版本必须随实现
+里程碑提交并通过上述门禁，不能只修改本说明。
 
 ## 代码组织
 
@@ -47,7 +48,8 @@ uv run pytest
 
 - 所有公共接口、端口、Adapter 边界和模块级函数必须具有完整类型注解。
 - 使用 `Protocol` 定义依赖反转端口；不因只有一个实现就跳过边界。
-- 内部不可变值优先使用 frozen dataclass；外部 JSON 和配置可在依赖获批后使用 Pydantic 校验。
+- 内部不可变值优先使用 frozen dataclass；小型 TOML 配置使用 Python 3.11 标准库 `tomllib`。
+  只有出现独立批准的复杂运行时类型建模需求，才评估 Pydantic 等新增运行依赖。
 - `Any` 只允许出现在无法避免的第三方边界，必须立即校验并转换为项目领域类型。
 - 不使用无类型 `dict` 在模块间传递重要状态；使用显式 dataclass、TypedDict 或带标识联合。
 - `None`、空集合、缺失字段和未知枚举值的语义必须显式，不依赖 truthy/falsy 猜测。

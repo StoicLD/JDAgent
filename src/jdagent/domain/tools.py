@@ -28,11 +28,41 @@ class PermissionDecision(StrEnum):
     DENY = "deny"
 
 
+class PermissionTargetKind(StrEnum):
+    """The path scope of a persistent session permission rule."""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
 class ApprovalDecision(StrEnum):
     """A user's answer to an approval request."""
 
     APPROVE = "approve"
     REJECT = "reject"
+
+
+@dataclass(frozen=True, slots=True)
+class SessionPermissionRule:
+    """A narrow, workspace-relative permission granted to one session."""
+
+    rule_id: str
+    session_id: str
+    tool_name: str
+    target_kind: PermissionTargetKind
+    target: str
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalOutcome:
+    """One approval decision plus an optional persistent Session rule."""
+
+    decision: ApprovalDecision
+    granted_rule: SessionPermissionRule | None = None
+
+    def __post_init__(self) -> None:
+        if self.decision is ApprovalDecision.REJECT and self.granted_rule is not None:
+            raise ValueError("A rejected approval cannot grant a permission rule")
 
 
 class ToolResultStatus(StrEnum):
@@ -110,3 +140,5 @@ class ApprovalRequest:
     arguments: JsonObject
     risk: RiskLevel
     call_id: str = ""
+    session_id: str = ""
+    target: str | None = None

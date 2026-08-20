@@ -4,13 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jdagent"
-version = "0.1.0"
+version = "0.2.0"
 description = "A model-independent agent runtime built for learning."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28,<1",
     "jsonschema>=4.23,<5",
+    "prompt-toolkit>=3.0.52,<4",
+    "rich>=14.1,<15",
 ]
 
 [project.scripts]

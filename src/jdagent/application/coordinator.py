@@ -39,24 +39,29 @@ class TurnCoordinator:
         workspace: Path,
         loop_factory: AgentLoopFactory,
         event_observers: tuple[EventObserver, ...] = (),
+        workspace_identity: str | None = None,
     ) -> None:
         self._session = session
         self._workspace = workspace
         self._loop_factory = loop_factory
         self._event_observers = event_observers
+        self._workspace_identity = workspace_identity
 
     async def send(
         self,
         user_text: str,
         *,
         session_id: str | None = None,
+        new_session_id: str | None = None,
         cancellation: CancellationToken | None = None,
     ) -> CoordinatedTurn:
         """Append a user message and drive exactly one agent turn."""
 
         if not user_text.strip():
             raise ValueError("user_text must not be empty")
-        actual_session_id = session_id or str(uuid4())
+        if session_id is not None and new_session_id is not None:
+            raise ValueError("session_id and new_session_id are mutually exclusive")
+        actual_session_id = session_id or new_session_id or str(uuid4())
         turn_id = str(uuid4())
         trace = TraceProjection()
         journal = await EventJournal.open(
@@ -66,7 +71,14 @@ class TurnCoordinator:
             require_existing=session_id is not None,
         )
         if not journal.events:
-            await journal.record(None, RuntimeEventType.SESSION_STARTED, SessionStartedPayload())
+            await journal.record(
+                None,
+                RuntimeEventType.SESSION_STARTED,
+                SessionStartedPayload(
+                    name=f"session-{actual_session_id[:8]}",
+                    workspace_identity=self._workspace_identity,
+                ),
+            )
         await journal.record(
             turn_id,
             RuntimeEventType.USER_MESSAGE,

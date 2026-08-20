@@ -6,9 +6,26 @@ import pytest
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
 from jdagent.adapters.jsonl_session import JsonlSession
 from jdagent.domain.errors import SessionError, SessionErrorCode
-from jdagent.domain.events import RuntimeEventType, SessionStartedPayload
-from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
-from jdagent.domain.tools import ApprovalDecision, ToolCall
+from jdagent.domain.events import (
+    PermissionRuleGrantedPayload,
+    PermissionRuleRevokedPayload,
+    RecoverySnapshotPayload,
+    RuntimeEventType,
+    SessionStartedPayload,
+)
+from jdagent.domain.model import (
+    MessageRole,
+    ModelMessage,
+    ResponseCompleted,
+    TextDelta,
+    ToolCallCompleted,
+)
+from jdagent.domain.tools import (
+    ApprovalDecision,
+    PermissionTargetKind,
+    SessionPermissionRule,
+    ToolCall,
+)
 from jdagent.eventing import EventJournal
 from jdagent.tools.builtins import create_builtin_tools
 from jdagent.tools.workspace import WorkspacePathResolver
@@ -31,6 +48,54 @@ def test_jsonl_round_trip_preserves_events(tmp_path: Path) -> None:
     original_id, restored_id = asyncio.run(scenario())
 
     assert restored_id == original_id
+
+
+def test_jsonl_round_trip_preserves_recovery_and_permission_facts(tmp_path: Path) -> None:
+    async def scenario() -> tuple[object, object, object]:
+        session = JsonlSession(tmp_path / "sessions")
+        journal = await EventJournal.open(session, "session-1")
+        await journal.record(
+            None,
+            RuntimeEventType.SESSION_STARTED,
+            SessionStartedPayload("recovery", "workspace-1"),
+        )
+        snapshot = RecoverySnapshotPayload(
+            "parent",
+            7,
+            (ModelMessage(MessageRole.USER, "safe context"),),
+        )
+        rule = SessionPermissionRule(
+            "rule-1",
+            "session-1",
+            "write_text_file",
+            PermissionTargetKind.FILE,
+            "note.txt",
+        )
+        await journal.record(None, RuntimeEventType.RECOVERY_SNAPSHOT, snapshot)
+        await journal.record(
+            None,
+            RuntimeEventType.PERMISSION_RULE_GRANTED,
+            PermissionRuleGrantedPayload(rule),
+        )
+        await journal.record(
+            None,
+            RuntimeEventType.PERMISSION_RULE_REVOKED,
+            PermissionRuleRevokedPayload("rule-1"),
+        )
+
+        restored = tuple([event async for event in session.read("session-1")])
+        return restored[1].payload, restored[2].payload, restored[3].payload
+
+    restored_snapshot, restored_grant, restored_revoke = asyncio.run(scenario())
+
+    assert restored_snapshot == RecoverySnapshotPayload(
+        "parent",
+        7,
+        (ModelMessage(MessageRole.USER, "safe context"),),
+    )
+    assert isinstance(restored_grant, PermissionRuleGrantedPayload)
+    assert restored_grant.rule.target == "note.txt"
+    assert restored_revoke == PermissionRuleRevokedPayload("rule-1")
 
 
 def test_jsonl_reader_rejects_partial_final_line(tmp_path: Path) -> None:
