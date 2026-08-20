@@ -269,15 +269,17 @@ class DeepSeekModelPort:
             usage = require_object(usage_value, "usage")
             details_value = usage.get("completion_tokens_details")
             details = (
-                require_object(details_value, "completion_tokens_details") if details_value else {}
+                {}
+                if details_value is None
+                else require_object(details_value, "completion_tokens_details")
             )
             events.append(
                 UsageReported(
                     Usage(
                         require_integer(usage, "prompt_tokens"),
                         require_integer(usage, "completion_tokens"),
-                        cached_tokens=require_integer(usage, "prompt_cache_hit_tokens"),
-                        reasoning_tokens=require_integer(details, "reasoning_tokens"),
+                        cached_tokens=require_integer(usage, "prompt_cache_hit_tokens", 0),
+                        reasoning_tokens=require_integer(details, "reasoning_tokens", 0),
                     )
                 )
             )

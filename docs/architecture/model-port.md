@@ -87,9 +87,13 @@ Adapter 保存可用于诊断的 Provider 状态码和请求 ID，但不得把 A
 
 - 首选 DeepSeek 官方兼容 API，不在 Core 中依赖 OpenAI SDK 对象。
 - 将标准消息、工具 Schema 和设置翻译成 DeepSeek 请求，将流式 Chunk 重建为统一事件。
+- Usage 中未返回的缓存或推理 Token 明细按 0 投影；基础 input/output Token 仍必须存在，
+  非法类型继续作为 `invalid_response` fail closed。
 - DeepSeek thinking、strict schema 等特性只能通过能力声明或 `provider_options.deepseek` 暴露。
 - v0.1 不把 Beta strict mode 作为工具参数安全性的唯一保证；本地 Tool Runtime 始终独立校验 Schema。
 - 重试仅覆盖明确可重试、且尚未产生不可安全重放副作用的 Provider 调用；详细重试策略在实现前另行批准。
+- Adapter 构造函数仍只接受已解析的 Key；环境变量和开发 Key 文件的优先级由 Composition
+  Root 处理，秘密来源不会进入 Core、Session 或 Trace。
 
 ## Fake Model
 

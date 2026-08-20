@@ -18,9 +18,32 @@ from jdagent.tools.permissions import DefaultPermissionPolicy
 from jdagent.tools.runtime import ToolRegistry, ToolRuntime
 from jdagent.tools.workspace import WorkspacePathResolver
 
+DEVELOPMENT_DEEPSEEK_API_KEY_FILE = (
+    Path(__file__).resolve().parents[3] / "tmp" / "keys" / "deepseek-api-key.txt"
+)
+
 
 def _empty_json_object() -> JsonObject:
     return {}
+
+
+def load_deepseek_api_key(
+    explicit_key: str | None,
+    key_file: Path = DEVELOPMENT_DEEPSEEK_API_KEY_FILE,
+) -> str | None:
+    """Prefer an explicit key, then read the approved development-only key file."""
+
+    if explicit_key is not None and explicit_key.strip():
+        return explicit_key.strip()
+    try:
+        file_key = key_file.read_text(encoding="utf-8-sig").strip()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise ValueError("DeepSeek API key file could not be read") from error
+    if not file_key:
+        raise ValueError("DeepSeek API key file must not be empty")
+    return file_key
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +54,8 @@ class RuntimeConfiguration:
     model: str
     workspace: Path
     session_directory: Path
-    api_key: str | None = None
+    api_key: str | None = field(default=None, repr=False)
+    deepseek_api_key_file: Path = DEVELOPMENT_DEEPSEEK_API_KEY_FILE
     base_url: str = "https://api.deepseek.com"
     model_timeout_seconds: float = 30.0
     tool_timeout_seconds: float = 10.0
@@ -138,10 +162,16 @@ def build_runtime(
             delay_seconds=configuration.fake_delay_seconds,
         )
     elif configuration.provider == "deepseek":
-        if not configuration.api_key:
-            raise ValueError("DEEPSEEK_API_KEY is required for provider=deepseek")
-        model = DeepSeekModelPort(
+        api_key = load_deepseek_api_key(
             configuration.api_key,
+            configuration.deepseek_api_key_file,
+        )
+        if api_key is None:
+            raise ValueError(
+                "DEEPSEEK_API_KEY or the development key file is required for provider=deepseek"
+            )
+        model = DeepSeekModelPort(
+            api_key,
             base_url=configuration.base_url,
         )
     else:

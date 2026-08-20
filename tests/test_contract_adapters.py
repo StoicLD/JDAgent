@@ -5,9 +5,10 @@ from typing import TypeVar
 
 import pytest
 
+from jdagent.adapters.deepseek import DeepSeekModelPort
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
 from jdagent.adapters.memory import InMemorySession
-from jdagent.composition import RuntimeConfiguration
+from jdagent.composition import RuntimeConfiguration, build_runtime, load_deepseek_api_key
 from jdagent.domain.events import (
     RuntimeEvent,
     RuntimeEventType,
@@ -92,3 +93,54 @@ def test_runtime_configuration_rejects_invalid_call_limits(tmp_path: Path) -> No
                 max_model_calls=model_calls,
                 max_tool_calls=tool_calls,
             )
+
+
+def test_deepseek_key_uses_file_when_explicit_value_is_missing(tmp_path: Path) -> None:
+    key_file = tmp_path / "deepseek-api-key.txt"
+    key_file.write_text("file-development-key\n", encoding="utf-8")
+
+    loaded = load_deepseek_api_key(None, key_file)
+
+    assert loaded == "file-development-key"
+
+
+def test_deepseek_key_prefers_explicit_value_without_reading_file(tmp_path: Path) -> None:
+    missing_file = tmp_path / "missing-key.txt"
+
+    loaded = load_deepseek_api_key(" explicit-development-key ", missing_file)
+
+    assert loaded == "explicit-development-key"
+
+
+def test_build_runtime_uses_development_key_file_when_explicit_key_is_missing(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "deepseek-api-key.txt"
+    key_file.write_text("file-development-key\n", encoding="utf-8")
+    configuration = RuntimeConfiguration(
+        provider="deepseek",
+        model="deepseek-v4-flash",
+        workspace=tmp_path,
+        session_directory=tmp_path / "sessions",
+        deepseek_api_key_file=key_file,
+    )
+
+    composition = build_runtime(
+        configuration,
+        FakeApproval(decision=ApprovalDecision.APPROVE),
+    )
+
+    assert isinstance(composition.model, DeepSeekModelPort)
+    asyncio.run(composition.aclose())
+
+
+def test_runtime_configuration_repr_does_not_expose_explicit_key(tmp_path: Path) -> None:
+    configuration = RuntimeConfiguration(
+        provider="deepseek",
+        model="deepseek-v4-flash",
+        workspace=tmp_path,
+        session_directory=tmp_path / "sessions",
+        api_key="repr-must-not-contain-this-key",
+    )
+
+    assert "repr-must-not-contain-this-key" not in repr(configuration)

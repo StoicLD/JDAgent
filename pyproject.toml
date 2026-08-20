@@ -38,10 +38,9 @@ quote-style = "double"
 
 [tool.pyright]
 include = ["src", "tests"]
+extraPaths = ["src"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
-venvPath = "."
-venv = ".venv"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

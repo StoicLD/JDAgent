@@ -2,7 +2,7 @@
 
 状态：`Implemented`
 
-验收状态：离线验收通过；真实 DeepSeek 与 M10b 人工学习出口待完成。
+验收状态：离线与真实 DeepSeek 验收通过；M10b 人工学习出口待完成。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -13,7 +13,7 @@ JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作�
 
 v0.1 通用 Agent Runtime 已完成离线实现，包含模型无关 `ModelPort`、Agent Loop、
 ContextBuilder、三种工具、权限审批、append-only JSONL Session、恢复、Trace、Fake Model
-与 DeepSeek Adapter。真实 DeepSeek 验收仍需用户在本机显式提供 API Key；MCP、RAG、长期记忆
+与 DeepSeek Adapter。真实 DeepSeek 流式文本与 Tool Call 闭环已经通过；MCP、RAG、长期记忆
 和求职领域包不属于 v0.1。
 
 ## 快速开始
@@ -41,7 +41,13 @@ uv run jdagent --show-trace "解释 ModelPort"
 模型、base URL、模型超时、工具超时和可选硬上下文限制均可通过 CLI 参数配置；运行
 `uv run jdagent --help` 查看完整选项。
 
-真实 DeepSeek 调用必须显式选择 Provider，且 Key 只从环境变量读取：
+真实 DeepSeek 调用必须显式选择 Provider。Key 来源按以下顺序解析：
+
+1. `DEEPSEEK_API_KEY` 环境变量。
+2. 开发期默认文件 `../tmp/keys/deepseek-api-key.txt`。
+
+默认文件位于产品仓库之外，不得加入 Git；环境变量始终优先。生产或共享环境应使用批准的
+秘密管理方案，而不是依赖开发机文件。
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "..."
@@ -59,8 +65,8 @@ uv run pyright
 uv run pytest -q
 ```
 
-真实 Provider 测试默认跳过。完成 DeepSeek 验收时，另行设置
-`JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行 `tests/integration/test_deepseek_live.py`。
+真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
+`tests/integration/test_deepseek_live.py`；测试同样遵循上述 Key 优先级。
 
 ## M10b 学习出口
 

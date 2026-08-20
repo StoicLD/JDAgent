@@ -6,9 +6,11 @@ import pytest
 
 from jdagent.adapters.deepseek import DeepSeekModelPort
 from jdagent.adapters.fake import FakeApproval
+from jdagent.composition import load_deepseek_api_key
 from jdagent.domain.model import (
     MessageRole,
     ModelEvent,
+    ModelFailed,
     ModelMessage,
     ModelRequest,
     ModelToolDefinition,
@@ -32,9 +34,9 @@ pytestmark = pytest.mark.integration
 def _live_configuration() -> tuple[str, str, str]:
     if os.environ.get("JDAGENT_RUN_DEEPSEEK_INTEGRATION") != "1":
         pytest.skip("Set JDAGENT_RUN_DEEPSEEK_INTEGRATION=1 for live provider tests")
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    api_key = load_deepseek_api_key(os.environ.get("DEEPSEEK_API_KEY"))
     if not api_key:
-        pytest.skip("DEEPSEEK_API_KEY is required for live provider tests")
+        pytest.skip("A DeepSeek API key is required for live provider tests")
     return (
         api_key,
         os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
@@ -59,6 +61,7 @@ def test_real_deepseek_streams_text() -> None:
 
     events = asyncio.run(scenario())
 
+    assert not any(isinstance(event, ModelFailed) for event in events)
     assert any(isinstance(event, TextDelta) for event in events)
     assert any(isinstance(event, ResponseCompleted) for event in events)
 
@@ -66,7 +69,7 @@ def test_real_deepseek_streams_text() -> None:
 def test_real_deepseek_tool_call_round_trip(tmp_path: Path) -> None:
     api_key, base_url, model = _live_configuration()
 
-    async def scenario() -> tuple[ToolResultStatus, list[ModelEvent]]:
+    async def scenario() -> tuple[ToolResultStatus, list[ModelEvent], list[ModelEvent]]:
         port = DeepSeekModelPort(api_key, base_url=base_url)
         try:
             tool = create_builtin_tools(WorkspacePathResolver(tmp_path))[0]
@@ -118,12 +121,14 @@ def test_real_deepseek_tool_call_round_trip(tmp_path: Path) -> None:
                 },
             )
             second_events = [event async for event in port.stream(second_request)]
-            return result.status, second_events
+            return result.status, first_events, second_events
         finally:
             await port.aclose()
 
-    result_status, events = asyncio.run(scenario())
+    result_status, first_events, events = asyncio.run(scenario())
 
     assert result_status is ToolResultStatus.SUCCESS
+    assert not any(isinstance(event, ModelFailed) for event in first_events)
+    assert not any(isinstance(event, ModelFailed) for event in events)
     assert any(isinstance(event, TextDelta) for event in events)
     assert any(isinstance(event, ResponseCompleted) for event in events)

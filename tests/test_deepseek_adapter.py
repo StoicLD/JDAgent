@@ -75,6 +75,70 @@ def test_deepseek_stream_maps_text_usage_and_completion() -> None:
     assert payload["stream_options"] == {"include_usage": True}
 
 
+def test_deepseek_stream_accepts_usage_without_optional_token_details() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            content=_sse(
+                {
+                    "choices": [{"delta": {"content": "Done"}, "finish_reason": "stop"}],
+                    "usage": {
+                        "prompt_tokens": 4,
+                        "completion_tokens": 1,
+                    },
+                }
+            ),
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://test")
+    port = DeepSeekModelPort("not-a-real-key", client=client)
+    request = ModelRequest(
+        model="deepseek-v4-flash",
+        messages=(ModelMessage(MessageRole.USER, "finish"),),
+    )
+
+    events = asyncio.run(_events(port, request))
+    asyncio.run(client.aclose())
+
+    assert events == [
+        TextDelta("Done"),
+        UsageReported(Usage(4, 1)),
+        ResponseCompleted("stop"),
+    ]
+
+
+def test_deepseek_stream_rejects_invalid_optional_token_details_type() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            200,
+            content=_sse(
+                {
+                    "choices": [{"delta": {"content": "Done"}, "finish_reason": "stop"}],
+                    "usage": {
+                        "prompt_tokens": 4,
+                        "completion_tokens": 1,
+                        "completion_tokens_details": [],
+                    },
+                }
+            ),
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://test")
+    port = DeepSeekModelPort("not-a-real-key", client=client)
+    request = ModelRequest(
+        model="deepseek-v4-flash",
+        messages=(ModelMessage(MessageRole.USER, "finish"),),
+    )
+
+    events = asyncio.run(_events(port, request))
+    asyncio.run(client.aclose())
+
+    assert isinstance(events[-1], ModelFailed)
+    assert events[-1].category is ModelErrorCategory.INVALID_RESPONSE
+
+
 def test_deepseek_stream_assembles_tool_call_fragments() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         del request

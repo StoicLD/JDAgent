@@ -2,13 +2,13 @@
 
 状态：`Implemented`
 
-验收状态：离线验收通过；最终验收尚未完成。
+验收状态：工程与真实 DeepSeek 验收通过；M10b 人工学习出口待完成。
 
 ## 当前阶段
 
-v0.1 通用 Agent Runtime 已按批准计划实现。离线工程门禁与双轴代码审查已通过；真实
-DeepSeek 流式回答和 Tool Call 测试因本机未提供 `DEEPSEEK_API_KEY` 而尚无验收证据，M10b
-人工学习出口也留待用户完成。因此当前不能将整个 v0.1 标记为最终验收完成。
+v0.1 通用 Agent Runtime 已按批准计划实现。离线工程门禁、真实 DeepSeek 流式回答和
+Tool Call 闭环均已通过。当前只剩 M10b 人工学习出口必须由用户本人完成，因此尚不把整个
+v0.1 标记为最终验收完成。
 
 ## 已批准事实
 
@@ -26,6 +26,8 @@ DeepSeek 流式回答和 Tool Call 测试因本机未提供 `DEEPSEEK_API_KEY` �
 - DeepSeek Adapter 默认模型为 `deepseek-v4-flash`，默认 base URL 为
   `https://api.deepseek.com`；v0.1 显式关闭 thinking，避免丢失未纳入事件模型的 reasoning
   内容。
+- 2026-08-19 用户批准开发期 DeepSeek Key 回退：显式 `DEEPSEEK_API_KEY`/配置值优先，
+  缺省读取工作区 `tmp/keys/deepseek-api-key.txt`。该文件位于产品仓库外，不得进入 Git。
 
 ## 已实现范围
 
@@ -43,26 +45,25 @@ DeepSeek 流式回答和 Tool Call 测试因本机未提供 `DEEPSEEK_API_KEY` �
 ## 验证与评审证据
 
 - 2026-08-12：Ruff format/check、Pyright strict 均通过。
-- 2026-08-12：默认测试 `55 passed, 2 skipped`；两项跳过均为显式 opt-in 的 DeepSeek
-  live integration tests。
+- 2026-08-19：默认测试 `61 passed, 2 skipped`；两项跳过均为显式 opt-in 的 DeepSeek
+  live integration tests。启用 live 后完整测试 `63 passed`。
+- 真实 DeepSeek 流式文本与 Tool Call 闭环均通过；执行时未设置 `DEEPSEEK_API_KEY`，证明
+  默认开发 Key 文件回退有效。
 - 双轴审查初轮发现取消传播、Composition Root、Trace 细节、resume、finish reason、空
   JSONL 与秘密忽略规则等阻塞问题；全部完成修复并增加回归测试。
-- Standards 最终复查为 `pass`、0 findings；规格最终复查为 `pass_with_findings`，唯一 finding
-  是缺少真实 DeepSeek 验收证据，而非已知实现缺陷。
+- 2026-08-19 补充审查：Standards 为 `pass_with_findings`、0 个硬违规，仅保留开发路径依赖
+  源码布局的非阻塞判断项；Spec 为 `pass`、0 findings。
 - 完整记录见 [v0.1 实现审查](../reviews/v0.1-implementation-review.md)。
 
 ## 剩余验收项
 
-- 在用户本机安全设置 `DEEPSEEK_API_KEY` 和 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1`，执行
-  真实流式文本与 Tool Call 两项测试。Key 不得写入仓库或对话。
 - 用户完成 [M10b 学习检查表](../learning/v0.1-learning-checklist.md)：闭卷画出模块关系、
   解释 Tool Call 数据流，并使用 Trace 定位一次注入失败。
 
 ## 下一步
 
-1. 用户在本机设置 DeepSeek 集成测试环境变量后，继续执行 M9/M10a 的真实 Provider 验收。
-2. 与用户进行 M10b 学习复盘；未理解的机制进入 v0.2 学习输入。
-3. 两项均完成后再把 v0.1 状态升级为最终验收完成，并讨论 v0.2，不提前引入 MCP、RAG
+1. 与用户进行 M10b 学习复盘；未理解的机制进入 v0.2 学习输入。
+2. M10b 完成后把 v0.1 状态升级为最终验收完成，并讨论 v0.2，不提前引入 MCP、RAG
    或求职领域能力。
 
 ## 恢复入口

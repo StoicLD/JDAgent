@@ -143,4 +143,6 @@ Agent Core + Domain Types + Ports
 - v0.1 不提供 Shell 和网络工具。
 - 文件工具以解析后的 workspace 根路径为唯一边界，不接受字符串前缀判断。
 - 校验和审批必须发生在副作用之前。
-- API Key 不进入 Session、Trace 或异常正文。
+- API Key 不进入 Session、Trace 或异常正文。开发期默认文件位于产品仓库之外的
+  `../tmp/keys/deepseek-api-key.txt`；Composition Root 负责“显式配置优先、文件回退”，
+  Adapter 只接收解析后的值。
