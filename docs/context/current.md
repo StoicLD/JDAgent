@@ -93,6 +93,19 @@ finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学�
 - v0.2 双轴实现审查的 Standards 与 Spec 复核均为 0 Blocker、0 High；完整发现、修复与残余
   人工环境风险见 [v0.2 实现审查](../reviews/v0.2-implementation-review.md)。
 
+## 后续模块治理
+
+- 用户于 2026-08-24 批准[模块交付与学习工作流](../development/module-delivery-workflow.md)：
+  AI 可以承担主要代码实现，学习者必须亲自拥有初始模型、方案选择、Trade-off、故障预测、证据
+  判断和人工学习出口。
+- 每个实质性模块的设计包必须包含需求与非目标、Interface 与状态所有权、失败模型、最小 Eval、
+  实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
+- 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：完成
+  v0.2 M10 后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
+  Context Orchestration 与 Compaction。
+- 上述路线只批准学习方向和顺序；v0.3–v0.5 的具体需求、架构、依赖和实现尚未批准，必须分别
+  形成可验证设计包后由用户决定。
+
 ## v0.1 最终验收
 
 - 用户已于 2026-08-20 完成 [M10b 学习检查表](../learning/v0.1-learning-checklist.md)：闭卷
@@ -102,10 +115,13 @@ finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学�
 ## 下一步
 
 1. 完成 [v0.2 CLI 学习检查表](../learning/v0.2-learning-checklist.md) 的闭卷架构、五条数据流和
-   恢复分类练习。
-2. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
+   恢复分类练习，并把它作为新模块学习工作流的基线试运行。
+2. M10 通过后，按[模块交付与学习工作流](../development/module-delivery-workflow.md)形成 v0.3
+   RAG 的需求、非目标、候选方案、Interface、失败模型、最小 Eval、实施计划和专属学习清单；
+   在用户批准前不开始实现。
+3. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
    恢复仍以已批准的 Session 合同为准。
-3. M10 完成前不启动 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
+4. M10 完成前不启动 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
 
 ## 恢复入口
 

@@ -31,6 +31,9 @@ Codex、Cursor 和 Claude 可以直接从本仓库根目录启动，也可以从
 - 决策记录：[ADR 目录](docs/decisions/)
 - 实施阶段：[v0.1 实施计划](docs/plans/v0.1-implementation.md)
 - 当前实施阶段：[v0.2 CLI 实施计划](docs/plans/v0.2-cli-implementation.md)
+- 后续模块方向：[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)
+- 模块交付规则：[模块交付与学习工作流](docs/development/module-delivery-workflow.md)
+- 学习出口模板：[模块学习检查表模板](docs/learning/module-learning-checklist-template.md)
 - Python 规范：[Python 工程规范](docs/development/python-style.md)
 - 正式评审与处置：`docs/reviews/`。
 
@@ -38,6 +41,11 @@ Codex、Cursor 和 Claude 可以直接从本仓库根目录启动，也可以从
 
 - 文档状态使用 `Draft`、`Proposed`、`Approved`、`Implemented`、`Superseded` 或 `Rejected`；Agent 不得自行批准提案。
 - 讨论和诊断默认只读；实质性实现前必须有可验证的需求和验收标准。
+- v0.2 之后的实质性模块必须遵循模块交付与学习工作流；模块设计包必须同时包含最小 Eval 与
+  模块专属学习清单，不能在实现完成后再补。
+- AI 可以承担主要代码实现，但不得代替学习者形成初始模型、选择方案、预测故障、判断证据或完成
+  人工学习出口。
+- 当前模块的工程和学习门禁未通过前，不启动下一实质性模块。
 - 代码变更遵循 Python 工程规范，并按风险覆盖正常路径、失败路径和回归测试。
 - 不创建未经批准的框架、基础设施或空壳代码。
 - 未经用户明确授权，不 commit、pull、push、merge、改写历史、切换分支或配置 remote。

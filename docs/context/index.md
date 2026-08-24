@@ -15,6 +15,8 @@
 - [v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md) — `Approved`
 - [v0.2 CLI 实施计划](../plans/v0.2-cli-implementation.md) — `Implemented`，M1–M9 完成，
   M10 人工学习出口待执行
+- [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
+  v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
 
 ## 架构
 
@@ -37,6 +39,8 @@
 ## 开发规范
 
 - [Python 工程规范](../development/python-style.md) — `Approved`
+- [模块交付与学习工作流](../development/module-delivery-workflow.md) — `Approved`，定义模块边界、
+  AI/学习者角色、设计包、Eval、工程验收和学习验收
 
 ## 评审与证据
 
@@ -56,3 +60,5 @@
 - [v0.1 人工学习检查表](../learning/v0.1-learning-checklist.md) — `Implemented`，2026-08-20 完成
 - [v0.2 CLI 人工学习检查表](../learning/v0.2-learning-checklist.md) — `Approved`，实现完成，
   待学习者执行 M10
+- [模块学习检查表模板](../learning/module-learning-checklist-template.md) — `Approved`，每个后续
+  实质性模块设计完成时实例化并填充具体机制、数据流和故障实验

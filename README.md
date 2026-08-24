@@ -13,6 +13,21 @@ JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作�
 1. 构建领域无关、模型无关、可观察且可测试的通用 Agent Runtime，系统掌握 LLM、Function Calling、工具、权限、会话、上下文、记忆、RAG 和 MCP 等机制。
 2. 在通用 Runtime 上增加求职领域包，接入职位、面经和技术经验来源，并针对采集、检索、分析和质量评测做领域优化。
 
+## 学习驱动的模块交付
+
+JDAgent 的后续版本不以功能数量为首要结果。每个实质性模块必须同时交付可工作的端到端能力、
+明确的 Interface 与 Trade-off、实现前后 Eval、故障实验，以及由学习者本人完成的闭卷学习出口。
+
+AI 可以作为资深指导者、实现者、批判者和模拟面试官承担主要代码实现；学习者负责在实现前形成
+初始模型和候选方案，决定范围与取舍，并在实现后依据 Diff、测试、Trace 和实验控制与解释产出。
+详细规则见[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，每个模块从
+[模块学习检查表模板](docs/learning/module-learning-checklist-template.md)实例化专属出口。
+
+完成 v0.2 M10 后，已批准的近期学习顺序为：v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆
+生命周期、v0.5 Context Orchestration 与 Compaction。该顺序不等于具体版本需求已经批准；各版本
+仍需独立完成需求、架构、计划、Eval 和学习清单。见
+[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
+
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
 ContextBuilder、三种工具、权限审批、append-only JSONL Session、恢复、Trace、Fake Model
 与 DeepSeek Adapter。离线门禁、真实 DeepSeek 流式文本与 Tool Call 闭环、人工学习出口均已
