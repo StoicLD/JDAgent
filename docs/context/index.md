@@ -13,8 +13,8 @@
 - [v0.1 Agent Runtime 需求](../requirements/v0.1-agent-runtime.md) — `Approved`
 - [v0.1 实施计划](../plans/v0.1-implementation.md) — `Approved`，全部里程碑与学习出口已完成
 - [v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md) — `Approved`
-- [v0.2 CLI 实施计划](../plans/v0.2-cli-implementation.md) — `Implemented`，M1–M9 完成，
-  M10 人工学习出口待执行
+- [v0.2 CLI 实施计划](../plans/v0.2-cli-implementation.md) — `Implemented`，工程与学习门禁
+  全部关闭
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
   v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
 
@@ -58,7 +58,7 @@
 ## 学习出口
 
 - [v0.1 人工学习检查表](../learning/v0.1-learning-checklist.md) — `Implemented`，2026-08-20 完成
-- [v0.2 CLI 人工学习检查表](../learning/v0.2-learning-checklist.md) — `Approved`，实现完成，
-  待学习者执行 M10
+- [v0.2 CLI 人工学习检查表](../learning/v0.2-learning-checklist.md) — `Implemented`，项目所有者
+  于 2026-08-24 按学习范围裁定关闭；原题保留为可选复习材料
 - [模块学习检查表模板](../learning/module-learning-checklist-template.md) — `Approved`，每个后续
   实质性模块设计完成时实例化并填充具体机制、数据流和故障实验

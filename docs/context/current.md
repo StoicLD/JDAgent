@@ -2,10 +2,10 @@
 
 状态：`Implemented`
 
-版本状态：v0.1 `Implemented`；v0.2 `Implemented`（M1–M9 完成，M10 待执行）。
+版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）。
 
-验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 离线工程门禁、
-真实 DeepSeek、PowerShell 主循环和双轴独立审查通过，人工学习出口待执行。
+验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
+学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。下一 Chat 可直接开始 v0.3 设计。
 
 ## 当前阶段
 
@@ -14,7 +14,8 @@ v0.1 通用 Agent Runtime 已按批准计划实现并于 2026-08-20 完成最终
 
 v0.2 已按批准设计完成 M1–M9：v0.1 薄 CLI 已提升为可安装、可在任意 workspace 日常使用的
 持久交互式 CLI。Cursor 计划审查的 F01–F12 已处置；实现后的 Standards/Spec 双轴审查初轮
-finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学习者完成 M10 人工学习出口。
+finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026-08-24 明确认定 CLI/UI 不属于
+当前最急切的 Agent 核心学习范围，因此不要求逐项执行原 M10 练习，并验收 v0.2 学习门禁完成。
 
 ## 已批准事实
 
@@ -100,9 +101,9 @@ finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学�
   判断和人工学习出口。
 - 每个实质性模块的设计包必须包含需求与非目标、Interface 与状态所有权、失败模型、最小 Eval、
   实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
-- 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：完成
-  v0.2 M10 后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
-  Context Orchestration 与 Compaction。
+- 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：v0.2
+  学习门禁关闭后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
+  Context Orchestration 与 Compaction；当前已进入 v0.3 设计准备阶段。
 - 上述路线只批准学习方向和顺序；v0.3–v0.5 的具体需求、架构、依赖和实现尚未批准，必须分别
   形成可验证设计包后由用户决定。
 
@@ -112,16 +113,22 @@ finding 已全部修复，复核为 0 Blocker、0 High。下一阶段是由学�
   模块关系、Tool Call 数据流和 Trace 故障练习均确认完成。
 - v0.1 没有剩余验收项。
 
+## v0.2 最终验收
+
+- v0.2 工程、真实 DeepSeek、PowerShell 主循环、安装验证和双轴独立审查全部通过。
+- 用户于 2026-08-24 明确将 CLI/UI 排除出当前最优先的 Agent 核心学习范围，并决定按已完成
+  v0.2 学习处理；[原 M10 检查表](../learning/v0.2-learning-checklist.md)保留为可选复习材料，
+  未勾选项目不代表待办，也不再阻塞后续版本。
+- 该裁定只适用于 v0.2，不修改 v0.3 起的模块交付与学习工作流。
+
 ## 下一步
 
-1. 完成 [v0.2 CLI 学习检查表](../learning/v0.2-learning-checklist.md) 的闭卷架构、五条数据流和
-   恢复分类练习，并把它作为新模块学习工作流的基线试运行。
-2. M10 通过后，按[模块交付与学习工作流](../development/module-delivery-workflow.md)形成 v0.3
-   RAG 的需求、非目标、候选方案、Interface、失败模型、最小 Eval、实施计划和专属学习清单；
-   在用户批准前不开始实现。
-3. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
+1. 新 Chat 直接按[模块交付与学习工作流](../development/module-delivery-workflow.md)开始 v0.3 RAG
+   的问题定义、需求、非目标、候选方案、Interface、失败模型、最小 Eval、实施计划和专属学习
+   清单；在用户批准前不开始实现。
+2. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
    恢复仍以已批准的 Session 合同为准。
-4. M10 完成前不启动 MCP、RAG、求职领域能力、全屏 TUI、自定义命令或通用 Session Branch。
+3. v0.3 只进入设计讨论，不因路线已批准而自动批准依赖、架构或产品实现。
 
 ## 恢复入口
 

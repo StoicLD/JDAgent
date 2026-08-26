@@ -2,9 +2,9 @@
 
 状态：`Implemented`
 
-版本状态：v0.1 `Implemented`；v0.2 `Implemented`（M1–M9 完成，M10 学习出口待执行）。
+版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）。
 
-验收状态：v0.1 最终验收完成；v0.2 CLI 工程门禁、Live 验收与双轴独立审查通过。
+验收状态：v0.1、v0.2 均已完成；当前可以开始 v0.3 的思考与设计计划。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -23,9 +23,9 @@ AI 可以作为资深指导者、实现者、批判者和模拟面试官承担�
 详细规则见[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，每个模块从
 [模块学习检查表模板](docs/learning/module-learning-checklist-template.md)实例化专属出口。
 
-完成 v0.2 M10 后，已批准的近期学习顺序为：v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆
-生命周期、v0.5 Context Orchestration 与 Compaction。该顺序不等于具体版本需求已经批准；各版本
-仍需独立完成需求、架构、计划、Eval 和学习清单。见
+v0.2 学习门禁已经关闭。已批准的近期学习顺序为：v0.3 RAG 与来源可追踪的知识检索、v0.4
+长期记忆生命周期、v0.5 Context Orchestration 与 Compaction。该顺序不等于具体版本需求已经
+批准；各版本仍需独立完成需求、架构、计划、Eval 和学习清单。见
 [v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
@@ -100,13 +100,14 @@ uv run pytest -q
 真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
 `tests/integration/test_deepseek_live.py`；测试同样遵循上述 Key 优先级。
 
-## v0.1 学习出口
+## 学习出口
 
 [v0.1 学习检查表](docs/learning/v0.1-learning-checklist.md) 已于 2026-08-20 完成。检查表包含
 闭卷架构图、Tool Call 数据流讲解和一个无需真实 API 的 Fake Model 超时 Trace 故障练习。
 
-下一步使用 [v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 完成 M10，验证 CLI
-应用层、Session Catalog、终端 Adapter、输出合同和异常恢复理解。
+[v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 已于 2026-08-24 由项目所有者按
+学习范围裁定关闭：CLI/UI 不属于当前最优先的 Agent 核心学习内容，原练习保留为可选复习材料，
+不再阻塞 v0.3。下一次 Chat 可以直接开始 v0.3 的需求、候选方案和设计计划讨论。
 
 恢复工作请依次阅读：
 
