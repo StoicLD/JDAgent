@@ -35,9 +35,12 @@
 - [ADR-0002：模型无关 ModelPort](../decisions/ADR-0002-model-port.md)
 - [ADR-0003：通用 Runtime 与求职领域分离](../decisions/ADR-0003-runtime-domain-separation.md)
 - [ADR-0004：CLI 应用层与终端 Adapter](../decisions/ADR-0004-cli-application-layer.md)
+- [ADR-0005：Agent 启动链不依赖独立 Context 仓库](../decisions/ADR-0005-agent-context-free-startup.md)
 
 ## 开发规范
 
+- [Agent 协作与评审规则](../development/agent-collaboration.md) — `Approved`，定义事实归属、
+  角色与写入边界、正式评审接口、并行 worktree 和失败行为
 - [Python 工程规范](../development/python-style.md) — `Approved`
 - [模块交付与学习工作流](../development/module-delivery-workflow.md) — `Approved`，定义模块边界、
   AI/学习者角色、设计包、Eval、工程验收和学习验收

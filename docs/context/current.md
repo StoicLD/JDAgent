@@ -19,8 +19,10 @@ finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026
 
 ## 已批准事实
 
-- `JDAgentProject` 是产品与工程事实的唯一权威仓库。
-- `JDAgentAgentContext` 是同级私有 Agent Context 仓库，不是产品构建、测试或运行依赖。
+- 当前产品 Git 仓库同时承载产品、工程与项目级协作事实，是唯一权威仓库。
+- 用户于 2026-08-26 批准[ADR-0005](../decisions/ADR-0005-agent-context-free-startup.md)：Agent
+  启动、恢复和正式协作不再读取独立 Context 仓库；旧仓库只作为未处置历史输入保留，外层本地
+  工作区只提供到产品原生入口的薄路由。
 - 第一阶段建设领域无关的通用 Agent Runtime；第二阶段通过求职领域包进行特化。
 - Agent Core 使用 Python 3.11+，不维护第二套 TypeScript Core。
 - Agent Core 依赖模型无关的 `ModelPort`；首个真实 Provider Adapter 对接 DeepSeek。
