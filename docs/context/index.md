@@ -17,6 +17,8 @@
   全部关闭
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
   v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
+- [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Proposed`，记录不再阻塞
+  高层设计的默认值与后续增强；不替代尚未形成的正式实施计划
 
 ## 架构
 
@@ -28,6 +30,13 @@
 - [v0.2 Session 异常恢复表示](../architecture/session-recovery-v0.2.md) — `Approved`
 - [v0.2 Session Permission Rule 合同](../architecture/permission-rules-v0.2.md) — `Approved`
 - [v0.2 Windows 终端附录](../architecture/windows-terminal-v0.2.md) — `Approved`
+- [v0.3 RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md) —
+  `Proposed`，设计访谈已经收敛，尚未批准实现
+
+## 领域语言
+
+- [v0.3 知识检索语境](../../CONTEXT.md) — RAG、知识访问、来源生命周期、Evidence 与 Citation
+  的限定语境词汇表
 
 ## 已批准决策
 
@@ -36,6 +45,10 @@
 - [ADR-0003：通用 Runtime 与求职领域分离](../decisions/ADR-0003-runtime-domain-separation.md)
 - [ADR-0004：CLI 应用层与终端 Adapter](../decisions/ADR-0004-cli-application-layer.md)
 - [ADR-0005：Agent 启动链不依赖独立 Context 仓库](../decisions/ADR-0005-agent-context-free-startup.md)
+
+## 提议中的决策
+
+- [ADR-0006：Milvus Standalone 承载 v0.3 知识索引](../decisions/ADR-0006-milvus-standalone-knowledge-index.md) — `Proposed`
 
 ## 开发规范
 

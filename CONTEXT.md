@@ -1,0 +1,196 @@
+# v0.3 知识检索语境
+
+本词汇表只适用于 JDAgent v0.3 的 RAG、知识访问和来源可追踪回答。它不定义这些词在数据库、
+长期记忆、Session 历史或其他产品中的通用含义。
+
+## 知识与访问范围
+
+**来源文档（Source Document）**：
+用户选择摄取的一份外部文本来源。它在摄取后仍由原位置的所有者管理，不因摄取而成为 JDAgent
+管理的文件。
+_避免使用_：Knowledge Source、来源版本、语料
+
+**Knowledge Source**：
+JDAgent-managed Knowledge Base 内代表一个逻辑来源的稳定身份。内容替换会增加 Source Version，
+但不改变 Knowledge Source 的身份。
+_避免使用_：文件路径、内容哈希、来源文档
+
+**来源版本（Source Version）**：
+一个 Knowledge Source 在一次成功摄取中形成的不可变内容版本。它包含 Raw Source Artifact 和由
+特定 Parser 产生的 Parsed Source Snapshot；同一来源内容变化后形成新版本，不改写旧版本。
+_避免使用_：索引版本、文件路径、当前文件
+
+**Raw Source Artifact**：
+Source Version 保存的原始输入字节及其格式、编码和内容校验信息。它用于审计和重新解析，不直接
+作为检索结果。
+_避免使用_：Parsed Source Snapshot、Evidence、原文件路径
+
+**Parsed Source Snapshot**：
+特定 Parser 版本从 Raw Source Artifact 产生的不可变规范结构和稳定 Locator。Parent Segment、
+Child Chunk 和 Knowledge Index 从它派生。
+_避免使用_：Raw Source Artifact、Knowledge Index、模型 Context
+
+**知识库（Knowledge Base）**：
+由一个 Knowledge Provider 管理的一组有效来源版本及其知识生命周期。知识库独立于 Workspace，
+也不是向量数据库、Milvus Collection 或 Session 的别名。
+_避免使用_：Workspace 知识、向量库、索引
+
+**JDAgent 管理的知识库（JDAgent-managed Knowledge Base）**：
+由 JDAgent 负责摄取、来源版本和知识索引生命周期的知识库。外部存储服务不因此成为来源版本的
+所有者。
+_避免使用_：Milvus 知识库、本地知识库
+
+**Knowledge Provider**：
+通过 JDAgent 知识合同提供一个知识库的系统边界。v0.3 首先提供 JDAgent 管理的实现，但该术语
+不限定未来的连接协议。
+_避免使用_：向量数据库、Knowledge Connection
+
+**Knowledge Connection**：
+用户级注册的 Knowledge Provider 身份与访问配置。一个 Knowledge Connection 可以暴露多个
+Knowledge Base；注册连接不自动授权任何 Workspace 使用其中任何知识库。
+_避免使用_：知识库、Workspace Binding、活动知识库
+
+**Workspace Knowledge Binding**：
+一个 Workspace 获准通过某个用户级 Knowledge Connection 使用其中一个 Knowledge Base 的显式
+授权关系。Binding 决定后续 Turn 可以使用的持久范围，不属于 Session。
+_避免使用_：Knowledge Connection、Session 选择、Milvus Collection
+
+**Knowledge Base Reference**：
+由 Knowledge Connection 身份和该 Provider 内 Knowledge Base 身份共同组成的稳定业务引用。
+它不包含 Milvus Collection、Endpoint 或认证信息。
+_避免使用_：Knowledge Connection ID、Collection 名、文件路径
+
+**有效知识库集合（Effective Knowledge Bases）**：
+Runtime 在一个 Turn 开始时，根据当前 Workspace Knowledge Bindings、仍存在的 Knowledge
+Connections 和当前可访问的 Knowledge Bases 计算出的临时检索范围。它不是 Session 持久状态。
+_避免使用_：Active Knowledge Set、Session 知识库、全部用户级知识库
+
+**Prepared Turn Knowledge**：
+应用层在一个 Turn 开始时对 Effective Knowledge Bases 各执行一次检索，并完成跨库合并、去重和
+预算裁剪后形成的不可变知识输入。该 Turn 内 Agent Loop 的所有模型调用复用同一份 Evidence，
+不得重新读取 Binding 或执行新的知识检索。
+_避免使用_：Session 知识配置、模型 Context、动态检索状态
+
+**知识索引（Knowledge Index）**：
+从来源版本派生、用于查找相关内容且可以重建的知识投影。索引不拥有来源版本，索引丢失也不等于
+知识丢失。
+_避免使用_：知识库、来源存储、Milvus 数据
+
+**Knowledge Catalog**：
+JDAgent-managed Knowledge Base 的规范元数据，记录 Knowledge Source 身份、Source Version 关系、
+当前 Index Generation、当前 Content Revision 和知识生命周期状态。来源内容对象或索引记录不能
+单独替代 Knowledge Catalog。
+_避免使用_：Source Store、Knowledge Index、文件目录
+
+**Index Generation**：
+一代具有相同解析、切分、Embedding、检索字段和 Retrieval Language Profile 兼容边界的 Knowledge
+Index。任何破坏该兼容边界的配置变化都会产生新一代，而不是原地改变既有 Generation。
+_避免使用_：Content Revision、Source Version、Milvus Collection
+
+**Content Revision**：
+同一个 Index Generation 内，决定哪些 Source Version 的检索单元在某一时刻有效的不可变内容视图。
+来源新增、替换、停用或逻辑删除会产生新的 Content Revision，而不必改变 Index Generation。
+_避免使用_：Index Generation、Source Version、当前文件集合
+
+**Retrieval Language Profile**：
+一个 Knowledge Base 用于关键词索引与查询的版本化语言分析规则。索引端与查询端必须使用同一
+Profile；Profile 变化会产生新的 Index Generation。
+_避免使用_：自动语言检测、Embedding 模型、Parser
+
+**Embedding Profile**：
+一个 Knowledge Base 用于文档与查询向量化的版本化模型身份、维度和归一化合同。Profile 变化会
+产生新的 Index Generation，聊天生成模型不因此成为 Embedding 模型。
+_避免使用_：ModelPort、Retrieval Language Profile、向量字段
+
+**Retrieval Profile**：
+一个 Knowledge Base 的版本化候选生成、融合、准入和预算规则，并引用其 Embedding Profile 与
+Retrieval Language Profile。它定义检索行为，不定义模型如何生成最终回答。
+_避免使用_：Prompt、Answer Policy、Milvus 配置
+
+## 检索与回答
+
+**Child Chunk**：
+从一个来源版本派生、用于精确检索定位的较小内容单元。Child Chunk 不是用户引用的独立来源。
+_避免使用_：Evidence、来源文档
+
+**Parent Segment**：
+包含一个或多个 Child Chunk、用于恢复回答所需上下文的较大来源片段。命中的 Child Chunk 可以
+扩展到其 Parent Segment，但二者仍指向同一来源版本。
+_避免使用_：相邻 Chunk 集合、来源版本
+
+**证据（Evidence）**：
+从有效知识库集合的某个来源版本中选出并提供给一次回答的有界内容，保留所属知识库和可返回原文的
+稳定定位信息。
+_避免使用_：候选结果、模型知识、引用
+
+**引用（Citation）**：
+回答中的一个主张指向证据及其来源位置的可见关系。引用存在只证明建立了定位关系，不自动证明证据
+确实支持该主张。来源后来被删除时，历史回答不重写；引用保留身份和定位元数据并显示来源已删除，
+不能把已删除内容伪装成仍可打开的原文。
+_避免使用_：证据、来源文档
+
+**Evidence Reference**：
+模型在一个 Turn 内用于引用 Prepared Turn Knowledge 中某条 Evidence 的临时标识。它只在该 Turn
+内有效；JDAgent 验证并把它解析为持久 Citation，不能把模型自行生成的标识当成来源事实。
+_避免使用_：Citation、Evidence 身份、跨 Turn 引用
+
+**模型补充（Model Supplement）**：
+模型依据自身参数知识提供、但没有 Prepared Turn Knowledge 中 Evidence 支持的回答内容。模型补充
+必须与有证据支持的内容明确区分。
+_避免使用_：常识、知识库答案、证据
+
+**Augmented-with-boundary Answer**：
+v0.3 唯一的知识增强回答合同：有 Evidence 支持的内容建立 Citation，没有 Evidence 支持的模型知识
+只作为明确分隔的 Model Supplement，知识不可用状态必须单独显示。
+_避免使用_：Grounded-only Answer、普通模型回答、静默降级
+
+**无充分证据（Insufficient Evidence）**：
+有效知识库集合中应参与本次检索的知识库可以正常检索，但返回内容不足以支持知识库回答。它描述
+证据结果，不表示知识服务故障。
+_避免使用_：Knowledge Unavailable、没有答案
+
+**Knowledge Unavailable**：
+一个 Workspace Knowledge Binding 指向的知识库因连接、访问、服务、兼容性或索引状态而未能
+进入或完成本次检索。它必须保留具体知识库身份，不能被表示成无充分证据。
+_避免使用_：Insufficient Evidence、空结果
+
+**Knowledge Retrieval Failure Reason**：
+Turn 对单个绑定知识库无法执行检索时记录的稳定原因：`BINDING_INVALID` 表示 Binding 指向的
+Connection 或 Knowledge Base 已不存在，`ACCESS_DENIED` 表示当前访问权限不足，
+`PROVIDER_UNAVAILABLE` 表示 Provider 或其依赖服务不可用，`QUERY_FAILED` 表示已到达 Provider
+但本次查询失败。Adapter 的异常文本可以作为诊断信息，但不能替代这些业务原因。
+_避免使用_：空检索结果、Milvus 异常类型、Turn Retrieval Outcome
+
+**Turn Retrieval Record**：
+记录一个 Turn 实际查询的 Knowledge Base、各库结果状态、所用 Index Build、Evidence 和 Citation
+关系的规范 Session Runtime Event 投影。它只持久化 Evidence 身份、Locator、内容校验值、Index
+Build 和排序等引用信息；Evidence 全文仍由 Source Store 保存。它描述已经发生的检索，不配置后续
+Turn 的检索范围。
+_避免使用_：Effective Knowledge Bases、Session 知识配置、Trace-only 记录
+
+**Turn Retrieval Outcome**：
+一次 Turn 的检索总体结果：`NOT_CONFIGURED` 表示 Workspace 没有可参与计算的 Knowledge
+Binding，`COMPLETE` 表示全部应查询知识库成功且形成可用证据，`PARTIAL` 表示只有部分知识库
+成功，`UNAVAILABLE` 表示没有知识库可完成检索，`INSUFFICIENT` 表示检索均可用但没有充分证据。
+该结果不改变 Augmented-with-boundary 的回答模式。
+_避免使用_：Turn Stop Reason、模型 Finish Reason、下轮检索配置
+
+## 来源生命周期
+
+**Deactivate**：
+停止一个 Knowledge Source 参与检索但保留其 Source Version 的可逆操作。
+_避免使用_：Delete、Milvus 清理
+
+**Delete**：
+不可逆移除一个 Knowledge Source 的 Raw Source Artifact、Parsed Source Snapshot 和所有索引投影
+的操作。只有所有必需存储均确认清理后，删除才算完成。
+_避免使用_：Deactivate、从活动集合移除
+
+**Delete Pending**：
+Knowledge Source 已被排除出检索，但至少一个必需存储尚未确认物理清理的状态。
+_避免使用_：Deleted、Inactive
+
+**Knowledge Mutation Lease**：
+用户级 Knowledge Catalog 在一段有期限的时间内授予一个操作的独占知识变更权。它只约束摄取、
+替换、删除和恢复等变更，不阻止读取已激活的 Content Revision。
+_避免使用_：Session Lock、Retrieval Lock、分布式锁

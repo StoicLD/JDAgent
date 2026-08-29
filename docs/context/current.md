@@ -1,11 +1,12 @@
 # 当前项目状态
 
-状态：`Implemented`
+状态：`Designing`
 
-版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）。
+版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
+`Proposed`（高层设计已收敛，尚未批准实现）。
 
 验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
-学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。下一 Chat 可直接开始 v0.3 设计。
+学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 尚未进入工程验收。
 
 ## 当前阶段
 
@@ -16,6 +17,11 @@ v0.2 已按批准设计完成 M1–M9：v0.1 薄 CLI 已提升为可安装、可
 持久交互式 CLI。Cursor 计划审查的 F01–F12 已处置；实现后的 Standards/Spec 双轴审查初轮
 finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026-08-24 明确认定 CLI/UI 不属于
 当前最急切的 Agent 核心学习范围，因此不要求逐项执行原 M10 练习，并验收 v0.2 学习门禁完成。
+
+v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
+[RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md)、RAG 限定语境
+[词汇表](../../CONTEXT.md)、[ADR-0006](../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
+和[实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md)。这些文档当前均不构成实现批准。
 
 ## 已批准事实
 
@@ -105,9 +111,9 @@ finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026
   实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
 - 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：v0.2
   学习门禁关闭后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
-  Context Orchestration 与 Compaction；当前已进入 v0.3 设计准备阶段。
-- 上述路线只批准学习方向和顺序；v0.3–v0.5 的具体需求、架构、依赖和实现尚未批准，必须分别
-  形成可验证设计包后由用户决定。
+  Context Orchestration 与 Compaction；当前已完成 v0.3 高层设计访谈并进入设计包评审准备。
+- 上述路线只批准学习方向和顺序；v0.3 高层设计、ADR、依赖和实现仍为 `Proposed`，必须与需求、
+  详细合同、Eval、实施计划和学习清单形成可验证设计包后由用户决定是否批准。
 
 ## v0.1 最终验收
 
@@ -125,12 +131,12 @@ finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026
 
 ## 下一步
 
-1. 新 Chat 直接按[模块交付与学习工作流](../development/module-delivery-workflow.md)开始 v0.3 RAG
-   的问题定义、需求、非目标、候选方案、Interface、失败模型、最小 Eval、实施计划和专属学习
-   清单；在用户批准前不开始实现。
-2. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
+1. 审阅 v0.3 高层设计与 ADR-0006，并补齐可追踪需求、Port/Payload/Runtime Event v2 详细合同、
+   Gold Corpus 基线、正式实施计划和模块专属学习清单；在用户批准前不开始实现。
+2. 对完整 v0.3 设计包执行独立 Spec/Standards 评审，关闭 Blocker/High 后再请求实现批准。
+3. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
    恢复仍以已批准的 Session 合同为准。
-3. v0.3 只进入设计讨论，不因路线已批准而自动批准依赖、架构或产品实现。
+4. v0.3 仍处于设计阶段，不因访谈收敛或路线已批准而自动批准依赖、架构或产品实现。
 
 ## 恢复入口
 
