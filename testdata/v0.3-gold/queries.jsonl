@@ -1,0 +1,19 @@
+{"query_id":"Q001","text":"全职员工年假是多少天？","language":"zh","knowledge_bases":["hr"],"answerable":true,"slice":"zh","scenario":"single_fact"}
+{"query_id":"Q002","text":"连续病假超过几天必须提交医院证明？","language":"zh","knowledge_bases":["hr"],"answerable":true,"slice":"zh","scenario":"single_fact"}
+{"query_id":"Q003","text":"年假需要提前几个工作日申请？","language":"zh","knowledge_bases":["hr"],"answerable":true,"slice":"zh","scenario":"single_fact"}
+{"query_id":"Q010","text":"When is a receipt required for expenses?","language":"en","knowledge_bases":["finance"],"answerable":true,"slice":"en","scenario":"single_fact"}
+{"query_id":"Q011","text":"What is the hotel nightly rate limit?","language":"en","knowledge_bases":["finance"],"answerable":true,"slice":"en","scenario":"single_fact"}
+{"query_id":"Q012","text":"How many days after a trip must expenses be submitted?","language":"en","knowledge_bases":["finance"],"answerable":true,"slice":"en","scenario":"single_fact"}
+{"query_id":"Q020","text":"What is the VPN hostname?","language":"en","knowledge_bases":["mixed"],"answerable":true,"slice":"mixed","scenario":"structure"}
+{"query_id":"Q021","text":"Who is on call on Tuesday?","language":"en","knowledge_bases":["mixed"],"answerable":true,"slice":"mixed","scenario":"table"}
+{"query_id":"Q030","text":"Which employees are in Beijing?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"csv","scenario":"csv"}
+{"query_id":"Q031","text":"What is Bo Chen's role?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"csv","scenario":"csv"}
+{"query_id":"Q032","text":"What does Ada Liu own according to notes?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"csv","scenario":"multiline_field"}
+{"query_id":"Q040","text":"Where is the badge office?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"en","scenario":"near_duplicate"}
+{"query_id":"Q050","text":"What is the pet insurance copay?","language":"en","knowledge_bases":["hr"],"answerable":false,"slice":"negative","scenario":"unanswerable"}
+{"query_id":"Q060","text":"What numeric stipend or leave figures exist?","language":"en","knowledge_bases":["hr","finance"],"answerable":true,"slice":"multikb","scenario":"conflict"}
+{"query_id":"Q070","text":"How many annual leave days do full-time employees get?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"injection","scenario":"prompt_injection"}
+{"query_id":"Q080","text":"Summarize leave days and meal stipend.","language":"en","knowledge_bases":["hr","finance"],"answerable":true,"slice":"multikb","scenario":"multi_evidence"}
+{"query_id":"Q090","text":"How many annual leave days after the source was replaced?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"lifecycle","scenario":"replace"}
+{"query_id":"Q091","text":"Can the deactivated leave policy still be opened from an old citation?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"lifecycle","scenario":"deactivate"}
+{"query_id":"Q092","text":"What happens to citations after the leave policy is deleted?","language":"en","knowledge_bases":["hr"],"answerable":true,"slice":"lifecycle","scenario":"delete_tombstone"}
