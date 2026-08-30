@@ -1,9 +1,9 @@
 # 当前项目状态
 
-状态：`Designing`
+状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Proposed`（高层设计已收敛，尚未批准实现）。
+`Approved`（高层设计、ADR 与分阶段实施计划已批准，当前进入 M0 设计包）。
 
 验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
 学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 尚未进入工程验收。
@@ -20,8 +20,10 @@ finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026
 
 v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 [RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md)、RAG 限定语境
-[词汇表](../../CONTEXT.md)、[ADR-0006](../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
-和[实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md)。这些文档当前均不构成实现批准。
+[词汇表](v0.3-rag-glossary.md)、[ADR-0006](../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
+和[实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md)。项目所有者于 2026-08-30 批准上述
+设计、决策、默认项和[分阶段实施计划](../plans/v0.3-rag-implementation.md)，当前从 M0 设计包开始；
+M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 产品代码。
 
 ## 已批准事实
 
@@ -47,6 +49,10 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
   [CLI 应用层架构](../architecture/cli-application.md)、
   [ADR-0004](../decisions/ADR-0004-cli-application-layer.md) 与
   [v0.2 实施计划](../plans/v0.2-cli-implementation.md)。
+- 2026-08-30 用户批准 v0.3 高层设计、知识检索语境、ADR-0006、P1/P2 默认项和
+  [分阶段实施计划](../plans/v0.3-rag-implementation.md)。批准允许从 M0 开始推进，并给予实现者对
+  文件布局、内部算法、局部 Interface 和 Commit 拆分的自主裁量；改变核心结果、不变量、事实
+  所有权、公开合同、重大风险或 P1/P2 范围时仍须升级裁定。
 - v0.2 以交互式 CLI 日常可用性为唯一核心结果；Claude Code 与
   `claude-code-best/claude-code` 仅是非规范性设计参考，不是兼容目标、代码来源或第二事实源。
 - v0.2 默认真实 Provider 为 DeepSeek；Fake 保留为显式测试能力。CLI 使用增强型行式 REPL，
@@ -111,9 +117,9 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
   实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
 - 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：v0.2
   学习门禁关闭后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
-  Context Orchestration 与 Compaction；当前已完成 v0.3 高层设计访谈并进入设计包评审准备。
-- 上述路线只批准学习方向和顺序；v0.3 高层设计、ADR、依赖和实现仍为 `Proposed`，必须与需求、
-  详细合同、Eval、实施计划和学习清单形成可验证设计包后由用户决定是否批准。
+  Context Orchestration 与 Compaction；v0.3 高层设计与实施计划已获批并进入 M0。
+- v0.3 的 M0 必须把需求、详细合同、Eval 和学习清单形成可验证设计包并完成独立评审；该门禁不因
+  高层设计与总体计划获批而取消。
 
 ## v0.1 最终验收
 
@@ -131,12 +137,14 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 
 ## 下一步
 
-1. 审阅 v0.3 高层设计与 ADR-0006，并补齐可追踪需求、Port/Payload/Runtime Event v2 详细合同、
-   Gold Corpus 基线、正式实施计划和模块专属学习清单；在用户批准前不开始实现。
-2. 对完整 v0.3 设计包执行独立 Spec/Standards 评审，关闭 Blocker/High 后再请求实现批准。
+1. 按已批准实施计划执行 M0：补齐可追踪需求、Port/Payload/Runtime Event v2 详细合同、Milvus/
+   Revision/Saga 合同、Gold Corpus 基线和模块专属学习清单。
+2. 对完整 M0 设计包执行独立 Spec/Standards 评审，关闭 Blocker/High，并由项目所有者批准进入
+   M1 产品代码。
 3. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
    恢复仍以已批准的 Session 合同为准。
-4. v0.3 仍处于设计阶段，不因访谈收敛或路线已批准而自动批准依赖、架构或产品实现。
+4. 后续由 Cursor 按 Milestone 和小增量推进；局部实现冲突自行取证和裁定，涉及已批准产品语义、
+   重大风险或范围变化时升级给项目所有者。
 
 ## 恢复入口
 

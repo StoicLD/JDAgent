@@ -2,9 +2,10 @@
 
 状态：`Implemented`
 
-版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）。
+版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
+`Approved`（当前进入 M0 设计包）。
 
-验收状态：v0.1、v0.2 均已完成；当前可以开始 v0.3 的思考与设计计划。
+验收状态：v0.1、v0.2 均已完成；v0.3 高层设计、ADR 与分阶段实施计划已批准，尚未进入工程验收。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -23,10 +24,10 @@ AI 可以作为资深指导者、实现者、批判者和模拟面试官承担�
 详细规则见[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，每个模块从
 [模块学习检查表模板](docs/learning/module-learning-checklist-template.md)实例化专属出口。
 
-v0.2 学习门禁已经关闭。已批准的近期学习顺序为：v0.3 RAG 与来源可追踪的知识检索、v0.4
-长期记忆生命周期、v0.5 Context Orchestration 与 Compaction。该顺序不等于具体版本需求已经
-批准；各版本仍需独立完成需求、架构、计划、Eval 和学习清单。见
-[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
+v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层设计和
+[分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，当前先完成 M0 的
+详细需求、合同、Eval 与学习清单。后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
+Orchestration 与 Compaction，见[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
 ContextBuilder、三种工具、权限审批、append-only JSONL Session、恢复、Trace、Fake Model
@@ -107,7 +108,7 @@ uv run pytest -q
 
 [v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 已于 2026-08-24 由项目所有者按
 学习范围裁定关闭：CLI/UI 不属于当前最优先的 Agent 核心学习内容，原练习保留为可选复习材料，
-不再阻塞 v0.3。下一次 Chat 可以直接开始 v0.3 的需求、候选方案和设计计划讨论。
+不再阻塞 v0.3。v0.3 当前按已批准的分阶段实施计划从 M0 设计包推进。
 
 恢复工作请依次阅读：
 
