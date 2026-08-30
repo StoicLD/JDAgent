@@ -88,6 +88,7 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
         precision_medians: list[float] = []
         completeness_medians: list[float] = []
         unsupported_medians: list[float] = []
+        scored_queries: list[str] = []
         try:
             for query in queries:
                 query_id = str(query["query_id"])
@@ -130,10 +131,14 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
                 precision_medians.append(median(tuple(runs_precision)))
                 completeness_medians.append(median(tuple(runs_completeness)))
                 unsupported_medians.append(median(tuple(runs_unsupported)))
+                scored_queries.append(query_id)
         finally:
             catalog.close()
-        assert sum(precision_medians) / len(precision_medians) >= 0.90
-        assert sum(completeness_medians) / len(completeness_medians) >= 0.85
-        assert sum(unsupported_medians) / len(unsupported_medians) <= 0.05
+        report = list(
+            zip(scored_queries, precision_medians, completeness_medians, unsupported_medians)
+        )
+        assert sum(precision_medians) / len(precision_medians) >= 0.90, report
+        assert sum(completeness_medians) / len(completeness_medians) >= 0.85, report
+        assert sum(unsupported_medians) / len(unsupported_medians) <= 0.05, report
 
     asyncio.run(scenario())
