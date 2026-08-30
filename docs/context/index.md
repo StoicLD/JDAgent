@@ -21,6 +21,17 @@
   M6 工程验收的增量、Commit 边界、退出条件与 Cursor 自主裁量
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
   默认值、P2 后续增强和升级条件
+- [v0.3 RAG 需求与可追踪验收标准](../requirements/v0.3-knowledge-retrieval.md) — `Proposed`，
+  FR/AC 与 Milestone 映射
+- [v0.3 知识 Port、Payload 与 Runtime Event v2 合同](../architecture/knowledge-contracts-v0.3.md)
+  — `Proposed`
+- [v0.3 Milvus Collection、Revision 与 Saga 合同](../architecture/milvus-revision-saga-v0.3.md)
+  — `Proposed`
+
+## Eval 数据
+
+- [v0.3 Gold Corpus 与无 RAG 基线](../../testdata/v0.3-gold/DATASET.md) — `Proposed`，
+  dataset revision `v0.3-gold-r1`
 
 ## 架构
 
@@ -79,3 +90,5 @@
   于 2026-08-24 按学习范围裁定关闭；原题保留为可选复习材料
 - [模块学习检查表模板](../learning/module-learning-checklist-template.md) — `Approved`，每个后续
   实质性模块设计完成时实例化并填充具体机制、数据流和故障实验
+- [v0.3 RAG 人工学习检查表](../learning/v0.3-rag-learning-checklist.md) — `Proposed`，工程关闭后
+  仍须由学习者本人完成
