@@ -45,6 +45,7 @@ _COMMANDS = (
     "/resume",
     "/rename",
     "/permissions",
+    "/knowledge",
     "/trace",
     "/exit",
 )

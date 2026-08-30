@@ -13,6 +13,44 @@ from jdagent.configuration import ConfigurationError
 from jdagent.domain.errors import SessionError
 from jdagent.host import CliStartup, run_cli
 from jdagent.host import run_single_turn as run_single_turn
+from jdagent.knowledge.cli import run_knowledge_cli
+from jdagent.knowledge.errors import KnowledgeError
+
+_VALUE_FLAGS = frozenset(
+    {
+        "--session-id",
+        "--provider",
+        "--model",
+        "--base-url",
+        "--model-timeout-seconds",
+        "--tool-timeout-seconds",
+        "--max-context-tokens",
+        "--fake-delay-seconds",
+        "--workspace",
+        "--data-dir",
+        "--output",
+    }
+)
+
+
+def _split_knowledge_argv(argv: Sequence[str]) -> tuple[list[str], list[str]] | None:
+    global_argv: list[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "knowledge":
+            return global_argv, list(argv[index + 1 :])
+        if token.startswith("-"):
+            name = token.split("=", 1)[0]
+            global_argv.append(token)
+            if "=" not in token and name in _VALUE_FLAGS:
+                index += 1
+                if index < len(argv):
+                    global_argv.append(argv[index])
+            index += 1
+            continue
+        return None
+    return None
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -70,8 +108,21 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI with a composition root selected from explicit arguments."""
 
+    raw = list(sys.argv[1:] if argv is None else argv)
+    knowledge_split = _split_knowledge_argv(raw)
     try:
-        return asyncio.run(run_cli(_parse_arguments(argv)))
+        if knowledge_split is not None:
+            global_argv, knowledge_argv = knowledge_split
+            startup = _parse_arguments(global_argv)
+            return run_knowledge_cli(
+                knowledge_argv,
+                workspace=startup.workspace,
+                data_dir=startup.data_dir,
+            )
+        return asyncio.run(run_cli(_parse_arguments(raw)))
+    except KnowledgeError as error:
+        print(f"jdagent: {error} [{error.code.value}]", file=sys.stderr)
+        return int(ExitStatus.USAGE_OR_CONFIG_ERROR)
     except SessionError as error:
         print(f"jdagent: {error}", file=sys.stderr)
         return int(ExitStatus.SESSION_ERROR)

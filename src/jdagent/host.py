@@ -220,6 +220,8 @@ async def run_cli(startup: CliStartup) -> int:
                 model_timeout_seconds=resolved.model_timeout_seconds,
                 tool_timeout_seconds=resolved.tool_timeout_seconds,
                 max_context_tokens=resolved.max_context_tokens,
+                knowledge_catalog=resolved.data_paths.knowledge_catalog,
+                knowledge_backups=resolved.data_paths.knowledge_backups,
             ),
             initial_session_id=session_id,
             recovery=recovery,

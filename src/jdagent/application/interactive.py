@@ -21,15 +21,18 @@ from jdagent.application.session_recovery import (
     prepare_session_resume,
 )
 from jdagent.core.loop import CancellationToken
+from jdagent.data_paths import workspace_identity
 from jdagent.domain.errors import SessionError, StopReason
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType
+from jdagent.knowledge.catalog import KnowledgeCatalog
+from jdagent.knowledge.errors import KnowledgeError
 from jdagent.observability import TraceProjection
 from jdagent.ports import SessionPort
 from jdagent.tools.permissions import active_session_rules
 
 
 class CommandName(StrEnum):
-    """The complete v0.2 built-in command set."""
+    """The complete built-in command set."""
 
     HELP = "help"
     STATUS = "status"
@@ -39,6 +42,7 @@ class CommandName(StrEnum):
     RENAME = "rename"
     PERMISSIONS = "permissions"
     TRACE = "trace"
+    KNOWLEDGE = "knowledge"
     EXIT = "exit"
 
 
@@ -132,6 +136,8 @@ class InteractiveContext:
     model_timeout_seconds: float = 30.0
     tool_timeout_seconds: float = 10.0
     max_context_tokens: int | None = None
+    knowledge_catalog: Path | None = None
+    knowledge_backups: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +170,7 @@ def parse_user_action(raw: str) -> UserAction:
 
 _HELP = (
     "/help /status /new /sessions /resume <name|id> /rename <name> "
-    "/permissions [revoke <rule-id>] /trace /exit\n"
+    "/permissions [revoke <rule-id>] /knowledge status|bindings|sources /trace /exit\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
@@ -407,10 +413,12 @@ class InteractiveApplication:
                 )
             elif action.name is CommandName.PERMISSIONS:
                 await self._permissions(action.arguments)
+            elif action.name is CommandName.KNOWLEDGE:
+                await self._knowledge(action.arguments)
             elif action.name is CommandName.TRACE:
                 self._require_arity(action.arguments, 0, "/trace")
                 await self._trace()
-        except (CommandError, OSError, SessionError, ValueError) as error:
+        except (CommandError, KnowledgeError, OSError, SessionError, ValueError) as error:
             await self._presenter.publish(UiEvent(UiEventKind.ERROR, str(error)))
         return False
 
@@ -451,6 +459,32 @@ class InteractiveApplication:
             )
             return
         raise CommandError("usage: /permissions [revoke <rule-id>]")
+
+    async def _knowledge(self, arguments: Sequence[str]) -> None:
+        if len(arguments) != 1 or arguments[0] not in {"status", "bindings", "sources"}:
+            raise CommandError("usage: /knowledge status|bindings|sources")
+        catalog_path = self._context.knowledge_catalog
+        backup_path = self._context.knowledge_backups
+        if catalog_path is None or backup_path is None:
+            raise CommandError("Knowledge catalog is not configured")
+        catalog = KnowledgeCatalog(catalog_path, backup_path)
+        catalog.open()
+        try:
+            identity = workspace_identity(self._context.workspace)
+            if arguments[0] == "status":
+                bindings = catalog.list_bindings(identity)
+                message = f"bindings={len(bindings)}"
+            elif arguments[0] == "bindings":
+                bindings = catalog.list_bindings(identity)
+                message = (
+                    "\n".join(f"{item.binding_id} {item.knowledge_base_id}" for item in bindings)
+                    or "no bindings"
+                )
+            else:
+                message = "no sources"
+        finally:
+            catalog.close()
+        await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
 
     async def _trace(self) -> None:
         if self._last_trace is None:

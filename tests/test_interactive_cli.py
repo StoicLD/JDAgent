@@ -89,6 +89,7 @@ class MemoryRecoveryStore:
         ("/rename focused work", CommandName.RENAME, ("focused", "work")),
         ("/permissions", CommandName.PERMISSIONS, ()),
         ("/trace", CommandName.TRACE, ()),
+        ("/knowledge status", CommandName.KNOWLEDGE, ("status",)),
         ("/exit", CommandName.EXIT, ()),
     ),
 )
