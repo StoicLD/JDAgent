@@ -7,6 +7,8 @@ __pycache__/
 .coverage
 htmlcov/
 .jdagent/
+testdata/v0.3-gold/failures/*.jsonl
+!testdata/v0.3-gold/failures/README.md
 dist/
 build/
 *.egg-info/
