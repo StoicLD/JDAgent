@@ -1,5 +1,5 @@
 from jdagent.domain.events import CitationRecord
-from jdagent.knowledge.citation import finalize_answer
+from jdagent.knowledge.citation import evidence_system_part, finalize_answer
 from jdagent.knowledge.ptk import (
     Evidence,
     EvidenceBudget,
@@ -46,3 +46,10 @@ def test_finalize_rewrites_machine_references_and_rejects_unknown() -> None:
     )
     bad = finalize_answer("See K:other:E1 and [1].", knowledge)
     assert bad.illegal is True
+
+
+def test_evidence_prompt_requires_exact_machine_references() -> None:
+    prompt = evidence_system_part(_ptk())
+    assert "K:tok:E1" in prompt
+    assert "machine reference" in prompt
+    assert "[1]" in prompt

@@ -55,6 +55,7 @@ class RuntimeOptions:
     max_model_calls: int = 8
     max_tool_calls: int = 16
     temperature: float | None = None
+    include_tools: bool = True
     provider_options: JsonObject = field(default_factory=_empty_json_object)
 
     def __post_init__(self) -> None:
@@ -173,7 +174,7 @@ def build_runtime(
         raise ValueError(f"Unsupported provider: {configuration.provider}")
 
     session = JsonlSession(configuration.session_directory)
-    tools = create_builtin_tools(resolver)
+    tools = create_builtin_tools(resolver) if options.include_tools else ()
     loop_factory = ConfiguredLoopFactory(
         model=model,
         model_name=configuration.model,
