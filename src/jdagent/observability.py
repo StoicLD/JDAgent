@@ -12,6 +12,7 @@ from jdagent.domain.events import (
     ToolExecutionCompletedPayload,
     TurnCompletedPayload,
     TurnFailedPayload,
+    TurnRetrievalRecordedPayload,
 )
 
 
@@ -46,6 +47,7 @@ class TraceSummary:
     stop_reason: StopReason | None
     error_category: str | None
     duration_ms: int
+    knowledge_outcome: str | None = None
 
 
 class TraceProjection:
@@ -61,6 +63,7 @@ class TraceProjection:
         self._output_tokens = 0
         self._stop_reason: StopReason | None = None
         self._error_category: str | None = None
+        self._knowledge_outcome: str | None = None
 
     @property
     def entries(self) -> tuple[TraceEntry, ...]:
@@ -85,6 +88,7 @@ class TraceProjection:
             self._stop_reason,
             self._error_category,
             duration_ms,
+            self._knowledge_outcome,
         )
 
     async def observe(self, event: RuntimeEvent) -> None:
@@ -128,6 +132,8 @@ class TraceProjection:
             self._model = payload.model
             self._input_tokens += payload.usage.input_tokens
             self._output_tokens += payload.usage.output_tokens
+        elif isinstance(payload, TurnRetrievalRecordedPayload):
+            self._knowledge_outcome = payload.outcome
         elif isinstance(payload, TurnCompletedPayload):
             self._provider = payload.provider
             self._model = payload.model

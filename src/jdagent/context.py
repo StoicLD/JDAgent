@@ -22,6 +22,8 @@ from jdagent.domain.model import (
     SystemPart,
 )
 from jdagent.domain.tools import ToolDefinition, ToolResultStatus
+from jdagent.knowledge.citation import evidence_system_part
+from jdagent.knowledge.ptk import PreparedTurnKnowledge
 
 
 class ContextLimitError(RuntimeError):
@@ -113,17 +115,31 @@ class ContextBuilder:
         self,
         events: Sequence[RuntimeEvent],
         capabilities: ModelCapabilities,
+        knowledge: PreparedTurnKnowledge | None = None,
+        *,
+        allow_tools: bool = True,
+        repair_message: str | None = None,
     ) -> ModelRequest:
         """Build and validate one deterministic provider-independent request."""
 
-        if self._tools and not capabilities.tool_calls:
+        if allow_tools and self._tools and not capabilities.tool_calls:
             raise UnsupportedModelCapabilityError("Selected model does not support tool calls")
 
         messages = project_messages(events)
-        tools = tuple(
-            ModelToolDefinition(tool.name, tool.description, dict(tool.input_schema))
-            for tool in self._tools
-        )
+        if repair_message:
+            messages = (*messages, ModelMessage(MessageRole.USER, repair_message))
+        tools = ()
+        if allow_tools:
+            tools = tuple(
+                ModelToolDefinition(tool.name, tool.description, dict(tool.input_schema))
+                for tool in self._tools
+            )
+        system_parts = self._system_parts
+        if knowledge is not None:
+            system_parts = (
+                *system_parts,
+                SystemPart(evidence_system_part(knowledge), source="untrusted_evidence"),
+            )
         metadata: dict[str, str] = {}
         if events:
             metadata["session_id"] = events[-1].session_id
@@ -131,7 +147,7 @@ class ContextBuilder:
                 metadata["turn_id"] = events[-1].turn_id
         request = ModelRequest(
             model=self._model,
-            system_parts=self._system_parts,
+            system_parts=system_parts,
             messages=messages,
             tools=tools,
             settings=self._settings,

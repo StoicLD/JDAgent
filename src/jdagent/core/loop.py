@@ -8,6 +8,7 @@ from jdagent.context import ContextBuilder, ContextLimitError
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    CitationRecord,
     ModelUsageRecordedPayload,
     RuntimeEventType,
     ToolCallRequestedPayload,
@@ -25,6 +26,8 @@ from jdagent.domain.model import (
     UsageReported,
 )
 from jdagent.domain.tools import ToolCall, ToolExecutionContext
+from jdagent.knowledge.citation import finalize_answer, repair_message
+from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
 
 
@@ -55,6 +58,8 @@ class TurnResult:
     model_calls: int
     tool_calls: int
     error_category: str | None = None
+    citations: tuple[CitationRecord, ...] = ()
+    model_supplement: str = ""
 
 
 class CancellationToken:
@@ -94,6 +99,9 @@ class AgentLoop:
         self._provider_name = provider_name
         self._model_name = model_name
         self._model_event_observers = model_event_observers
+        self._knowledge: PreparedTurnKnowledge | None = None
+        self._citations: tuple[CitationRecord, ...] = ()
+        self._model_supplement = ""
 
     async def run(
         self,
@@ -101,14 +109,19 @@ class AgentLoop:
         tool_context: ToolExecutionContext,
         *,
         cancellation: CancellationToken | None = None,
+        knowledge: PreparedTurnKnowledge | None = None,
     ) -> TurnResult:
         """Run until normal completion, failure, cancellation, or a hard limit."""
 
         cancellation = cancellation or CancellationToken()
+        self._knowledge = knowledge
+        self._citations = ()
+        self._model_supplement = ""
         model_calls = 0
         tool_calls = 0
         text_parts: list[str] = []
         seen_call_ids: set[str] = set()
+        repaired = False
 
         while True:
             if cancellation.cancelled:
@@ -136,6 +149,7 @@ class AgentLoop:
                 request = self._context_builder.build(
                     self._journal.events,
                     self._model.capabilities,
+                    self._knowledge,
                 )
             except ContextLimitError as error:
                 return await self._fail(
@@ -276,6 +290,81 @@ class AgentLoop:
                 )
 
             text = "".join(response_text)
+            if not response_calls and self._knowledge is not None:
+                finalized = finalize_answer(text, self._knowledge)
+                if finalized.illegal:
+                    if repaired:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.MODEL_ERROR,
+                            "invalid_citation",
+                            "Assistant citations were invalid after repair",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                    repaired = True
+                    try:
+                        repair_request = self._context_builder.build(
+                            self._journal.events,
+                            self._model.capabilities,
+                            self._knowledge,
+                            allow_tools=False,
+                            repair_message=repair_message(self._knowledge),
+                        )
+                    except ContextLimitError as error:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.CONTEXT_LIMIT,
+                            "context_length",
+                            str(error),
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                    model_calls += 1
+                    repair_text: list[str] = []
+                    repair_completed = False
+                    try:
+                        async with asyncio.timeout(repair_request.settings.timeout_seconds):
+                            async for event in self._model.stream(repair_request):
+                                if isinstance(event, TextDelta):
+                                    repair_text.append(event.text)
+                                elif isinstance(event, ResponseCompleted):
+                                    repair_completed = True
+                    except TimeoutError:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.MODEL_ERROR,
+                            ModelErrorCategory.TIMEOUT.value,
+                            "Model call timed out",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                    if not repair_completed:
+                        return await self._model_protocol_failure(
+                            turn_id,
+                            "Model stream ended without a valid completion",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                    text = "".join(repair_text)
+                    finalized = finalize_answer(text, self._knowledge)
+                    if finalized.illegal:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.MODEL_ERROR,
+                            "invalid_citation",
+                            "Assistant citations were invalid after repair",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                text = finalized.display_text
+                self._citations = finalized.citations
+                self._model_supplement = finalized.model_supplement
             text_parts.append(text)
             response_call_ids = [call.call_id for call in response_calls]
             if len(response_call_ids) != len(set(response_call_ids)) or any(
@@ -291,7 +380,12 @@ class AgentLoop:
             await self._journal.record(
                 turn_id,
                 RuntimeEventType.ASSISTANT_MESSAGE_COMPLETED,
-                AssistantMessageCompletedPayload(text, tuple(response_calls)),
+                AssistantMessageCompletedPayload(
+                    text,
+                    tuple(response_calls),
+                    self._citations if not response_calls else (),
+                    self._model_supplement if not response_calls else "",
+                ),
             )
             if not response_calls:
                 await self._journal.record(
@@ -310,6 +404,8 @@ class AgentLoop:
                     "".join(text_parts),
                     model_calls,
                     tool_calls,
+                    citations=self._citations,
+                    model_supplement=self._model_supplement,
                 )
 
             for call in response_calls:
@@ -402,6 +498,8 @@ class AgentLoop:
             model_calls,
             tool_calls,
             error_category,
+            self._citations,
+            self._model_supplement,
         )
 
     async def _record_failure(

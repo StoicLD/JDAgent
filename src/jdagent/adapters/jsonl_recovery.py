@@ -74,8 +74,15 @@ def _repair_locked(
     if raw.endswith(b"\n"):
         try:
             events = _parse_prefix(raw, session_id)
+        except SessionError as error:
+            if error.code is SessionErrorCode.UNSUPPORTED_SCHEMA:
+                raise
+            return PhysicalRecoveryResult(
+                PhysicalRecovery.UNRECOVERABLE,
+                (),
+                message=str(error),
+            )
         except (
-            SessionError,
             UnicodeDecodeError,
             json.JSONDecodeError,
             TypeError,
@@ -92,7 +99,16 @@ def _repair_locked(
     prefix = raw[:offset]
     try:
         events = _parse_prefix(prefix, session_id)
-    except (SessionError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+    except SessionError as error:
+        if error.code is SessionErrorCode.UNSUPPORTED_SCHEMA:
+            raise
+        return PhysicalRecoveryResult(
+            PhysicalRecovery.UNRECOVERABLE,
+            (),
+            byte_offset=offset,
+            message=f"Session cannot be repaired safely: {error}",
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
         return PhysicalRecoveryResult(
             PhysicalRecovery.UNRECOVERABLE,
             (),

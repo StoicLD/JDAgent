@@ -13,12 +13,16 @@ from typing import cast
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    CitationRecord,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
     PermissionResolvedPayload,
     PermissionRuleGrantedPayload,
     PermissionRuleRevokedPayload,
     RecoverySnapshotPayload,
+    RetrievalBaseRecord,
+    RetrievalBudgetRecord,
+    RetrievalEvidenceRecord,
     RuntimeEvent,
     RuntimeEventType,
     RuntimePayload,
@@ -29,6 +33,7 @@ from jdagent.domain.events import (
     ToolExecutionStartedPayload,
     TurnCompletedPayload,
     TurnFailedPayload,
+    TurnRetrievalRecordedPayload,
     UserMessagePayload,
 )
 from jdagent.domain.json import (
@@ -70,6 +75,52 @@ def _tool_call_to_data(call: ToolCall) -> JsonObject:
     return {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
 
 
+def _citation_to_data(item: CitationRecord) -> JsonObject:
+    return {
+        "ordinal": item.ordinal,
+        "evidence_id": item.evidence_id,
+        "knowledge_base_id": item.knowledge_base_id,
+        "source_id": item.source_id,
+        "source_version_id": item.source_version_id,
+        "snapshot_id": item.snapshot_id,
+        "locator": item.locator,
+        "locator_schema_version": item.locator_schema_version,
+        "content_hash": item.content_hash,
+    }
+
+
+def _base_to_data(item: RetrievalBaseRecord) -> JsonObject:
+    return {
+        "binding_id": item.binding_id,
+        "connection_id": item.connection_id,
+        "knowledge_base_id": item.knowledge_base_id,
+        "kb_name": item.kb_name,
+        "status": item.status,
+        "failure_reason": item.failure_reason,
+        "generation_id": item.generation_id,
+        "revision": item.revision,
+        "physical_collection": item.physical_collection,
+        "embedding_profile_fingerprint": item.embedding_profile_fingerprint,
+        "retrieval_profile_fingerprint": item.retrieval_profile_fingerprint,
+        "hit_count": item.hit_count,
+        "selected_evidence_count": item.selected_evidence_count,
+    }
+
+
+def _evidence_to_data(item: RetrievalEvidenceRecord) -> JsonObject:
+    return {
+        "evidence_id": item.evidence_id,
+        "ordinal": item.ordinal,
+        "knowledge_base_id": item.knowledge_base_id,
+        "source_id": item.source_id,
+        "source_version_id": item.source_version_id,
+        "snapshot_id": item.snapshot_id,
+        "locator": item.locator,
+        "locator_schema_version": item.locator_schema_version,
+        "content_hash": item.content_hash,
+    }
+
+
 def _tool_result_to_data(result: ToolResult) -> JsonObject:
     return {
         "call_id": result.call_id,
@@ -109,10 +160,30 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
         }
     if isinstance(payload, UserMessagePayload):
         return {"content": payload.content}
+    if isinstance(payload, TurnRetrievalRecordedPayload):
+        return {
+            "outcome": payload.outcome,
+            "turn_token": payload.turn_token,
+            "bases": [_base_to_data(item) for item in payload.bases],
+            "evidence": [_evidence_to_data(item) for item in payload.evidence],
+            "budget": {
+                "dense_top_k": payload.budget.dense_top_k,
+                "bm25_top_k": payload.budget.bm25_top_k,
+                "fused_child_count": payload.budget.fused_child_count,
+                "rerank_pool_size": payload.budget.rerank_pool_size,
+                "parent_count": payload.budget.parent_count,
+                "evidence_tokens": payload.budget.evidence_tokens,
+                "evidence_token_limit": payload.budget.evidence_token_limit,
+                "parent_limit": payload.budget.parent_limit,
+            },
+            "degradations": list(payload.degradations),
+        }
     if isinstance(payload, AssistantMessageCompletedPayload):
         return {
             "content": payload.content,
             "tool_calls": [_tool_call_to_data(call) for call in payload.tool_calls],
+            "citations": [_citation_to_data(item) for item in payload.citations],
+            "model_supplement": payload.model_supplement,
         }
     if isinstance(payload, ToolCallRequestedPayload):
         return {"call": _tool_call_to_data(payload.call)}
@@ -208,6 +279,52 @@ def _tool_call(data: JsonObject) -> ToolCall:
     )
 
 
+def _citation_from_data(data: JsonObject) -> CitationRecord:
+    return CitationRecord(
+        require_integer(data, "ordinal"),
+        require_string(data, "evidence_id"),
+        require_string(data, "knowledge_base_id"),
+        require_string(data, "source_id"),
+        require_string(data, "source_version_id"),
+        require_string(data, "snapshot_id"),
+        require_string(data, "locator"),
+        require_integer(data, "locator_schema_version"),
+        require_string(data, "content_hash"),
+    )
+
+
+def _base_from_data(data: JsonObject) -> RetrievalBaseRecord:
+    return RetrievalBaseRecord(
+        require_string(data, "binding_id"),
+        require_string(data, "connection_id"),
+        require_string(data, "knowledge_base_id"),
+        require_string(data, "kb_name"),
+        require_string(data, "status"),
+        optional_string(data, "failure_reason"),
+        optional_string(data, "generation_id"),
+        require_integer(data, "revision"),
+        optional_string(data, "physical_collection"),
+        require_string(data, "embedding_profile_fingerprint"),
+        require_string(data, "retrieval_profile_fingerprint"),
+        require_integer(data, "hit_count"),
+        require_integer(data, "selected_evidence_count"),
+    )
+
+
+def _evidence_record_from_data(data: JsonObject) -> RetrievalEvidenceRecord:
+    return RetrievalEvidenceRecord(
+        require_string(data, "evidence_id"),
+        require_integer(data, "ordinal"),
+        require_string(data, "knowledge_base_id"),
+        require_string(data, "source_id"),
+        require_string(data, "source_version_id"),
+        require_string(data, "snapshot_id"),
+        require_string(data, "locator"),
+        require_integer(data, "locator_schema_version"),
+        require_string(data, "content_hash"),
+    )
+
+
 def _tool_result(data: JsonObject) -> ToolResult:
     error_code = optional_string(data, "error_code")
     return ToolResult(
@@ -256,12 +373,55 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
         )
     if event_type is RuntimeEventType.USER_MESSAGE:
         return UserMessagePayload(require_string(data, "content"))
+    if event_type is RuntimeEventType.TURN_RETRIEVAL_RECORDED:
+        raw_bases = data.get("bases")
+        raw_evidence = data.get("evidence")
+        raw_degradations = data.get("degradations")
+        if not isinstance(raw_bases, list) or not isinstance(raw_evidence, list):
+            raise ValueError("turn_retrieval_recorded lists are invalid")
+        if not isinstance(raw_degradations, list):
+            raise ValueError("degradations must be an array")
+        budget = require_object(data.get("budget"), "budget")
+        return TurnRetrievalRecordedPayload(
+            require_string(data, "outcome"),
+            require_string(data, "turn_token"),
+            tuple(_base_from_data(require_object(item, "base")) for item in raw_bases),
+            tuple(
+                _evidence_record_from_data(require_object(item, "evidence"))
+                for item in raw_evidence
+            ),
+            RetrievalBudgetRecord(
+                require_integer(budget, "dense_top_k"),
+                require_integer(budget, "bm25_top_k"),
+                require_integer(budget, "fused_child_count"),
+                require_integer(budget, "rerank_pool_size"),
+                require_integer(budget, "parent_count"),
+                require_integer(budget, "evidence_tokens"),
+                require_integer(budget, "evidence_token_limit"),
+                require_integer(budget, "parent_limit"),
+            ),
+            tuple(str(item) for item in raw_degradations),
+        )
     if event_type is RuntimeEventType.ASSISTANT_MESSAGE_COMPLETED:
         raw_calls = data.get("tool_calls")
         if not isinstance(raw_calls, list):
             raise ValueError("tool_calls must be an array")
         calls = tuple(_tool_call(require_object(item, "tool_call")) for item in raw_calls)
-        return AssistantMessageCompletedPayload(require_string(data, "content"), calls)
+        raw_citations = data.get("citations")
+        if raw_citations is None:
+            citations: tuple[CitationRecord, ...] = ()
+        elif not isinstance(raw_citations, list):
+            raise ValueError("citations must be an array")
+        else:
+            citations = tuple(
+                _citation_from_data(require_object(item, "citation")) for item in raw_citations
+            )
+        return AssistantMessageCompletedPayload(
+            require_string(data, "content"),
+            calls,
+            citations,
+            optional_string(data, "model_supplement") or "",
+        )
     if event_type is RuntimeEventType.TOOL_CALL_REQUESTED:
         return ToolCallRequestedPayload(_tool_call(require_object(data.get("call"), "call")))
     if event_type is RuntimeEventType.PERMISSION_REQUESTED:
@@ -341,10 +501,10 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
 
 
 def event_from_data(data: JsonObject) -> RuntimeEvent:
-    """Validate and reconstruct one schema-v1 canonical event."""
+    """Validate and reconstruct one schema-v2 canonical event."""
 
     schema_version = require_integer(data, "schema_version")
-    if schema_version != 1:
+    if schema_version != 2:
         raise SessionError(
             SessionErrorCode.UNSUPPORTED_SCHEMA,
             f"Unsupported schema version: {schema_version}",

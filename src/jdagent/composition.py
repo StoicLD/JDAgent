@@ -54,6 +54,7 @@ class RuntimeOptions:
 
     max_model_calls: int = 8
     max_tool_calls: int = 16
+    temperature: float | None = None
     provider_options: JsonObject = field(default_factory=_empty_json_object)
 
     def __post_init__(self) -> None:
@@ -181,7 +182,10 @@ def build_runtime(
         registry=ToolRegistry(tools),
         approval=approval,
         system_parts=(SystemPart("You are a careful, concise general-purpose agent."),),
-        model_settings=ModelSettings(timeout_seconds=configuration.model_timeout_seconds),
+        model_settings=ModelSettings(
+            timeout_seconds=configuration.model_timeout_seconds,
+            temperature=options.temperature,
+        ),
         max_context_tokens=configuration.max_context_tokens,
         limits=LoopLimits(options.max_model_calls, options.max_tool_calls),
         tool_timeout_seconds=configuration.tool_timeout_seconds,
@@ -195,5 +199,8 @@ def build_runtime(
         loop_factory=loop_factory,
         event_observers=event_observers,
         workspace_identity=workspace_identity(workspace),
+        knowledge_catalog=configuration.data_paths.knowledge_catalog,
+        knowledge_backups=configuration.data_paths.knowledge_backups,
+        knowledge_index=configuration.data_paths.knowledge_directory / "index.sqlite",
     )
     return RuntimeComposition(coordinator, model, session)

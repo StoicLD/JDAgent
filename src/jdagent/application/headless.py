@@ -1,11 +1,13 @@
 """One-shot application seam shared by text and JSON presenters."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
-from jdagent.application.coordinator import TurnCoordinator
+from jdagent.application.coordinator import TurnCoordinator, retrieval_payload
 from jdagent.domain.errors import StopReason
+from jdagent.domain.events import CitationRecord
 from jdagent.domain.json import JsonObject
+from jdagent.knowledge.ptk import PreparedTurnKnowledge, empty_prepared_knowledge
 from jdagent.observability import TraceProjection
 
 
@@ -34,6 +36,11 @@ class HeadlessResult:
     output_tokens: int
     error_category: str | None
     trace: TraceProjection
+    knowledge: PreparedTurnKnowledge = field(
+        default_factory=lambda: empty_prepared_knowledge("", "", "")
+    )
+    citations: tuple[CitationRecord, ...] = ()
+    model_supplement: str = ""
 
     @property
     def exit_status(self) -> ExitStatus:
@@ -46,7 +53,7 @@ class HeadlessResult:
         return ExitStatus.RUNTIME_ERROR
 
     def json_data(self) -> JsonObject:
-        """Return the stable JSON-v1 public representation."""
+        """Return the stable JSON-v2 public representation."""
 
         error: JsonObject | None = None
         if self.exit_status is not ExitStatus.SUCCESS:
@@ -54,13 +61,15 @@ class HeadlessResult:
                 "category": self.error_category or self.stop_reason.value,
                 "message": "Turn did not complete successfully",
             }
+        recorded = retrieval_payload(self.knowledge)
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "success" if self.exit_status is ExitStatus.SUCCESS else "error",
             "session_id": self.session_id,
             "turn_id": self.turn_id,
             "stop_reason": self.stop_reason.value,
             "answer": self.answer,
+            "model_supplement": self.model_supplement,
             "provider": self.provider,
             "model": self.model,
             "usage": {
@@ -68,6 +77,33 @@ class HeadlessResult:
                 "output_tokens": self.output_tokens,
                 "total_tokens": self.input_tokens + self.output_tokens,
             },
+            "knowledge": {
+                "outcome": recorded.outcome,
+                "bases": [
+                    {
+                        "binding_id": item.binding_id,
+                        "connection_id": item.connection_id,
+                        "knowledge_base_id": item.knowledge_base_id,
+                        "kb_name": item.kb_name,
+                        "status": item.status,
+                        "failure_reason": item.failure_reason,
+                        "hit_count": item.hit_count,
+                        "selected_evidence_count": item.selected_evidence_count,
+                    }
+                    for item in recorded.bases
+                ],
+                "degradations": list(recorded.degradations),
+            },
+            "citations": [
+                {
+                    "ordinal": item.ordinal,
+                    "evidence_id": item.evidence_id,
+                    "knowledge_base_id": item.knowledge_base_id,
+                    "source_id": item.source_id,
+                    "locator": item.locator,
+                }
+                for item in self.citations
+            ],
             "error": error,
         }
 
@@ -95,4 +131,7 @@ async def run_headless(
         output_tokens=summary.output_tokens,
         error_category=turn.result.error_category,
         trace=turn.trace,
+        knowledge=turn.knowledge,
+        citations=turn.result.citations,
+        model_supplement=turn.result.model_supplement,
     )

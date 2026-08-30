@@ -1,4 +1,4 @@
-"""Canonical runtime event schema version 1."""
+"""Canonical runtime event schema version 2."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,6 +26,7 @@ class RuntimeEventType(StrEnum):
     SESSION_RENAMED = "session_renamed"
     RECOVERY_SNAPSHOT = "recovery_snapshot"
     USER_MESSAGE = "user_message"
+    TURN_RETRIEVAL_RECORDED = "turn_retrieval_recorded"
     ASSISTANT_MESSAGE_COMPLETED = "assistant_message_completed"
     TOOL_CALL_REQUESTED = "tool_call_requested"
     PERMISSION_REQUESTED = "permission_requested"
@@ -71,11 +72,82 @@ class UserMessagePayload:
 
 
 @dataclass(frozen=True, slots=True)
+class CitationRecord:
+    """A verified, turn-scoped citation attached to a completed assistant message."""
+
+    ordinal: int
+    evidence_id: str
+    knowledge_base_id: str
+    source_id: str
+    source_version_id: str
+    snapshot_id: str
+    locator: str
+    locator_schema_version: int
+    content_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalBaseRecord:
+    binding_id: str
+    connection_id: str
+    knowledge_base_id: str
+    kb_name: str
+    status: str
+    failure_reason: str | None
+    generation_id: str | None
+    revision: int
+    physical_collection: str | None
+    embedding_profile_fingerprint: str
+    retrieval_profile_fingerprint: str
+    hit_count: int
+    selected_evidence_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvidenceRecord:
+    evidence_id: str
+    ordinal: int
+    knowledge_base_id: str
+    source_id: str
+    source_version_id: str
+    snapshot_id: str
+    locator: str
+    locator_schema_version: int
+    content_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalBudgetRecord:
+    dense_top_k: int
+    bm25_top_k: int
+    fused_child_count: int
+    rerank_pool_size: int
+    parent_count: int
+    evidence_tokens: int
+    evidence_token_limit: int
+    parent_limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class TurnRetrievalRecordedPayload:
+    """Frozen retrieval outcome recorded before the first model call."""
+
+    outcome: str
+    turn_token: str
+    bases: tuple[RetrievalBaseRecord, ...] = ()
+    evidence: tuple[RetrievalEvidenceRecord, ...] = ()
+    budget: RetrievalBudgetRecord = RetrievalBudgetRecord(20, 20, 0, 40, 0, 0, 6000, 8)
+    degradations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class AssistantMessageCompletedPayload:
     """The final assistant content and tool calls for one model response."""
 
     content: str
     tool_calls: tuple[ToolCall, ...] = ()
+    citations: tuple[CitationRecord, ...] = ()
+    model_supplement: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +241,7 @@ RuntimePayload: TypeAlias = (
     | SessionRenamedPayload
     | RecoverySnapshotPayload
     | UserMessagePayload
+    | TurnRetrievalRecordedPayload
     | AssistantMessageCompletedPayload
     | ToolCallRequestedPayload
     | PermissionRequestedPayload
@@ -206,10 +279,10 @@ class RuntimeEvent:
         event_type: RuntimeEventType,
         payload: RuntimePayload,
     ) -> "RuntimeEvent":
-        """Create a schema-v1 event with a unique ID and UTC timestamp."""
+        """Create a schema-v2 event with a unique ID and UTC timestamp."""
 
         return cls(
-            schema_version=1,
+            schema_version=2,
             event_id=str(uuid4()),
             session_id=session_id,
             turn_id=turn_id,

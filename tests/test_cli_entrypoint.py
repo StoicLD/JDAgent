@@ -89,17 +89,49 @@ def test_headless_json_stdout_is_machine_parseable(
     assert code == 0
     assert captured.err == ""
     assert payload == {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "success",
         "session_id": payload["session_id"],
         "turn_id": payload["turn_id"],
         "stop_reason": "completed",
         "answer": "Offline fake model response.",
+        "model_supplement": "",
         "provider": "fake",
         "model": "deepseek-v4-flash",
         "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "knowledge": {"outcome": "not_configured", "bases": [], "degradations": []},
+        "citations": [],
         "error": None,
     }
+
+
+def test_ordinary_turn_does_not_create_knowledge_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_root = tmp_path / "config"
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("APPDATA", str(config_root))
+    monkeypatch.setenv("LOCALAPPDATA", str(data_root))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_root))
+    code = main(
+        [
+            "hello",
+            "--provider",
+            "fake",
+            "--workspace",
+            str(tmp_path),
+            "--data-dir",
+            str(tmp_path / "sessions"),
+            "--output",
+            "json",
+        ]
+    )
+    capsys.readouterr()
+    assert code == 0
+    assert not (data_root / "JDAgent" / "knowledge" / "catalog.sqlite").exists()
 
 
 def test_missing_deepseek_key_reports_action_and_exits_2_without_fake_fallback(
