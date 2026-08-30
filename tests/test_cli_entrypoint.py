@@ -194,7 +194,7 @@ def test_version_comes_from_installed_package_metadata(
         main(["--version"])
 
     assert exit_info.value.code == 0
-    assert capsys.readouterr().out == "jdagent 0.2.0\n"
+    assert capsys.readouterr().out == "jdagent 0.3.0\n"
 
 
 def test_unclassified_internal_error_is_safely_mapped_to_exit_1(
