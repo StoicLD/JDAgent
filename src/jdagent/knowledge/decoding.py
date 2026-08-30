@@ -105,7 +105,7 @@ def _charset_detector() -> Callable[[bytes], Iterable[object]]:
             KnowledgeErrorCode.DEPENDENCY_MISSING,
             "charset-normalizer is required for automatic encoding detection",
         ) from error
-    return cast(Callable[[bytes], Iterable[object]], getattr(module, "from_bytes"))
+    return cast(Callable[[bytes], Iterable[object]], module.from_bytes)
 
 
 def _reject_replacement(text: str, encoding: str) -> None:

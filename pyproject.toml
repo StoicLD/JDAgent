@@ -18,6 +18,12 @@ dependencies = [
 [project.scripts]
 jdagent = "jdagent.cli:main"
 
+[project.optional-dependencies]
+rag = [
+    "charset-normalizer>=3.3,<4",
+    "pymilvus>=2.4,<3",
+]
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.400,<2",
