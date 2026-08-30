@@ -27,6 +27,24 @@ class SourceLifecycle(StrEnum):
     DELETED = "deleted"
 
 
+class SagaStage(StrEnum):
+    RECEIVED = "received"
+    RAW_STORED = "raw_stored"
+    PARSED = "parsed"
+    INDEXING = "indexing"
+    INDEX_VALIDATED = "index_validated"
+    ACTIVE = "active"
+
+
+class OperationKind(StrEnum):
+    ADD = "add"
+    REPLACE = "replace"
+    DEACTIVATE = "deactivate"
+    REACTIVATE = "reactivate"
+    DELETE = "delete"
+    RECONCILE = "reconcile"
+
+
 @dataclass(frozen=True, slots=True)
 class EmbeddingProfile:
     """Versioned document/query vector contract for one knowledge base."""
@@ -209,3 +227,39 @@ class BindingRecord:
     connection_id: str
     knowledge_base_id: str
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRecord:
+    source_id: str
+    knowledge_base_id: str
+    name: str
+    lifecycle: SourceLifecycle
+    current_version_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SourceVersionRecord:
+    source_version_id: str
+    source_id: str
+    raw_hash: str
+    encoding: str
+    encoding_method: str
+    snapshot_hash: str
+    parser_profile: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class OperationRecord:
+    operation_id: str
+    kind: OperationKind
+    saga_stage: str
+    knowledge_base_id: str
+    source_id: str | None
+    payload_json: str
+    error_code: str | None
+    created_at: datetime
+    updated_at: datetime

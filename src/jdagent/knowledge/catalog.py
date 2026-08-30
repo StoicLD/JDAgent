@@ -7,7 +7,7 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -21,13 +21,20 @@ from jdagent.knowledge.types import (
     EmbeddingProfile,
     KnowledgeBaseRecord,
     KnowledgeBaseStatus,
+    OperationKind,
+    OperationRecord,
     ProviderKind,
     RetrievalProfile,
+    SagaStage,
+    SourceLifecycle,
+    SourceRecord,
+    SourceVersionRecord,
 )
 
 _CREDENTIAL_REF = re.compile(r"^(env|file):(.+)$")
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
+LEASE_TTL_SECONDS = 300
 
 
 class Clock(Protocol):
@@ -456,6 +463,348 @@ class KnowledgeCatalog:
             raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Binding not found")
         return self._binding_from_row(row)
 
+    def acquire_lease(self, operation_id: str, owner: str) -> None:
+        now = self._clock.now()
+        with self._lock:
+            db = self._db()
+            row = db.execute("SELECT * FROM leases WHERE lease_id = 'global'").fetchone()
+            if row is not None:
+                expires = _parse_time(row["expires_at"])
+                if expires > now and row["operation_id"] != operation_id:
+                    raise KnowledgeError(
+                        KnowledgeErrorCode.KNOWLEDGE_BUSY,
+                        "Knowledge catalog is busy",
+                    )
+            expires_at = (now + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat()
+            db.execute(
+                """
+                INSERT INTO leases(
+                    lease_id, operation_id, owner, acquired_at, heartbeat_at, expires_at
+                ) VALUES ('global', ?, ?, ?, ?, ?)
+                ON CONFLICT(lease_id) DO UPDATE SET
+                    operation_id = excluded.operation_id,
+                    owner = excluded.owner,
+                    heartbeat_at = excluded.heartbeat_at,
+                    expires_at = excluded.expires_at
+                """,
+                (operation_id, owner, now.isoformat(), now.isoformat(), expires_at),
+            )
+            self._commit_with_backup(db)
+
+    def release_lease(self, operation_id: str) -> None:
+        with self._lock:
+            db = self._db()
+            db.execute(
+                "DELETE FROM leases WHERE lease_id = 'global' AND operation_id = ?",
+                (operation_id,),
+            )
+            self._commit_with_backup(db)
+
+    def record_operation(
+        self,
+        *,
+        operation_id: str,
+        kind: OperationKind,
+        knowledge_base_id: str,
+        source_id: str | None,
+        stage: SagaStage,
+        payload_json: str = "{}",
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> OperationRecord:
+        now = self._clock.now().isoformat()
+        with self._lock:
+            db = self._db()
+            existing = db.execute(
+                "SELECT created_at FROM operations WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            created = existing["created_at"] if existing is not None else now
+            db.execute(
+                """
+                INSERT INTO operations (
+                    operation_id, kind, saga_stage, knowledge_base_id, source_id,
+                    payload_json, error_code, error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(operation_id) DO UPDATE SET
+                    saga_stage = excluded.saga_stage,
+                    source_id = excluded.source_id,
+                    payload_json = excluded.payload_json,
+                    error_code = excluded.error_code,
+                    error_message = excluded.error_message,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    operation_id,
+                    kind.value,
+                    stage.value,
+                    knowledge_base_id,
+                    source_id,
+                    payload_json,
+                    error_code,
+                    error_message,
+                    created,
+                    now,
+                ),
+            )
+            self._commit_with_backup(db)
+        return self.get_operation(operation_id)
+
+    def get_operation(self, operation_id: str) -> OperationRecord:
+        with self._lock:
+            row = (
+                self._db()
+                .execute(
+                    "SELECT * FROM operations WHERE operation_id = ?",
+                    (operation_id,),
+                )
+                .fetchone()
+            )
+        if row is None:
+            raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Operation not found")
+        return OperationRecord(
+            operation_id=row["operation_id"],
+            kind=OperationKind(row["kind"]),
+            saga_stage=row["saga_stage"],
+            knowledge_base_id=row["knowledge_base_id"],
+            source_id=row["source_id"],
+            payload_json=row["payload_json"],
+            error_code=row["error_code"],
+            created_at=_parse_time(row["created_at"]),
+            updated_at=_parse_time(row["updated_at"]),
+        )
+
+    def expire_stale_leases(self) -> int:
+        now = self._clock.now()
+        with self._lock:
+            db = self._db()
+            row = db.execute("SELECT * FROM leases WHERE lease_id = 'global'").fetchone()
+            if row is None:
+                return 0
+            if _parse_time(row["expires_at"]) > now:
+                return 0
+            db.execute("DELETE FROM leases WHERE lease_id = 'global'")
+            self._commit_with_backup(db)
+        return 1
+
+    def upsert_source(
+        self,
+        *,
+        knowledge_base_id: str,
+        name: str,
+        source_id: str | None = None,
+        lifecycle: SourceLifecycle = SourceLifecycle.ACTIVE,
+        current_version_id: str | None = None,
+    ) -> SourceRecord:
+        now = self._clock.now().isoformat()
+        identifier = source_id or new_id("src")
+        with self._lock:
+            db = self._db()
+            existing = db.execute(
+                "SELECT * FROM sources WHERE knowledge_base_id = ? AND name = ?",
+                (knowledge_base_id, name),
+            ).fetchone()
+            if existing is not None:
+                identifier = existing["source_id"]
+                db.execute(
+                    """
+                    UPDATE sources SET lifecycle = ?, current_version_id = ?, updated_at = ?
+                    WHERE source_id = ?
+                    """,
+                    (lifecycle.value, current_version_id, now, identifier),
+                )
+            else:
+                db.execute(
+                    """
+                    INSERT INTO sources (
+                        source_id, knowledge_base_id, name, lifecycle, current_version_id,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        identifier,
+                        knowledge_base_id,
+                        name,
+                        lifecycle.value,
+                        current_version_id,
+                        now,
+                        now,
+                    ),
+                )
+            self._commit_with_backup(db)
+        return self.get_source(identifier)
+
+    def get_source(self, source_id: str) -> SourceRecord:
+        with self._lock:
+            row = (
+                self._db()
+                .execute(
+                    "SELECT * FROM sources WHERE source_id = ?",
+                    (source_id,),
+                )
+                .fetchone()
+            )
+        if row is None:
+            raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Source not found")
+        return SourceRecord(
+            source_id=row["source_id"],
+            knowledge_base_id=row["knowledge_base_id"],
+            name=row["name"],
+            lifecycle=SourceLifecycle(row["lifecycle"]),
+            current_version_id=row["current_version_id"],
+            created_at=_parse_time(row["created_at"]),
+            updated_at=_parse_time(row["updated_at"]),
+        )
+
+    def get_source_by_name(self, knowledge_base_id: str, name: str) -> SourceRecord | None:
+        with self._lock:
+            row = (
+                self._db()
+                .execute(
+                    "SELECT * FROM sources WHERE knowledge_base_id = ? AND name = ?",
+                    (knowledge_base_id, name),
+                )
+                .fetchone()
+            )
+        if row is None:
+            return None
+        return self.get_source(row["source_id"])
+
+    def list_sources(self, knowledge_base_id: str) -> tuple[SourceRecord, ...]:
+        with self._lock:
+            rows = (
+                self._db()
+                .execute(
+                    "SELECT source_id FROM sources WHERE knowledge_base_id = ? ORDER BY name",
+                    (knowledge_base_id,),
+                )
+                .fetchall()
+            )
+        return tuple(self.get_source(row["source_id"]) for row in rows)
+
+    def get_source_version(self, source_version_id: str) -> SourceVersionRecord:
+        with self._lock:
+            row = (
+                self._db()
+                .execute(
+                    "SELECT * FROM source_versions WHERE source_version_id = ?",
+                    (source_version_id,),
+                )
+                .fetchone()
+            )
+        if row is None:
+            raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Source version not found")
+        return SourceVersionRecord(
+            source_version_id=row["source_version_id"],
+            source_id=row["source_id"],
+            raw_hash=row["raw_hash"],
+            encoding=str(row["encoding"] or ""),
+            encoding_method=str(row["encoding_method"] or ""),
+            snapshot_hash=str(row["snapshot_hash"] or ""),
+            parser_profile=str(row["parser_profile"] or ""),
+            created_at=_parse_time(row["created_at"]),
+        )
+
+    def add_source_version(
+        self,
+        *,
+        source_id: str,
+        raw_hash: str,
+        encoding: str,
+        encoding_method: str,
+        snapshot_hash: str,
+        parser_profile: str,
+    ) -> str:
+        version_id = new_id("sv")
+        now = self._clock.now().isoformat()
+        with self._lock:
+            db = self._db()
+            db.execute(
+                """
+                INSERT INTO source_versions (
+                    source_version_id, source_id, raw_hash, encoding, encoding_method,
+                    snapshot_hash, parser_profile, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version_id,
+                    source_id,
+                    raw_hash,
+                    encoding,
+                    encoding_method,
+                    snapshot_hash,
+                    parser_profile,
+                    now,
+                ),
+            )
+            self._commit_with_backup(db)
+        return version_id
+
+    def set_source_lifecycle(
+        self, source_id: str, lifecycle: SourceLifecycle, *, current_version_id: str | None = None
+    ) -> None:
+        now = self._clock.now().isoformat()
+        with self._lock:
+            db = self._db()
+            if current_version_id is None:
+                db.execute(
+                    "UPDATE sources SET lifecycle = ?, updated_at = ? WHERE source_id = ?",
+                    (lifecycle.value, now, source_id),
+                )
+            else:
+                db.execute(
+                    """
+                    UPDATE sources SET lifecycle = ?, current_version_id = ?, updated_at = ?
+                    WHERE source_id = ?
+                    """,
+                    (lifecycle.value, current_version_id, now, source_id),
+                )
+            self._commit_with_backup(db)
+
+    def activate_revision(self, knowledge_base_id: str, generation_id: str, revision: int) -> None:
+        now = self._clock.now().isoformat()
+        with self._lock:
+            db = self._db()
+            db.execute(
+                """
+                UPDATE knowledge_bases
+                SET current_generation_id = ?, current_revision = ?, updated_at = ?
+                WHERE knowledge_base_id = ?
+                """,
+                (generation_id, revision, now, knowledge_base_id),
+            )
+            self._commit_with_backup(db)
+
+    def remember_chunks(
+        self, generation_id: str, source_id: str, chunk_ids: tuple[str, ...]
+    ) -> None:
+        with self._lock:
+            db = self._db()
+            for chunk_id in chunk_ids:
+                db.execute(
+                    """
+                    INSERT OR REPLACE INTO generation_chunks(generation_id, chunk_id, source_id)
+                    VALUES (?, ?, ?)
+                    """,
+                    (generation_id, chunk_id, source_id),
+                )
+            self._commit_with_backup(db)
+
+    def chunks_for_source(self, generation_id: str, source_id: str) -> tuple[str, ...]:
+        with self._lock:
+            rows = (
+                self._db()
+                .execute(
+                    """
+                SELECT chunk_id FROM generation_chunks
+                WHERE generation_id = ? AND source_id = ?
+                """,
+                    (generation_id, source_id),
+                )
+                .fetchall()
+            )
+        return tuple(row["chunk_id"] for row in rows)
+
     def create_backup(self, *, reason: str = "manual") -> Path:
         with self._lock:
             return self._backup_locked(self._db(), reason=reason)
@@ -545,6 +894,57 @@ class KnowledgeCatalog:
                     knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(knowledge_base_id),
                     created_at TEXT NOT NULL,
                     UNIQUE (workspace_identity, knowledge_base_id)
+                );
+                """
+            )
+        if current < 2:
+            db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS sources (
+                    source_id TEXT PRIMARY KEY,
+                    knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(knowledge_base_id),
+                    name TEXT NOT NULL,
+                    lifecycle TEXT NOT NULL,
+                    current_version_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (knowledge_base_id, name)
+                );
+                CREATE TABLE IF NOT EXISTS source_versions (
+                    source_version_id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL REFERENCES sources(source_id),
+                    raw_hash TEXT NOT NULL,
+                    encoding TEXT,
+                    encoding_method TEXT,
+                    snapshot_hash TEXT,
+                    parser_profile TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS operations (
+                    operation_id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    saga_stage TEXT NOT NULL,
+                    knowledge_base_id TEXT NOT NULL,
+                    source_id TEXT,
+                    payload_json TEXT NOT NULL,
+                    error_code TEXT,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS leases (
+                    lease_id TEXT PRIMARY KEY,
+                    operation_id TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    acquired_at TEXT NOT NULL,
+                    heartbeat_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS generation_chunks (
+                    generation_id TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    PRIMARY KEY (generation_id, chunk_id)
                 );
                 """
             )
