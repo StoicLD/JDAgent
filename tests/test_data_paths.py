@@ -36,6 +36,8 @@ def test_data_paths_partition_sessions_outside_workspace(tmp_path: Path) -> None
     assert paths.sessions_directory == paths.project_directory / "sessions"
     assert paths.catalog_index == paths.project_directory / "catalog-index.json"
     assert paths.input_history == paths.project_directory / "input-history"
+    assert paths.knowledge_catalog == data_root / "jdagent" / "knowledge" / "catalog.sqlite"
+    assert paths.knowledge_objects == data_root / "jdagent" / "knowledge" / "objects"
     assert workspace not in paths.project_directory.parents
 
 

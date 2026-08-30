@@ -57,6 +57,10 @@ class DataPaths:
     sessions_directory: Path
     catalog_index: Path
     input_history: Path
+    knowledge_directory: Path
+    knowledge_catalog: Path
+    knowledge_objects: Path
+    knowledge_backups: Path
 
     def ensure_project_partition(self) -> None:
         """Create or validate the collision-detecting workspace manifest."""
@@ -115,6 +119,7 @@ class DataPaths:
         actual_data_root = data_root or default_data
         identity = workspace_identity(canonical)
         project_directory = actual_data_root / application_name / "projects" / identity
+        knowledge_directory = actual_data_root / application_name / "knowledge"
         return cls(
             workspace=canonical,
             identity=identity,
@@ -124,4 +129,8 @@ class DataPaths:
             sessions_directory=project_directory / "sessions",
             catalog_index=project_directory / "catalog-index.json",
             input_history=project_directory / "input-history",
+            knowledge_directory=knowledge_directory,
+            knowledge_catalog=knowledge_directory / "catalog.sqlite",
+            knowledge_objects=knowledge_directory / "objects",
+            knowledge_backups=knowledge_directory / "backups",
         )

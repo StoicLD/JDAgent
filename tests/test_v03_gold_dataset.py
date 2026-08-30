@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
+
+from jdagent.domain.json import JsonObject, normalize_json
 
 GOLD_ROOT = Path(__file__).resolve().parents[1] / "testdata" / "v0.3-gold"
 REQUIRED_SLICES = {"zh", "en", "csv", "mixed", "multikb", "negative", "injection", "lifecycle"}
@@ -28,15 +31,15 @@ REQUIRED_ENCODINGS = {
 }
 
 
-def _load_jsonl(path: Path) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
+def _load_jsonl(path: Path) -> list[JsonObject]:
+    rows: list[JsonObject] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue
-        loaded = json.loads(line)
+        loaded = normalize_json(json.loads(line))
         if not isinstance(loaded, dict):
             raise AssertionError(f"{path.name}:{line_number} must be a JSON object")
-        rows.append(loaded)
+        rows.append(cast(JsonObject, loaded))
     return rows
 
 
@@ -45,7 +48,9 @@ def test_gold_corpus_inventory_and_query_annotation_join() -> None:
     annotations = _load_jsonl(GOLD_ROOT / "annotations.jsonl")
     source_names = {path.name for path in (GOLD_ROOT / "sources").iterdir() if path.is_file()}
     encoding_names = {
-        path.name for path in (GOLD_ROOT / "encodings").iterdir() if path.is_file() and path.name != "README.md"
+        path.name
+        for path in (GOLD_ROOT / "encodings").iterdir()
+        if path.is_file() and path.name != "README.md"
     }
 
     assert REQUIRED_SOURCES <= source_names
@@ -58,7 +63,7 @@ def test_gold_corpus_inventory_and_query_annotation_join() -> None:
     assert query_ids == annotation_ids
     assert len(set(query_ids)) == len(query_ids)
 
-    slices = {row["slice"] for row in queries}
+    slices = {row["slice"] for row in queries if isinstance(row["slice"], str)}
     assert REQUIRED_SLICES <= slices
 
     for query, annotation in zip(queries, annotations, strict=True):
