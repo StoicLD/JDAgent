@@ -481,7 +481,13 @@ class InteractiveApplication:
                     or "no bindings"
                 )
             else:
-                message = "no sources"
+                identity = workspace_identity(self._context.workspace)
+                bindings = catalog.list_bindings(identity)
+                lines: list[str] = []
+                for binding in bindings:
+                    for source in catalog.list_sources(binding.knowledge_base_id):
+                        lines.append(f"{source.source_id} {source.name} {source.lifecycle.value}")
+                message = "\n".join(lines) or "no sources"
         finally:
             catalog.close()
         await self._presenter.publish(UiEvent(UiEventKind.INFO, message))

@@ -129,3 +129,84 @@ def test_knowledge_commands_are_not_registered_as_tools(tmp_path: Path) -> None:
     assert "knowledge" not in names
     assert "connection" not in names
     assert names == {"calculator", "read_text_file", "write_text_file"}
+
+
+def test_knowledge_cli_adds_and_lists_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _isolate_data(tmp_path, monkeypatch)
+    gold = Path(__file__).resolve().parents[1] / "testdata" / "v0.3-gold" / "sources"
+    connection = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "connection",
+                "add",
+                "--name",
+                "local",
+            ],
+        )
+    )
+    kb = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "kb",
+                "create",
+                "--connection",
+                connection["connection_id"],
+                "--name",
+                "hr",
+            ],
+        )
+    )
+    added = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "source",
+                "add",
+                "--kb",
+                kb["knowledge_base_id"],
+                "--file",
+                str(gold / "zh-leave-policy.md"),
+            ],
+        )
+    )
+    listed = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "source",
+                "list",
+                "--kb",
+                kb["knowledge_base_id"],
+            ],
+        )
+    )
+    assert added["revision"] == 1
+    assert listed[0]["source_id"] == added["source_id"]
+    assert listed[0]["lifecycle"] == "active"
+
+
+def _run(capsys: pytest.CaptureFixture[str], argv: list[str]) -> str:
+    code = main(argv)
+    captured = capsys.readouterr()
+    assert code == 0, captured.err
+    return captured.out

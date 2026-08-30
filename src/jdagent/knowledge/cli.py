@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -10,8 +11,12 @@ from pathlib import Path
 from jdagent.configuration import CliOverrides, resolve_configuration
 from jdagent.data_paths import DataPaths, workspace_identity
 from jdagent.knowledge.catalog import KnowledgeCatalog
+from jdagent.knowledge.embedding import HashEmbedding, OpenAICompatibleEmbedding
 from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
-from jdagent.knowledge.types import ConnectionRecord, KnowledgeBaseRecord
+from jdagent.knowledge.index import FileKnowledgeIndex, KnowledgeIndex
+from jdagent.knowledge.ingestion import KnowledgeIngestion
+from jdagent.knowledge.store import ContentAddressedStore
+from jdagent.knowledge.types import ConnectionRecord, KnowledgeBaseRecord, SourceRecord
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -53,6 +58,40 @@ def _parser() -> argparse.ArgumentParser:
     unbind = binding_sub.add_parser("remove")
     unbind.add_argument("--id", dest="binding_id", required=True)
     unbind.add_argument("--yes", action="store_true")
+
+    source = sub.add_parser("source")
+    source_sub = source.add_subparsers(dest="action", required=True)
+    source_add = source_sub.add_parser("add")
+    source_add.add_argument("--kb", required=True)
+    source_add.add_argument("--file", required=True, type=Path)
+    source_add.add_argument("--encoding")
+    source_add.add_argument("--operation-id")
+    source_replace = source_sub.add_parser("replace")
+    source_replace.add_argument("--kb", required=True)
+    source_replace.add_argument("--file", required=True, type=Path)
+    source_replace.add_argument("--encoding")
+    source_replace.add_argument("--operation-id")
+    source_replace.add_argument("--yes", action="store_true")
+    source_list = source_sub.add_parser("list")
+    source_list.add_argument("--kb", required=True)
+    deactivate = source_sub.add_parser("deactivate")
+    deactivate.add_argument("--kb", required=True)
+    deactivate.add_argument("--id", dest="source_id", required=True)
+    reactivate = source_sub.add_parser("reactivate")
+    reactivate.add_argument("--kb", required=True)
+    reactivate.add_argument("--id", dest="source_id", required=True)
+    source_delete = source_sub.add_parser("delete")
+    source_delete.add_argument("--kb", required=True)
+    source_delete.add_argument("--id", dest="source_id", required=True)
+    source_delete.add_argument("--yes", action="store_true")
+
+    operation = sub.add_parser("operation")
+    operation_sub = operation.add_subparsers(dest="action", required=True)
+    op_status = operation_sub.add_parser("status")
+    op_status.add_argument("--id", dest="operation_id", required=True)
+    op_retry = operation_sub.add_parser("retry")
+    op_retry.add_argument("--id", dest="operation_id", required=True)
+    operation_sub.add_parser("reconcile")
     return parser
 
 
@@ -83,6 +122,45 @@ def _kb_json(record: KnowledgeBaseRecord) -> dict[str, object]:
         "language_profile": record.language_profile,
         "current_revision": record.current_revision,
     }
+
+
+def _source_json(record: SourceRecord) -> dict[str, object]:
+    return {
+        "source_id": record.source_id,
+        "knowledge_base_id": record.knowledge_base_id,
+        "name": record.name,
+        "lifecycle": record.lifecycle.value,
+        "current_version_id": record.current_version_id,
+    }
+
+
+def _index_for(
+    catalog: KnowledgeCatalog, kb: KnowledgeBaseRecord, paths: DataPaths
+) -> KnowledgeIndex:
+    connection = catalog.get_connection(kb.connection_id)
+    if connection.endpoint:
+        from jdagent.knowledge.milvus import load_milvus_index
+
+        return load_milvus_index(connection.endpoint)
+    return FileKnowledgeIndex(paths.knowledge_directory / "index.sqlite")
+
+
+def _ingestion(
+    catalog: KnowledgeCatalog,
+    knowledge_base_id: str,
+    paths: DataPaths,
+) -> KnowledgeIngestion:
+    kb = catalog.get_knowledge_base(knowledge_base_id)
+    profile = kb.embedding_profile
+    embedding = (
+        OpenAICompatibleEmbedding() if profile.base_url and profile.model else HashEmbedding()
+    )
+    return KnowledgeIngestion(
+        catalog,
+        ContentAddressedStore(paths.knowledge_objects),
+        _index_for(catalog, kb, paths),
+        embedding,
+    )
 
 
 def run_knowledge_cli(
@@ -165,4 +243,85 @@ def _dispatch(catalog: KnowledgeCatalog, namespace: argparse.Namespace, paths: D
     if group == "binding" and action == "remove":
         catalog.unbind(namespace.binding_id, confirmed=namespace.yes)
         return {"removed": namespace.binding_id}
+    if group == "source" and action == "add":
+        ingestion = _ingestion(catalog, namespace.kb, paths)
+        result = asyncio.run(
+            ingestion.add_file(
+                namespace.kb,
+                namespace.file,
+                operation_id=namespace.operation_id,
+                encoding=namespace.encoding,
+            )
+        )
+        return {
+            "operation_id": result.operation_id,
+            "source_id": result.source_id,
+            "source_version_id": result.source_version_id,
+            "revision": result.revision,
+            "generation_id": result.generation_id,
+        }
+    if group == "source" and action == "replace":
+        if not namespace.yes:
+            raise KnowledgeError(
+                KnowledgeErrorCode.CONFIRMATION_REQUIRED,
+                "Replacing a source requires confirmation",
+            )
+        ingestion = _ingestion(catalog, namespace.kb, paths)
+        result = asyncio.run(
+            ingestion.add_file(
+                namespace.kb,
+                namespace.file,
+                operation_id=namespace.operation_id,
+                encoding=namespace.encoding,
+                replace=True,
+            )
+        )
+        return {
+            "operation_id": result.operation_id,
+            "source_id": result.source_id,
+            "source_version_id": result.source_version_id,
+            "revision": result.revision,
+            "generation_id": result.generation_id,
+        }
+    if group == "source" and action == "list":
+        return [_source_json(item) for item in catalog.list_sources(namespace.kb)]
+    if group == "source" and action == "deactivate":
+        ingestion = _ingestion(catalog, namespace.kb, paths)
+        revision = asyncio.run(ingestion.deactivate(namespace.kb, namespace.source_id))
+        return {"source_id": namespace.source_id, "revision": revision, "lifecycle": "inactive"}
+    if group == "source" and action == "reactivate":
+        ingestion = _ingestion(catalog, namespace.kb, paths)
+        revision = asyncio.run(ingestion.reactivate(namespace.kb, namespace.source_id))
+        return {"source_id": namespace.source_id, "revision": revision, "lifecycle": "active"}
+    if group == "source" and action == "delete":
+        ingestion = _ingestion(catalog, namespace.kb, paths)
+        asyncio.run(ingestion.delete(namespace.kb, namespace.source_id, confirmed=namespace.yes))
+        return {"deleted": namespace.source_id, "lifecycle": "deleted"}
+    if group == "operation" and action == "status":
+        record = catalog.get_operation(namespace.operation_id)
+        return {
+            "operation_id": record.operation_id,
+            "kind": record.kind.value,
+            "saga_stage": record.saga_stage,
+            "knowledge_base_id": record.knowledge_base_id,
+            "source_id": record.source_id,
+            "error_code": record.error_code,
+        }
+    if group == "operation" and action == "retry":
+        record = catalog.get_operation(namespace.operation_id)
+        ingestion = _ingestion(catalog, record.knowledge_base_id, paths)
+        result = asyncio.run(ingestion.retry(namespace.operation_id))
+        return {
+            "operation_id": result.operation_id,
+            "source_id": result.source_id,
+            "revision": result.revision,
+            "saga_stage": "active",
+        }
+    if group == "operation" and action == "reconcile":
+        ingestion = KnowledgeIngestion(
+            catalog,
+            ContentAddressedStore(paths.knowledge_objects),
+            FileKnowledgeIndex(paths.knowledge_directory / "index.sqlite"),
+        )
+        return ingestion.reconcile()
     raise KnowledgeError(KnowledgeErrorCode.INVALID_ARGUMENT, "Unsupported knowledge command")
