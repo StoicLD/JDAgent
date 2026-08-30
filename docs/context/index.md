@@ -17,8 +17,8 @@
   全部关闭
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
   v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
-- [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，从 M0 设计包到
-  M6 工程验收的增量、Commit 边界、退出条件与 Cursor 自主裁量
+- [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，P1 M0–M6
+  工程实现已合入 `0.3.0`；学习出口与部分 Live/独立评审门禁见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
   默认值、P2 后续增强和升级条件
 - [v0.3 RAG 需求与可追踪验收标准](../requirements/v0.3-knowledge-retrieval.md) — `Proposed`，

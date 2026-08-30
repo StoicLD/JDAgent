@@ -3,9 +3,9 @@
 状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Approved`（当前进入 M0 设计包）。
+`Implemented（学习出口待执行）`。
 
-验收状态：v0.1、v0.2 均已完成；v0.3 高层设计、ADR 与分阶段实施计划已批准，尚未进入工程验收。
+验收状态：v0.1、v0.2 均已完成；v0.3 P1 工程代码已合入 `0.3.0`，学习出口待学习者本人完成。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -99,7 +99,8 @@ uv run pytest -q
 ```
 
 真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
-`tests/integration/test_deepseek_live.py`；测试同样遵循上述 Key 优先级。
+`tests/integration/test_deepseek_live.py` 与 Gold Answer/Citation Eval；测试同样遵循上述
+Key 优先级。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
 
 ## 学习出口
 
@@ -108,7 +109,8 @@ uv run pytest -q
 
 [v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 已于 2026-08-24 由项目所有者按
 学习范围裁定关闭：CLI/UI 不属于当前最优先的 Agent 核心学习内容，原练习保留为可选复习材料，
-不再阻塞 v0.3。v0.3 当前按已批准的分阶段实施计划从 M0 设计包推进。
+不再阻塞 v0.3。[v0.3 RAG 学习检查表](docs/learning/v0.3-rag-learning-checklist.md) 须由学习者
+本人完成，工程合入不能代替。
 
 恢复工作请依次阅读：
 

@@ -3,10 +3,13 @@
 状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Approved`（高层设计、ADR 与分阶段实施计划已批准，当前进入 M0 设计包）。
+`Implemented（学习出口待执行）`。P1 工程代码已合入 `0.3.0`；M0 需求/合同/Eval 规格仍为
+`Proposed`（实现者不得自批）；Milvus Live 与独立实现评审尚未关闭。
 
 验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
-学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 尚未进入工程验收。
+学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 P1 离线门禁、clean-env 安装、
+DeepSeek 流式/Tool Call 与 Gold Answer/Citation Live（每题 3 次中位数）已通过；人工学习
+出口未执行。
 
 ## 当前阶段
 
@@ -22,8 +25,9 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 [RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md)、RAG 限定语境
 [词汇表](v0.3-rag-glossary.md)、[ADR-0006](../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
 和[实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md)。项目所有者于 2026-08-30 批准上述
-设计、决策、默认项和[分阶段实施计划](../plans/v0.3-rag-implementation.md)，当前从 M0 设计包开始；
-M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 产品代码。
+设计、决策、默认项和[分阶段实施计划](../plans/v0.3-rag-implementation.md)，并授权实现者在不改变
+核心结果的前提下推进 P1 产品代码。M0–M6 的 P1 实现已合入包版本 `0.3.0`；M0 详细合同仍保持
+`Proposed`，学习检查表须由学习者本人完成。
 
 ## 已批准事实
 
@@ -84,6 +88,11 @@ M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 �
   正常保留 Session。
 - 可审计/可撤销的 Session 文件或目录允许规则；恢复同一 Session 后仍有效，新 Session 不继承，
   且不能放宽用户或项目 `DENY` 上限。
+- v0.3 P1：Workspace Binding 的知识库、Catalog/Store/Index 所有权分离、TXT/MD/CSV 解析与
+  Parent-Child Chunking、来源 Saga/Lease、离线 File Index 与可选 Milvus Adapter、Turn
+  Knowledge Preparation、Schema v2 Session/Headless、Turn 内 Citation 与最多一次 Repair。
+- 普通无 Binding 对话输出 `not_configured`，不因缺少 RAG extra 或 Catalog 文件失败；Catalog
+  文件不存在时普通 Turn 不会创建它。
 
 ## 验证与评审证据
 
@@ -107,6 +116,16 @@ M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 �
   Headless 入口均通过。
 - v0.2 双轴实现审查的 Standards 与 Spec 复核均为 0 Blocker、0 High；完整发现、修复与残余
   人工环境风险见 [v0.2 实现审查](../reviews/v0.2-implementation-review.md)。
+- 2026-08-30：v0.3 默认离线门禁 `162 passed, 5 skipped`，Ruff format/check、Pyright strict、
+  `git diff --check` 通过。五项跳过均为显式 opt-in（DeepSeek 流式/Tool Call/取消、Gold
+  Answer/Citation、Milvus Live）。
+- 同日启用 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后，`tests/integration/test_deepseek_live.py`
+  3 项通过；Gold Answer/Citation 每题 3 次、发布判定用中位数的 Live 测试通过。未挑选最佳一次。
+- 同日 `jdagent-0.3.0` wheel 在源码树外隔离 venv 安装：基础 extra 下 `jdagent --version` 与
+  `python -m jdagent --version` 均为 `jdagent 0.3.0`，导入 `jdagent` 不加载 `pymilvus`；
+  `.[rag]` extra 可导入 `pymilvus`。
+- 本机 `127.0.0.1:19530` 无 Milvus，未运行 `JDAGENT_RUN_RAG_LIVE=1`。M0 合同仍为 `Proposed`，
+  未伪造独立设计评审或实现评审结论。
 
 ## 后续模块治理
 
@@ -117,9 +136,10 @@ M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 �
   实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
 - 用户批准[v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md)中的近期顺序：v0.2
   学习门禁关闭后，依次设计 v0.3 RAG 与来源可追踪的知识检索、v0.4 长期记忆生命周期、v0.5
-  Context Orchestration 与 Compaction；v0.3 高层设计与实施计划已获批并进入 M0。
-- v0.3 的 M0 必须把需求、详细合同、Eval 和学习清单形成可验证设计包并完成独立评审；该门禁不因
-  高层设计与总体计划获批而取消。
+  Context Orchestration 与 Compaction；v0.3 高层设计与实施计划已获批，P1 工程实现已合入
+  `0.3.0`，学习出口仍待学习者本人完成。
+- v0.3 的 M0 详细需求、合同、Eval 规格和学习清单仍为 `Proposed`；不得把代码合入理解为这些
+  设计包已获项目所有者批准。
 
 ## v0.1 最终验收
 
@@ -135,16 +155,21 @@ M0 的详细需求、合同、Eval 规格和学习清单获批前不进入 M1 �
   未勾选项目不代表待办，也不再阻塞后续版本。
 - 该裁定只适用于 v0.2，不修改 v0.3 起的模块交付与学习工作流。
 
+## v0.3 工程状态
+
+- P1 代码、离线测试、DeepSeek Live 与 Gold Answer/Citation Live、`0.3.0` clean-env 安装已完成。
+- 未关闭：M0 设计包仍为 `Proposed`；Milvus Standalone Live；独立实现评审；人工学习出口。
+- AI 不得勾选 [v0.3 学习检查表](../learning/v0.3-rag-learning-checklist.md)。
+
 ## 下一步
 
-1. 按已批准实施计划执行 M0：补齐可追踪需求、Port/Payload/Runtime Event v2 详细合同、Milvus/
-   Revision/Saga 合同、Gold Corpus 基线和模块专属学习清单。
-2. 对完整 M0 设计包执行独立 Spec/Standards 评审，关闭 Blocker/High，并由项目所有者批准进入
-   M1 产品代码。
-3. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
+1. 项目所有者决定是否将 M0 需求、合同、Eval 规格和学习清单从 `Proposed` 转为 `Approved`。
+2. 在可达的 Milvus Standalone 上运行 `JDAGENT_RUN_RAG_LIVE=1` 来源生命周期 Live。
+3. 对固定 revision 做独立 Standards/Spec 实现评审并处置 Blocker/High。
+4. 学习者本人完成 [v0.3 RAG 学习检查表](../learning/v0.3-rag-learning-checklist.md)；AI 不得
+   代填。
+5. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，
    恢复仍以已批准的 Session 合同为准。
-4. 后续由 Cursor 按 Milestone 和小增量推进；局部实现冲突自行取证和裁定，涉及已批准产品语义、
-   重大风险或范围变化时升级给项目所有者。
 
 ## 恢复入口
 
