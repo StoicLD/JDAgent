@@ -4,12 +4,14 @@
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
 `Implemented（学习出口待执行）`。P1 工程代码已合入 `0.3.0`；M0 需求/合同/Eval 规格仍为
-`Proposed`（实现者不得自批）；Milvus Live 与独立实现评审尚未关闭。
+`Proposed`（实现者不得自批）；Milvus Live 未跑。对 `40b9aee` 的独立实现评审已记录并处置
+High；修复 SHA 尚未由未参与该修复的评审方复核。
 
 验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
 学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 P1 离线门禁、clean-env 安装、
-DeepSeek 流式/Tool Call 与 Gold Answer/Citation Live（每题 3 次中位数）已通过；人工学习
-出口未执行。
+DeepSeek 流式/Tool Call 与 Gold Answer/Citation Live（每题 3 次中位数）已通过；对
+`40b9aee` 的独立实现评审为 `fail`（0 Blocker，High 未关闭），F01–F06 已在 `2b28228`
+处置；人工学习出口未执行。
 
 ## 当前阶段
 
@@ -26,8 +28,8 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 [词汇表](v0.3-rag-glossary.md)、[ADR-0006](../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
 和[实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md)。项目所有者于 2026-08-30 批准上述
 设计、决策、默认项和[分阶段实施计划](../plans/v0.3-rag-implementation.md)，并授权实现者在不改变
-核心结果的前提下推进 P1 产品代码。M0–M6 的 P1 实现已合入包版本 `0.3.0`；M0 详细合同仍保持
-`Proposed`，学习检查表须由学习者本人完成。
+核心结果的前提下推进 P1 产品代码。M0–M6 的 P1 实现已合入包版本 `0.3.0`；对 `40b9aee` 的
+独立实现评审 High 已处置。M0 详细合同仍保持 `Proposed`，学习检查表须由学习者本人完成。
 
 ## 已批准事实
 
@@ -116,16 +118,22 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
   Headless 入口均通过。
 - v0.2 双轴实现审查的 Standards 与 Spec 复核均为 0 Blocker、0 High；完整发现、修复与残余
   人工环境风险见 [v0.2 实现审查](../reviews/v0.2-implementation-review.md)。
-- 2026-08-30：v0.3 默认离线门禁 `162 passed, 5 skipped`，Ruff format/check、Pyright strict、
-  `git diff --check` 通过。五项跳过均为显式 opt-in（DeepSeek 流式/Tool Call/取消、Gold
-  Answer/Citation、Milvus Live）。
+- 2026-08-30：v0.3 默认离线门禁当时为 `162 passed, 5 skipped`，Ruff format/check、Pyright
+  strict、`git diff --check` 通过。五项跳过均为显式 opt-in（DeepSeek 流式/Tool Call/取消、
+  Gold Answer/Citation、Milvus Live）。
 - 同日启用 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后，`tests/integration/test_deepseek_live.py`
   3 项通过；Gold Answer/Citation 每题 3 次、发布判定用中位数的 Live 测试通过。未挑选最佳一次。
 - 同日 `jdagent-0.3.0` wheel 在源码树外隔离 venv 安装：基础 extra 下 `jdagent --version` 与
   `python -m jdagent --version` 均为 `jdagent 0.3.0`，导入 `jdagent` 不加载 `pymilvus`；
   `.[rag]` extra 可导入 `pymilvus`。
-- 本机 `127.0.0.1:19530` 无 Milvus，未运行 `JDAGENT_RUN_RAG_LIVE=1`。M0 合同仍为 `Proposed`，
-  未伪造独立设计评审或实现评审结论。
+- 同日 Cursor 对 revision `40b9aee520e3a980a1b69e2e1e694eb219d6b7e7` 做只读独立实现评审，
+  结论 `fail`、0 Blocker、High 未关闭。处置见
+  [v0.3 P1 实现独立评审处置](../reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)；
+  代码修复为 `2b282284e075a52d63b43f49e262737a988d3299`。该处置不是对修复 SHA 的第二次独立评审。
+- 处置后默认离线门禁 `168 passed, 5 skipped`，Ruff format/check、Pyright strict、
+  `git diff --check` 通过。未重跑 DeepSeek Live、Gold Answer Live、Milvus Live 或 clean-env
+  wheel。
+- 本机 `127.0.0.1:19530` 无 Milvus，未运行 `JDAGENT_RUN_RAG_LIVE=1`。M0 合同仍为 `Proposed`。
 
 ## 后续模块治理
 
@@ -158,14 +166,16 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 ## v0.3 工程状态
 
 - P1 代码、离线测试、DeepSeek Live 与 Gold Answer/Citation Live、`0.3.0` clean-env 安装已完成。
-- 未关闭：M0 设计包仍为 `Proposed`；Milvus Standalone Live；独立实现评审；人工学习出口。
+- `40b9aee` 的独立实现评审 High 已在 `2b28228` 处置；修复 SHA 未再做独立复核。
+- 未关闭：M0 设计包仍为 `Proposed`；Milvus Standalone Live；修复 SHA 的独立复核（可选）；
+  人工学习出口。
 - AI 不得勾选 [v0.3 学习检查表](../learning/v0.3-rag-learning-checklist.md)。
 
 ## 下一步
 
 1. 项目所有者决定是否将 M0 需求、合同、Eval 规格和学习清单从 `Proposed` 转为 `Approved`。
 2. 在可达的 Milvus Standalone 上运行 `JDAGENT_RUN_RAG_LIVE=1` 来源生命周期 Live。
-3. 对固定 revision 做独立 Standards/Spec 实现评审并处置 Blocker/High。
+3. 若需关闭独立实现评审门禁，由未参与 `2b28228` 修复的评审方对该 SHA 取证。
 4. 学习者本人完成 [v0.3 RAG 学习检查表](../learning/v0.3-rag-learning-checklist.md)；AI 不得
    代填。
 5. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，

@@ -18,7 +18,7 @@
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
   v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
 - [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，P1 M0–M6
-  工程实现已合入 `0.3.0`；学习出口与部分 Live/独立评审门禁见当前状态
+  工程实现已合入 `0.3.0`；学习出口、Milvus Live 与独立评审处置见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
   默认值、P2 后续增强和升级条件
 - [v0.3 RAG 需求与可追踪验收标准](../requirements/v0.3-knowledge-retrieval.md) — `Proposed`，
@@ -82,6 +82,8 @@
   0 Blocker、0 High；含离线、Live、PowerShell 与安装验证证据
 - [v0.3 RAG 高层设计独立评审处置](../reviews/REV-20260829-001-v0.3-rag-design-disposition.md) —
   `Approved`，记录 Cursor finding 的接受、调整后接受、拒绝与修订位置
+- [v0.3 P1 实现独立评审处置](../reviews/REV-20260830-001-v0.3-p1-rag-disposition.md) —
+  对 `40b9aee` 的 `fail` 结论与 High/Medium 处置；不是对修复 SHA 的二次独立评审
 
 ## 学习出口
 
