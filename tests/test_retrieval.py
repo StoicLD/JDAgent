@@ -1,0 +1,190 @@
+import asyncio
+from datetime import UTC, datetime
+
+from jdagent.knowledge.embedding import HashEmbedding
+from jdagent.knowledge.index import IndexChunk, InMemoryKnowledgeIndex
+from jdagent.knowledge.preparation import TurnKnowledgePreparation
+from jdagent.knowledge.ptk import FrozenKnowledgeBase, QueryFailureReason, RetrievalOutcome
+from jdagent.knowledge.reranker import ExplodingReranker
+from jdagent.knowledge.types import (
+    BindingRecord,
+    EmbeddingProfile,
+    RetrievalProfile,
+)
+
+
+def _binding(kb_id: str) -> BindingRecord:
+    now = datetime(2026, 8, 30, tzinfo=UTC)
+    return BindingRecord(f"bind_{kb_id}", "ws", "conn_1", kb_id, now)
+
+
+def _frozen(
+    kb_id: str,
+    *,
+    generation: str = "gen-1",
+    revision: int = 1,
+    profile: RetrievalProfile | None = None,
+    embedding: EmbeddingProfile | None = None,
+) -> FrozenKnowledgeBase:
+    embedding_profile = embedding or EmbeddingProfile(dimension=8)
+    retrieval = profile or RetrievalProfile()
+    return FrozenKnowledgeBase(
+        f"bind_{kb_id}",
+        "conn_1",
+        kb_id,
+        kb_id,
+        generation,
+        revision,
+        generation,
+        embedding_profile,
+        retrieval,
+        "mixed_zh_en_v1",
+    )
+
+
+def _chunk(
+    chunk_id: str,
+    text: str,
+    *,
+    kb_id: str,
+    locator: str,
+    revision: int = 1,
+    parent: str = "parent",
+) -> IndexChunk:
+    return IndexChunk(
+        chunk_id=chunk_id,
+        source_id="src",
+        source_version_id="sv",
+        snapshot_id="snap",
+        parent_id=parent,
+        locator=locator,
+        content_hash=chunk_id,
+        text=text,
+        vector=(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        valid_from_revision=revision,
+        parent_text=text,
+        knowledge_base_id=kb_id,
+    )
+
+
+def test_preparation_outcomes_and_budget() -> None:
+    async def scenario() -> None:
+        empty = TurnKnowledgePreparation()
+        none = await empty.prepare(
+            turn_id="t0",
+            query_text="q",
+            bindings=(),
+            frozen=(),
+            turn_token="tok0",
+        )
+        assert none.outcome is RetrievalOutcome.NOT_CONFIGURED
+
+        index = InMemoryKnowledgeIndex()
+        index.upsert_chunks(
+            "gen-1",
+            (_chunk("c1", "年假 15 天", kb_id="hr", locator="md:h2[0]/p[0]"),),
+        )
+        preparation = TurnKnowledgePreparation(
+            embedding=HashEmbedding(),
+            indexes={"hr": index},
+        )
+        complete = await preparation.prepare(
+            turn_id="t1",
+            query_text="年假",
+            bindings=(_binding("hr"),),
+            frozen=((_frozen("hr"), None),),
+            turn_token="tok1",
+        )
+        assert complete.outcome is RetrievalOutcome.COMPLETE
+        assert complete.evidence[0].reference == "K:tok1:E1"
+
+        missing = await preparation.prepare(
+            turn_id="t2",
+            query_text="年假",
+            bindings=(_binding("missing"),),
+            frozen=((None, QueryFailureReason.BINDING_INVALID),),
+            turn_token="tok2",
+        )
+        assert missing.outcome is RetrievalOutcome.UNAVAILABLE
+
+        finance = InMemoryKnowledgeIndex()
+        partial = await preparation.prepare(
+            turn_id="t3",
+            query_text="年假",
+            bindings=(_binding("hr"), _binding("finance")),
+            frozen=(
+                (_frozen("hr"), None),
+                (_frozen("finance", generation="gen-missing"), None),
+            ),
+            turn_token="tok3",
+        )
+        assert partial.outcome is RetrievalOutcome.PARTIAL
+        del finance
+
+        unused = InMemoryKnowledgeIndex()
+        unused.upsert_chunks(
+            "gen-1",
+            (_chunk("other", "unrelated vocabulary zzzz", kb_id="hr", locator="txt:p[0]"),),
+        )
+        insufficient = TurnKnowledgePreparation(indexes={"hr": unused})
+        empty_hits = await insufficient.prepare(
+            turn_id="t4",
+            query_text="年假天数",
+            bindings=(_binding("hr"),),
+            frozen=((_frozen("hr", profile=RetrievalProfile(mode="bm25")), None),),
+            turn_token="tok4",
+        )
+        assert empty_hits.outcome is RetrievalOutcome.INSUFFICIENT
+
+    asyncio.run(scenario())
+
+
+def test_reranker_failure_falls_back_without_query_failed() -> None:
+    async def scenario() -> None:
+        index = InMemoryKnowledgeIndex()
+        index.upsert_chunks(
+            "gen-1",
+            (_chunk("c1", "年假 15 天", kb_id="hr", locator="md:h2[0]/p[0]"),),
+        )
+        preparation = TurnKnowledgePreparation(
+            indexes={"hr": index},
+            reranker=ExplodingReranker(),
+        )
+        ptk = await preparation.prepare(
+            turn_id="t1",
+            query_text="年假",
+            bindings=(_binding("hr"),),
+            frozen=((_frozen("hr"), None),),
+            turn_token="tok",
+        )
+        assert ptk.outcome is RetrievalOutcome.COMPLETE
+        assert ptk.degradations == ("reranker_fallback",)
+
+    asyncio.run(scenario())
+
+
+def test_parent_budget_drops_whole_parents() -> None:
+    async def scenario() -> None:
+        index = InMemoryKnowledgeIndex()
+        index.upsert_chunks(
+            "gen-1",
+            (
+                _chunk("a", "short leave", kb_id="hr", locator="txt:p[0]", parent="p0"),
+                _chunk("b", "x" * 9000, kb_id="hr", locator="txt:p[1]", parent="p1"),
+            ),
+        )
+        profile = RetrievalProfile(
+            parent_limit=1, parent_token_limit=2000, evidence_token_limit=6000
+        )
+        preparation = TurnKnowledgePreparation(indexes={"hr": index})
+        ptk = await preparation.prepare(
+            turn_id="t1",
+            query_text="leave",
+            bindings=(_binding("hr"),),
+            frozen=((_frozen("hr", profile=profile), None),),
+            turn_token="tok",
+        )
+        assert len(ptk.evidence) == 1
+        assert ptk.evidence[0].locator == "txt:p[0]"
+
+    asyncio.run(scenario())
