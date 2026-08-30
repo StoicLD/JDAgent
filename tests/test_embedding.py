@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 
 import httpx
@@ -60,5 +61,37 @@ def test_http_embedding_retries_then_validates() -> None:
         assert calls["count"] == 2
         await client.aclose()
         assert hash_vector("query", 4, normalize=False)
+
+    asyncio.run(scenario())
+
+
+def test_http_embedding_honors_profile_batch_size() -> None:
+    async def scenario() -> None:
+        seen: list[int] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            payload = json.loads(request.content.decode("utf-8"))
+            seen.append(len(payload["input"]))
+            vectors = [[0.0, 1.0, 0.0, 0.0] for _ in payload["input"]]
+            return httpx.Response(200, json={"data": [{"embedding": item} for item in vectors]})
+
+        transport = httpx.MockTransport(handler)
+        client = httpx.AsyncClient(transport=transport, base_url="https://embed.test")
+        adapter = OpenAICompatibleEmbedding(client)
+        profile = EmbeddingProfile(
+            base_url="https://embed.test",
+            model="demo",
+            dimension=4,
+            normalize=False,
+            batch_size=2,
+        )
+        result = await adapter.embed(
+            ("a", "b", "c"),
+            profile,
+            input_kind=EmbeddingKind.DOCUMENT,
+        )
+        assert seen == [2, 1]
+        assert len(result.vectors) == 3
+        await client.aclose()
 
     asyncio.run(scenario())

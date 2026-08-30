@@ -77,6 +77,8 @@ class Evidence:
     parent_text: str
     token_estimate: int
     ordinal: int
+    kb_name: str = ""
+    source_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)

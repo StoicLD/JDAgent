@@ -47,6 +47,7 @@ class CatalogBaseResolver:
         for binding in bindings:
             try:
                 kb = self._catalog.get_knowledge_base(binding.knowledge_base_id)
+                self._catalog.get_connection(binding.connection_id)
             except KnowledgeError as error:
                 reason = (
                     QueryFailureReason.ACCESS_DENIED
@@ -54,6 +55,9 @@ class CatalogBaseResolver:
                     else QueryFailureReason.BINDING_INVALID
                 )
                 resolved.append((None, reason))
+                continue
+            if kb.connection_id != binding.connection_id:
+                resolved.append((None, QueryFailureReason.BINDING_INVALID))
                 continue
             generation_id = kb.current_generation_id
             resolved.append(
@@ -100,6 +104,7 @@ class TurnKnowledgePreparation:
         bindings: tuple[BindingRecord, ...],
         frozen: tuple[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None], ...],
         turn_token: str | None = None,
+        source_names: Mapping[str, str] | None = None,
     ) -> PreparedTurnKnowledge:
         token = turn_token or uuid4().hex[:8]
         digest = hashlib.sha256(query_text.encode("utf-8")).hexdigest()
@@ -216,7 +221,7 @@ class TurnKnowledgePreparation:
                 ranked = fused
                 degradations.append("reranker_fallback")
 
-        evidence = _expand_parents(ranked, token, default_profile)
+        evidence = _expand_parents(ranked, token, default_profile, frozen, source_names or {})
         selected_by_kb: dict[str, int] = {}
         for item in evidence:
             selected_by_kb[item.knowledge_base_id] = (
@@ -241,7 +246,28 @@ class TurnKnowledgePreparation:
             for result in base_results
         )
         outcome = outcome_from_counts(len(bindings), success, failure_count, len(evidence))
-        profile_fp = default_profile.fingerprint("", "mixed_zh_en_v1")
+        fingerprints = tuple(
+            sorted(
+                {
+                    item.retrieval_profile_fingerprint
+                    for item in finalized
+                    if item.retrieval_profile_fingerprint
+                }
+            )
+        )
+        if len(fingerprints) == 1:
+            profile_fp = fingerprints[0]
+        elif fingerprints:
+            profile_fp = hashlib.sha256("\n".join(fingerprints).encode("utf-8")).hexdigest()
+        else:
+            language = "mixed_zh_en_v1"
+            embedding_fp = ""
+            for base, _failure in frozen:
+                if base is not None:
+                    language = base.language_profile
+                    embedding_fp = base.embedding_profile.fingerprint()
+                    break
+            profile_fp = default_profile.fingerprint(embedding_fp, language)
         return PreparedTurnKnowledge(
             turn_id=turn_id,
             turn_token=token,
@@ -293,7 +319,10 @@ def _expand_parents(
     hits: tuple[IndexHit, ...],
     turn_token: str,
     profile: RetrievalProfile,
+    frozen: tuple[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None], ...],
+    source_names: Mapping[str, str],
 ) -> tuple[Evidence, ...]:
+    kb_names = {base.knowledge_base_id: base.name for base, _failure in frozen if base is not None}
     selected: list[Evidence] = []
     seen_parents: set[tuple[str, str]] = set()
     tokens_used = 0
@@ -326,6 +355,8 @@ def _expand_parents(
                 parent_text=parent_text,
                 token_estimate=parent_tokens,
                 ordinal=ordinal,
+                kb_name=kb_names.get(hit.knowledge_base_id, hit.knowledge_base_id),
+                source_name=source_names.get(hit.source_id, hit.source_id),
             )
         )
         ordinal += 1

@@ -724,16 +724,7 @@ class KnowledgeCatalog:
             )
         if row is None:
             raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Source version not found")
-        return SourceVersionRecord(
-            source_version_id=row["source_version_id"],
-            source_id=row["source_id"],
-            raw_hash=row["raw_hash"],
-            encoding=str(row["encoding"] or ""),
-            encoding_method=str(row["encoding_method"] or ""),
-            snapshot_hash=str(row["snapshot_hash"] or ""),
-            parser_profile=str(row["parser_profile"] or ""),
-            created_at=_parse_time(row["created_at"]),
-        )
+        return self._source_version_from_row(row)
 
     def add_source_version(
         self,
@@ -804,6 +795,69 @@ class KnowledgeCatalog:
                 (generation_id, revision, now, knowledge_base_id),
             )
             self._commit_with_backup(db)
+
+    def activate_revision_and_lifecycle(
+        self,
+        knowledge_base_id: str,
+        generation_id: str,
+        revision: int,
+        source_id: str,
+        lifecycle: SourceLifecycle,
+    ) -> None:
+        now = self._clock.now().isoformat()
+        with self._lock:
+            db = self._db()
+            db.execute(
+                """
+                UPDATE knowledge_bases
+                SET current_generation_id = ?, current_revision = ?, updated_at = ?
+                WHERE knowledge_base_id = ?
+                """,
+                (generation_id, revision, now, knowledge_base_id),
+            )
+            db.execute(
+                "UPDATE sources SET lifecycle = ?, updated_at = ? WHERE source_id = ?",
+                (lifecycle.value, now, source_id),
+            )
+            self._commit_with_backup(db)
+
+    def list_source_versions(self, source_id: str) -> tuple[SourceVersionRecord, ...]:
+        with self._lock:
+            rows = (
+                self._db()
+                .execute(
+                    """
+                    SELECT * FROM source_versions
+                    WHERE source_id = ?
+                    ORDER BY created_at
+                    """,
+                    (source_id,),
+                )
+                .fetchall()
+            )
+        return tuple(self._source_version_from_row(row) for row in rows)
+
+    def openable_digest_count(self, digest: str) -> int:
+        with self._lock:
+            row = (
+                self._db()
+                .execute(
+                    """
+                    SELECT COUNT(*) FROM source_versions v
+                    JOIN sources s ON s.source_id = v.source_id
+                    WHERE (v.raw_hash = ? OR v.snapshot_hash = ?)
+                      AND s.lifecycle IN (?, ?)
+                    """,
+                    (
+                        digest,
+                        digest,
+                        SourceLifecycle.ACTIVE.value,
+                        SourceLifecycle.INACTIVE.value,
+                    ),
+                )
+                .fetchone()
+            )
+        return int(row[0]) if row is not None else 0
 
     def remember_chunks(
         self, generation_id: str, source_id: str, chunk_ids: tuple[str, ...]
@@ -1078,5 +1132,18 @@ class KnowledgeCatalog:
             workspace_identity=row["workspace_identity"],
             connection_id=row["connection_id"],
             knowledge_base_id=row["knowledge_base_id"],
+            created_at=_parse_time(row["created_at"]),
+        )
+
+    @staticmethod
+    def _source_version_from_row(row: sqlite3.Row) -> SourceVersionRecord:
+        return SourceVersionRecord(
+            source_version_id=row["source_version_id"],
+            source_id=row["source_id"],
+            raw_hash=row["raw_hash"],
+            encoding=str(row["encoding"] or ""),
+            encoding_method=str(row["encoding_method"] or ""),
+            snapshot_hash=str(row["snapshot_hash"] or ""),
+            parser_profile=str(row["parser_profile"] or ""),
             created_at=_parse_time(row["created_at"]),
         )

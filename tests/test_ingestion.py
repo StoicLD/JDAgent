@@ -58,6 +58,35 @@ def test_add_replace_deactivate_and_delete_source_lifecycle(tmp_path: Path) -> N
     asyncio.run(scenario())
 
 
+def test_delete_purges_unreferenced_objects_and_keeps_shared(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        catalog = KnowledgeCatalog(
+            tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock()
+        )
+        catalog.open()
+        connection = catalog.register_connection(name="local")
+        hr = catalog.create_knowledge_base(connection_id=connection.connection_id, name="hr")
+        finance = catalog.create_knowledge_base(
+            connection_id=connection.connection_id, name="finance"
+        )
+        store = ContentAddressedStore(tmp_path / "objects")
+        index = InMemoryKnowledgeIndex()
+        ingestion = KnowledgeIngestion(catalog, store, index)
+        first = await ingestion.add_file(hr.knowledge_base_id, GOLD / "zh-leave-policy.md")
+        second = await ingestion.add_file(finance.knowledge_base_id, GOLD / "zh-leave-policy.md")
+        version = catalog.get_source_version(first.source_version_id)
+        assert store.contains(version.raw_hash)
+        await ingestion.delete(hr.knowledge_base_id, first.source_id, confirmed=True)
+        assert catalog.get_source(first.source_id).lifecycle is SourceLifecycle.DELETED
+        assert store.contains(version.raw_hash)
+        await ingestion.delete(finance.knowledge_base_id, second.source_id, confirmed=True)
+        assert catalog.get_source(second.source_id).lifecycle is SourceLifecycle.DELETED
+        assert not store.contains(version.raw_hash)
+        catalog.close()
+
+    asyncio.run(scenario())
+
+
 def test_failed_ingest_keeps_previous_revision_readable(tmp_path: Path) -> None:
     async def scenario() -> None:
         catalog = KnowledgeCatalog(

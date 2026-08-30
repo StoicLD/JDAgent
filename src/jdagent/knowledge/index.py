@@ -11,6 +11,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
+from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
+
 
 @dataclass(frozen=True, slots=True)
 class IndexChunk:
@@ -158,8 +160,9 @@ class InMemoryKnowledgeIndex:
         vector: tuple[float, ...],
         top_k: int,
     ) -> tuple[IndexHit, ...]:
-        bucket = self._chunks.get(generation_id, {})
-        visible = [chunk for chunk in bucket.values() if _visible(chunk, revision)]
+        visible = [
+            chunk for chunk in self._generation(generation_id).values() if _visible(chunk, revision)
+        ]
         scores = [_cosine(vector, chunk.vector) for chunk in visible]
         return _hits(visible, scores, top_k)
 
@@ -171,8 +174,9 @@ class InMemoryKnowledgeIndex:
         top_k: int,
     ) -> tuple[IndexHit, ...]:
         query = tokenize(query_text)
-        bucket = self._chunks.get(generation_id, {})
-        visible = [chunk for chunk in bucket.values() if _visible(chunk, revision)]
+        visible = [
+            chunk for chunk in self._generation(generation_id).values() if _visible(chunk, revision)
+        ]
         scores = [bm25_score(query, chunk.text) for chunk in visible]
         return _hits(visible, scores, top_k)
 
@@ -182,6 +186,14 @@ class InMemoryKnowledgeIndex:
     def get_chunks(self, generation_id: str, chunk_ids: tuple[str, ...]) -> tuple[IndexChunk, ...]:
         bucket = self._chunks.get(generation_id, {})
         return tuple(bucket[chunk_id] for chunk_id in chunk_ids if chunk_id in bucket)
+
+    def _generation(self, generation_id: str) -> dict[str, IndexChunk]:
+        if generation_id not in self._chunks:
+            raise KnowledgeError(
+                KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                "Physical collection is missing",
+            )
+        return self._chunks[generation_id]
 
 
 class FileKnowledgeIndex:
@@ -203,6 +215,10 @@ class FileKnowledgeIndex:
             """
         )
         self._db.commit()
+
+    def close(self) -> None:
+        with self._lock:
+            self._db.close()
 
     def upsert_chunks(self, generation_id: str, chunks: tuple[IndexChunk, ...]) -> None:
         with self._lock:
@@ -285,6 +301,11 @@ class FileKnowledgeIndex:
                 "SELECT payload_json FROM chunks WHERE generation_id = ?",
                 (generation_id,),
             ).fetchall()
+        if not rows:
+            raise KnowledgeError(
+                KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                "Physical collection is missing",
+            )
         chunks = [_chunk_from_json(row[0]) for row in rows]
         return [chunk for chunk in chunks if _visible(chunk, revision)]
 

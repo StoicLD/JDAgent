@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 from jdagent.knowledge.index import IndexChunk, InMemoryKnowledgeIndex
 
 
@@ -34,6 +37,9 @@ def test_revision_filter_applies_before_top_k() -> None:
     assert current[0].chunk_id == "new"
     bm25 = index.search_bm25("gen-1", 2, "年假", top_k=5)
     assert [hit.chunk_id for hit in bm25] == ["new"]
+    with pytest.raises(KnowledgeError) as missing:
+        index.search_dense("missing-gen", 1, (1.0, 0.0), top_k=1)
+    assert missing.value.code is KnowledgeErrorCode.PROVIDER_UNAVAILABLE
 
 
 def test_file_index_filters_revision_before_top_k(tmp_path: Path) -> None:
@@ -52,3 +58,7 @@ def test_file_index_filters_revision_before_top_k(tmp_path: Path) -> None:
     current = index.search_dense("gen-1", 2, (1.0, 0.0), top_k=1)
     assert frozen[0].chunk_id == "old"
     assert current[0].chunk_id == "new"
+    with pytest.raises(KnowledgeError) as missing:
+        index.search_bm25("missing-gen", 1, "年假", top_k=1)
+    assert missing.value.code is KnowledgeErrorCode.PROVIDER_UNAVAILABLE
+    index.close()

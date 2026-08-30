@@ -238,36 +238,49 @@ class TurnCoordinator:
                 return empty_prepared_knowledge(turn_id, turn_token, digest)
             frozen = CatalogBaseResolver(catalog).resolve(bindings)
             indexes: dict[str, KnowledgeIndex] = {}
-            for binding in bindings:
-                try:
-                    kb = catalog.get_knowledge_base(binding.knowledge_base_id)
-                    connection = catalog.get_connection(binding.connection_id)
-                except KnowledgeError:
-                    continue
-                if connection.endpoint:
+            source_names: dict[str, str] = {}
+            try:
+                for binding in bindings:
                     try:
-                        from jdagent.knowledge.milvus import load_milvus_index
-
-                        indexes[kb.knowledge_base_id] = load_milvus_index(connection.endpoint)
+                        for source in catalog.list_sources(binding.knowledge_base_id):
+                            source_names[source.source_id] = source.name
+                    except KnowledgeError:
+                        pass
+                    try:
+                        kb = catalog.get_knowledge_base(binding.knowledge_base_id)
+                        connection = catalog.get_connection(binding.connection_id)
                     except KnowledgeError:
                         continue
-                    continue
-                if self._knowledge_index is None:
-                    continue
-                from jdagent.knowledge.index import FileKnowledgeIndex
+                    if connection.endpoint:
+                        try:
+                            from jdagent.knowledge.milvus import load_milvus_index
 
-                indexes[kb.knowledge_base_id] = FileKnowledgeIndex(self._knowledge_index)
-            preparation = TurnKnowledgePreparation(
-                embedding=AdaptiveEmbedding(),
-                indexes=indexes,
-            )
-            return await preparation.prepare(
-                turn_id=turn_id,
-                query_text=query_text,
-                bindings=bindings,
-                frozen=frozen,
-                turn_token=turn_token,
-            )
+                            indexes[kb.knowledge_base_id] = load_milvus_index(connection.endpoint)
+                        except KnowledgeError:
+                            continue
+                        continue
+                    if self._knowledge_index is None:
+                        continue
+                    from jdagent.knowledge.index import FileKnowledgeIndex
+
+                    indexes[kb.knowledge_base_id] = FileKnowledgeIndex(self._knowledge_index)
+                preparation = TurnKnowledgePreparation(
+                    embedding=AdaptiveEmbedding(),
+                    indexes=indexes,
+                )
+                return await preparation.prepare(
+                    turn_id=turn_id,
+                    query_text=query_text,
+                    bindings=bindings,
+                    frozen=frozen,
+                    turn_token=turn_token,
+                    source_names=source_names,
+                )
+            finally:
+                for index in indexes.values():
+                    closer = getattr(index, "close", None)
+                    if callable(closer):
+                        closer()
         except KnowledgeError:
             return empty_prepared_knowledge(
                 turn_id,

@@ -385,11 +385,29 @@ class KnowledgeIngestion:
             if generation_id is not None:
                 chunk_ids = self._catalog.chunks_for_source(generation_id, source_id)
                 self._index.close_chunks(generation_id, chunk_ids, next_revision)
-                self._catalog.activate_revision(knowledge_base_id, generation_id, next_revision)
-            self._catalog.set_source_lifecycle(source_id, SourceLifecycle.DELETE_PENDING)
+                self._catalog.activate_revision_and_lifecycle(
+                    knowledge_base_id,
+                    generation_id,
+                    next_revision,
+                    source_id,
+                    SourceLifecycle.DELETE_PENDING,
+                )
+            else:
+                self._catalog.set_source_lifecycle(source_id, SourceLifecycle.DELETE_PENDING)
+            self._purge_unreferenced_objects(source_id)
             self._catalog.set_source_lifecycle(source_id, SourceLifecycle.DELETED)
         finally:
             self._catalog.release_lease(operation)
+
+    def _purge_unreferenced_objects(self, source_id: str) -> None:
+        seen: set[str] = set()
+        for version in self._catalog.list_source_versions(source_id):
+            for digest in (version.raw_hash, version.snapshot_hash):
+                if not digest or digest in seen:
+                    continue
+                seen.add(digest)
+                if self._catalog.openable_digest_count(digest) == 0:
+                    self._store.purge(digest)
 
     async def _visibility(
         self, knowledge_base_id: str, source_id: str, lifecycle: SourceLifecycle

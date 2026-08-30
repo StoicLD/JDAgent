@@ -385,6 +385,12 @@ class MilvusKnowledgeIndex:
             )
         return collection
 
+    def close(self) -> None:
+        try:
+            self._connections.disconnect(self._alias)
+        except Exception:
+            return
+
 
 def load_milvus_index(uri: str) -> KnowledgeIndex:
     return cast(KnowledgeIndex, MilvusKnowledgeIndex(uri))

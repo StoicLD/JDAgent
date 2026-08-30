@@ -91,3 +91,13 @@ class ContentAddressedStore:
                 "Source object hash mismatch",
             )
         return data
+
+    def purge(self, digest: str) -> None:
+        path = self.path_for(digest)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as error:
+            raise KnowledgeError(
+                KnowledgeErrorCode.SOURCE_CORRUPT,
+                "Could not remove source object",
+            ) from error

@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from jdagent.domain.events import CitationRecord
+from jdagent.knowledge.catalog import KnowledgeCatalog
+from jdagent.knowledge.errors import KnowledgeError
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
+from jdagent.knowledge.store import ContentAddressedStore
 from jdagent.knowledge.types import SourceLifecycle
 
 _REF = re.compile(r"K:([A-Za-z0-9_-]+):E([1-9][0-9]*)")
@@ -29,11 +32,33 @@ class CitationTarget(StrEnum):
 
 
 def citation_target(lifecycle: SourceLifecycle, *, object_missing: bool) -> CitationTarget:
-    if object_missing:
-        return CitationTarget.CORRUPT
     if lifecycle in {SourceLifecycle.DELETE_PENDING, SourceLifecycle.DELETED}:
         return CitationTarget.TOMBSTONE
+    if object_missing:
+        return CitationTarget.CORRUPT
     return CitationTarget.OPENABLE
+
+
+def resolve_source_citation_target(
+    catalog: KnowledgeCatalog,
+    store: ContentAddressedStore,
+    source_id: str,
+) -> CitationTarget:
+    """Resolve a historical citation against Catalog lifecycle, then the object store."""
+
+    try:
+        source = catalog.get_source(source_id)
+    except KnowledgeError:
+        return CitationTarget.TOMBSTONE
+    missing = False
+    if source.current_version_id is not None:
+        try:
+            version = catalog.get_source_version(source.current_version_id)
+        except KnowledgeError:
+            missing = True
+        else:
+            missing = bool(version.raw_hash) and not store.contains(version.raw_hash)
+    return citation_target(source.lifecycle, object_missing=missing)
 
 
 def finalize_answer(text: str, knowledge: PreparedTurnKnowledge) -> FinalizedAnswer:
@@ -105,5 +130,10 @@ def evidence_system_part(knowledge: PreparedTurnKnowledge) -> str:
     ]
     for item in knowledge.evidence:
         escaped = item.parent_text.replace("K:", "K\u200b:")
-        blocks.append(f"{item.reference} source={item.source_id} locator={item.locator}\n{escaped}")
+        kb_name = item.kb_name or item.knowledge_base_id
+        source_name = item.source_name or item.source_id
+        blocks.append(
+            f"{item.reference} kb={kb_name} source={source_name} "
+            f"version={item.source_version_id} locator={item.locator}\n{escaped}"
+        )
     return "\n\n".join(blocks)

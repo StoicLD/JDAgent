@@ -1,10 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 
+from jdagent.knowledge.catalog import KnowledgeCatalog
+from jdagent.knowledge.clock import FakeClock
 from jdagent.knowledge.embedding import EmbeddingKind, EmbeddingResult, HashEmbedding
 from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 from jdagent.knowledge.index import IndexChunk, InMemoryKnowledgeIndex
-from jdagent.knowledge.preparation import TurnKnowledgePreparation
+from jdagent.knowledge.preparation import CatalogBaseResolver, TurnKnowledgePreparation
 from jdagent.knowledge.ptk import (
     BaseQueryStatus,
     FrozenKnowledgeBase,
@@ -103,6 +106,11 @@ def test_preparation_outcomes_and_budget() -> None:
         )
         assert complete.outcome is RetrievalOutcome.COMPLETE
         assert complete.evidence[0].reference == "K:tok1:E1"
+        expected_fp = RetrievalProfile().fingerprint(
+            EmbeddingProfile(dimension=8).fingerprint(),
+            "mixed_zh_en_v1",
+        )
+        assert complete.retrieval_profile_fingerprint == expected_fp
 
         missing = await preparation.prepare(
             turn_id="t2",
@@ -256,3 +264,32 @@ def test_query_embedding_failure_is_isolated_per_profile() -> None:
         assert ptk.evidence
 
     asyncio.run(scenario())
+
+
+def test_missing_generation_is_provider_unavailable() -> None:
+    async def scenario() -> None:
+        preparation = TurnKnowledgePreparation(indexes={"hr": InMemoryKnowledgeIndex()})
+        ptk = await preparation.prepare(
+            turn_id="t-missing-gen",
+            query_text="年假",
+            bindings=(_binding("hr"),),
+            frozen=((_frozen("hr"), None),),
+            turn_token="tok-mg",
+        )
+        assert ptk.outcome is RetrievalOutcome.UNAVAILABLE
+        assert ptk.bases[0].failure_reason is QueryFailureReason.PROVIDER_UNAVAILABLE
+
+    asyncio.run(scenario())
+
+
+def test_catalog_resolver_missing_connection_is_binding_invalid(tmp_path: Path) -> None:
+    catalog = KnowledgeCatalog(tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock())
+    catalog.open()
+    connection = catalog.register_connection(name="local")
+    kb = catalog.create_knowledge_base(connection_id=connection.connection_id, name="hr")
+    now = datetime(2026, 8, 30, tzinfo=UTC)
+    stale = BindingRecord("bind_stale", "ws", "conn_missing", kb.knowledge_base_id, now)
+    frozen, reason = CatalogBaseResolver(catalog).resolve((stale,))[0]
+    assert frozen is None
+    assert reason is QueryFailureReason.BINDING_INVALID
+    catalog.close()

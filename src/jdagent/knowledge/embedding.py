@@ -116,43 +116,58 @@ class OpenAICompatibleEmbedding:
             )
         client = self._client or httpx.AsyncClient(base_url=profile.base_url)
         owns_client = self._client is None
-        attempts = 0
-        last_error: Exception | None = None
-        payload: object = None
+        batch_size = max(1, profile.batch_size)
+        vectors: list[tuple[float, ...]] = []
         try:
-            while attempts < 3:
-                attempts += 1
-                try:
-                    headers: dict[str, str] = {}
-                    if self._api_key:
-                        headers["Authorization"] = f"Bearer {self._api_key}"
-                    response = await client.post(
-                        "/embeddings",
-                        json={"model": profile.model, "input": list(texts)},
-                        timeout=profile.timeout_seconds,
-                        headers=headers,
-                    )
-                    if response.status_code in {429, 502, 503} and attempts < 3:
-                        continue
-                    response.raise_for_status()
-                    payload = response.json()
-                    break
-                except (httpx.HTTPError, ValueError, KeyError) as error:
-                    last_error = error
-                    if attempts >= 3:
-                        raise KnowledgeError(
-                            KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
-                            "Embedding provider request failed",
-                        ) from error
-                    await asyncio.sleep(0)
-            else:
-                raise KnowledgeError(
-                    KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
-                    "Embedding provider request failed",
-                ) from last_error
+            for start in range(0, len(texts), batch_size):
+                batch = texts[start : start + batch_size]
+                vectors.extend(await self._embed_batch(client, batch, profile))
         finally:
             if owns_client:
                 await client.aclose()
+        result = tuple(vectors)
+        validate_vectors(texts, result, profile)
+        return EmbeddingResult(result, profile.model, profile.dimension)
+
+    async def _embed_batch(
+        self,
+        client: httpx.AsyncClient,
+        texts: tuple[str, ...],
+        profile: EmbeddingProfile,
+    ) -> tuple[tuple[float, ...], ...]:
+        attempts = 0
+        last_error: Exception | None = None
+        payload: object = None
+        while attempts < 3:
+            attempts += 1
+            try:
+                headers: dict[str, str] = {}
+                if self._api_key:
+                    headers["Authorization"] = f"Bearer {self._api_key}"
+                response = await client.post(
+                    "/embeddings",
+                    json={"model": profile.model, "input": list(texts)},
+                    timeout=profile.timeout_seconds,
+                    headers=headers,
+                )
+                if response.status_code in {429, 502, 503} and attempts < 3:
+                    continue
+                response.raise_for_status()
+                payload = response.json()
+                break
+            except (httpx.HTTPError, ValueError, KeyError) as error:
+                last_error = error
+                if attempts >= 3:
+                    raise KnowledgeError(
+                        KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                        "Embedding provider request failed",
+                    ) from error
+                await asyncio.sleep(0)
+        else:
+            raise KnowledgeError(
+                KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                "Embedding provider request failed",
+            ) from last_error
         if not isinstance(payload, dict):
             raise KnowledgeError(
                 KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
@@ -189,9 +204,7 @@ class OpenAICompatibleEmbedding:
                     )
                 parsed.append(float(value))
             vectors.append(tuple(parsed))
-        result = tuple(vectors)
-        validate_vectors(texts, result, profile)
-        return EmbeddingResult(result, profile.model, profile.dimension)
+        return tuple(vectors)
 
 
 class AdaptiveEmbedding:
