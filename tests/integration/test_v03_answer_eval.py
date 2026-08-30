@@ -135,7 +135,13 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
         finally:
             catalog.close()
         report = list(
-            zip(scored_queries, precision_medians, completeness_medians, unsupported_medians)
+            zip(
+                scored_queries,
+                precision_medians,
+                completeness_medians,
+                unsupported_medians,
+                strict=True,
+            )
         )
         assert sum(precision_medians) / len(precision_medians) >= 0.90, report
         assert sum(completeness_medians) / len(completeness_medians) >= 0.85, report
