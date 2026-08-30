@@ -1,10 +1,16 @@
 import asyncio
 from datetime import UTC, datetime
 
-from jdagent.knowledge.embedding import HashEmbedding
+from jdagent.knowledge.embedding import EmbeddingKind, EmbeddingResult, HashEmbedding
+from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 from jdagent.knowledge.index import IndexChunk, InMemoryKnowledgeIndex
 from jdagent.knowledge.preparation import TurnKnowledgePreparation
-from jdagent.knowledge.ptk import FrozenKnowledgeBase, QueryFailureReason, RetrievalOutcome
+from jdagent.knowledge.ptk import (
+    BaseQueryStatus,
+    FrozenKnowledgeBase,
+    QueryFailureReason,
+    RetrievalOutcome,
+)
 from jdagent.knowledge.reranker import ExplodingReranker
 from jdagent.knowledge.types import (
     BindingRecord,
@@ -186,5 +192,67 @@ def test_parent_budget_drops_whole_parents() -> None:
         )
         assert len(ptk.evidence) == 1
         assert ptk.evidence[0].locator == "txt:p[0]"
+
+    asyncio.run(scenario())
+
+
+class _SelectiveBoomEmbedding:
+    async def embed(
+        self,
+        texts: tuple[str, ...],
+        profile: EmbeddingProfile,
+        *,
+        input_kind: EmbeddingKind,
+    ) -> EmbeddingResult:
+        if profile.model == "bad":
+            raise KnowledgeError(KnowledgeErrorCode.PROVIDER_UNAVAILABLE, "boom")
+        return await HashEmbedding().embed(texts, profile, input_kind=input_kind)
+
+
+def test_query_embedding_failure_is_isolated_per_profile() -> None:
+    async def scenario() -> None:
+        hr = InMemoryKnowledgeIndex()
+        finance = InMemoryKnowledgeIndex()
+        hr.upsert_chunks(
+            "gen-hr",
+            (_chunk("c1", "年假 15 天", kb_id="hr", locator="md:h2[0]/p[0]"),),
+        )
+        finance.upsert_chunks(
+            "gen-fin",
+            (_chunk("c2", "年假津贴 500", kb_id="finance", locator="md:h2[0]/p[0]"),),
+        )
+        preparation = TurnKnowledgePreparation(
+            embedding=_SelectiveBoomEmbedding(),
+            indexes={"hr": hr, "finance": finance},
+        )
+        ptk = await preparation.prepare(
+            turn_id="t-iso",
+            query_text="年假",
+            bindings=(_binding("hr"), _binding("finance")),
+            frozen=(
+                (
+                    _frozen(
+                        "hr",
+                        generation="gen-hr",
+                        embedding=EmbeddingProfile(model="bad", dimension=8),
+                    ),
+                    None,
+                ),
+                (
+                    _frozen(
+                        "finance",
+                        generation="gen-fin",
+                        embedding=EmbeddingProfile(model="good", dimension=8),
+                    ),
+                    None,
+                ),
+            ),
+            turn_token="tok-iso",
+        )
+        assert ptk.outcome is RetrievalOutcome.PARTIAL
+        by_kb = {item.knowledge_base_id: item for item in ptk.bases}
+        assert by_kb["hr"].failure_reason is QueryFailureReason.QUERY_FAILED
+        assert by_kb["finance"].status is BaseQueryStatus.SUCCEEDED
+        assert ptk.evidence
 
     asyncio.run(scenario())

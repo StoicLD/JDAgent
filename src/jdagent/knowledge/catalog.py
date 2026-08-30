@@ -356,10 +356,14 @@ class KnowledgeCatalog:
                 "SELECT COUNT(*) FROM bindings WHERE knowledge_base_id = ?",
                 (knowledge_base_id,),
             ).fetchone()[0]
-            if bind_count:
+            source_count = db.execute(
+                "SELECT COUNT(*) FROM sources WHERE knowledge_base_id = ?",
+                (knowledge_base_id,),
+            ).fetchone()[0]
+            if bind_count or source_count:
                 raise KnowledgeError(
                     KnowledgeErrorCode.STILL_REFERENCED,
-                    "Knowledge base is still referenced by a workspace binding",
+                    "Knowledge base is still referenced",
                 )
             db.execute(
                 "DELETE FROM knowledge_bases WHERE knowledge_base_id = ?",
@@ -463,17 +467,23 @@ class KnowledgeCatalog:
             raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Binding not found")
         return self._binding_from_row(row)
 
-    def acquire_lease(self, operation_id: str, owner: str) -> None:
+    def acquire_lease(self, operation_id: str, owner: str, *, takeover: bool = False) -> None:
         now = self._clock.now()
         with self._lock:
             db = self._db()
             row = db.execute("SELECT * FROM leases WHERE lease_id = 'global'").fetchone()
             if row is not None:
                 expires = _parse_time(row["expires_at"])
-                if expires > now and row["operation_id"] != operation_id:
+                same_operation = row["operation_id"] == operation_id
+                if expires > now and not same_operation:
                     raise KnowledgeError(
                         KnowledgeErrorCode.KNOWLEDGE_BUSY,
                         "Knowledge catalog is busy",
+                    )
+                if expires <= now and not same_operation and not takeover:
+                    raise KnowledgeError(
+                        KnowledgeErrorCode.KNOWLEDGE_BUSY,
+                        "Expired lease can only be taken over by retry or reconcile",
                     )
             expires_at = (now + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat()
             db.execute(
@@ -562,17 +572,7 @@ class KnowledgeCatalog:
             )
         if row is None:
             raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Operation not found")
-        return OperationRecord(
-            operation_id=row["operation_id"],
-            kind=OperationKind(row["kind"]),
-            saga_stage=row["saga_stage"],
-            knowledge_base_id=row["knowledge_base_id"],
-            source_id=row["source_id"],
-            payload_json=row["payload_json"],
-            error_code=row["error_code"],
-            created_at=_parse_time(row["created_at"]),
-            updated_at=_parse_time(row["updated_at"]),
-        )
+        return self._operation_from_row(row)
 
     def expire_stale_leases(self) -> int:
         now = self._clock.now()
@@ -586,6 +586,36 @@ class KnowledgeCatalog:
             db.execute("DELETE FROM leases WHERE lease_id = 'global'")
             self._commit_with_backup(db)
         return 1
+
+    def list_incomplete_operations(self) -> tuple[OperationRecord, ...]:
+        with self._lock:
+            rows = (
+                self._db()
+                .execute(
+                    """
+                SELECT * FROM operations
+                WHERE saga_stage != ?
+                ORDER BY created_at
+                """,
+                    (SagaStage.ACTIVE.value,),
+                )
+                .fetchall()
+            )
+        return tuple(self._operation_from_row(row) for row in rows)
+
+    @staticmethod
+    def _operation_from_row(row: sqlite3.Row) -> OperationRecord:
+        return OperationRecord(
+            operation_id=row["operation_id"],
+            kind=OperationKind(row["kind"]),
+            saga_stage=row["saga_stage"],
+            knowledge_base_id=row["knowledge_base_id"],
+            source_id=row["source_id"],
+            payload_json=row["payload_json"],
+            error_code=row["error_code"],
+            created_at=_parse_time(row["created_at"]),
+            updated_at=_parse_time(row["updated_at"]),
+        )
 
     def upsert_source(
         self,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -61,6 +61,14 @@ class KnowledgeIngestion:
         if completed is not None:
             return completed
         try:
+            prior = self._catalog.get_operation(operation)
+        except KnowledgeError:
+            prior = None
+        if prior is not None:
+            resumed = await self._resume(prior)
+            if resumed is not None:
+                return resumed
+        try:
             data = await asyncio.to_thread(Path.read_bytes, path)
         except OSError as error:
             raise KnowledgeError(
@@ -71,7 +79,13 @@ class KnowledgeIngestion:
         source_format = format_from_path(name)
         raw_hash = content_digest(data)
         existing = self._catalog.get_source_by_name(knowledge_base_id, name)
-        if existing is not None and not replace:
+        skip_conflict = (
+            prior is not None
+            and prior.source_id is not None
+            and existing is not None
+            and existing.source_id == prior.source_id
+        )
+        if existing is not None and not replace and not skip_conflict:
             if existing.lifecycle is not SourceLifecycle.DELETED:
                 if (
                     existing.lifecycle is SourceLifecycle.ACTIVE
@@ -97,25 +111,23 @@ class KnowledgeIngestion:
         kind = OperationKind.REPLACE if replace else OperationKind.ADD
         self._catalog.acquire_lease(operation, self._owner)
         try:
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=None if existing is None else existing.source_id,
-                stage=SagaStage.RECEIVED,
-                payload_json=json.dumps(
-                    {"path": str(path), "replace": replace, "encoding": encoding}
-                ),
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                None if existing is None else existing.source_id,
+                SagaStage.RECEIVED,
+                {"path": str(path), "replace": replace, "encoding": encoding},
             )
             kb = self._catalog.get_knowledge_base(knowledge_base_id)
             stored_hash = self._store.put(data)
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=None if existing is None else existing.source_id,
-                stage=SagaStage.RAW_STORED,
-                payload_json=json.dumps({"raw_hash": stored_hash, "path": str(path)}),
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                None if existing is None else existing.source_id,
+                SagaStage.RAW_STORED,
+                {"raw_hash": stored_hash, "path": str(path), "replace": replace},
             )
             parsed = parse_source(data, source_format=source_format, encoding=encoding)
             parents = chunk_document(parsed)
@@ -145,13 +157,13 @@ class KnowledgeIngestion:
                 sort_keys=True,
             ).encode("utf-8")
             snapshot_hash = self._store.put(snapshot_payload)
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=None if existing is None else existing.source_id,
-                stage=SagaStage.PARSED,
-                payload_json=json.dumps({"snapshot_hash": snapshot_hash}),
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                None if existing is None else existing.source_id,
+                SagaStage.PARSED,
+                {"snapshot_hash": snapshot_hash},
             )
             source = self._catalog.upsert_source(
                 knowledge_base_id=knowledge_base_id,
@@ -175,13 +187,6 @@ class KnowledgeIngestion:
                 texts,
                 kb.embedding_profile,
                 input_kind=EmbeddingKind.DOCUMENT,
-            )
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=source.source_id,
-                stage=SagaStage.INDEXING,
             )
             snapshot_id = f"snap_{snapshot_hash[:16]}"
             index_chunks = tuple(
@@ -213,12 +218,37 @@ class KnowledgeIngestion:
                 source.source_id,
                 tuple(chunk.chunk_id for chunk in index_chunks),
             )
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=source.source_id,
-                stage=SagaStage.INDEX_VALIDATED,
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                source.source_id,
+                SagaStage.INDEXING,
+                {
+                    "source_id": source.source_id,
+                    "generation_id": generation_id,
+                    "next_revision": next_revision,
+                    "version_id": version_id,
+                    "chunk_ids": [chunk.chunk_id for chunk in index_chunks],
+                    "path": str(path),
+                    "replace": replace,
+                },
+            )
+            loaded = self._index.get_chunks(
+                generation_id, tuple(chunk.chunk_id for chunk in index_chunks)
+            )
+            if len(loaded) != len(index_chunks):
+                raise KnowledgeError(
+                    KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                    "Index validation failed",
+                )
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                source.source_id,
+                SagaStage.INDEX_VALIDATED,
+                {},
             )
             self._catalog.activate_revision(knowledge_base_id, generation_id, next_revision)
             self._catalog.set_source_lifecycle(
@@ -229,22 +259,20 @@ class KnowledgeIngestion:
             result = IngestResult(
                 operation, source.source_id, version_id, next_revision, generation_id
             )
-            self._catalog.record_operation(
-                operation_id=operation,
-                kind=kind,
-                knowledge_base_id=knowledge_base_id,
-                source_id=source.source_id,
-                stage=SagaStage.ACTIVE,
-                payload_json=json.dumps(
-                    {
-                        "source_id": result.source_id,
-                        "source_version_id": result.source_version_id,
-                        "revision": result.revision,
-                        "generation_id": result.generation_id,
-                        "path": str(path),
-                        "replace": replace,
-                    }
-                ),
+            self._write_stage(
+                operation,
+                kind,
+                knowledge_base_id,
+                source.source_id,
+                SagaStage.ACTIVE,
+                {
+                    "source_id": result.source_id,
+                    "source_version_id": result.source_version_id,
+                    "revision": result.revision,
+                    "generation_id": result.generation_id,
+                    "path": str(path),
+                    "replace": replace,
+                },
             )
             return result
         except KnowledgeError as error:
@@ -278,7 +306,16 @@ class KnowledgeIngestion:
 
     def reconcile(self) -> dict[str, int]:
         expired = self._catalog.expire_stale_leases()
-        return {"expired_leases": expired}
+        resumed = 0
+        for record in self._catalog.list_incomplete_operations():
+            payload = _payload(record)
+            if not isinstance(payload.get("path"), str):
+                continue
+            self._catalog.acquire_lease(record.operation_id, self._owner, takeover=True)
+            self._catalog.release_lease(record.operation_id)
+            asyncio.run(self.retry(record.operation_id))
+            resumed += 1
+        return {"expired_leases": expired, "resumed": resumed}
 
     async def deactivate(self, knowledge_base_id: str, source_id: str) -> int:
         return await self._visibility(knowledge_base_id, source_id, SourceLifecycle.INACTIVE)
@@ -302,7 +339,23 @@ class KnowledgeIngestion:
         try:
             next_revision = kb.current_revision + 1
             chunk_ids = self._catalog.chunks_for_source(generation_id, source_id)
-            self._index.close_chunks(generation_id, chunk_ids, 0)
+            existing_chunks = self._index.get_chunks(generation_id, chunk_ids)
+            copies = tuple(
+                replace(
+                    chunk,
+                    chunk_id=new_id("chk"),
+                    valid_from_revision=next_revision,
+                    valid_to_revision=0,
+                )
+                for chunk in existing_chunks
+            )
+            if copies:
+                self._index.upsert_chunks(generation_id, copies)
+                self._catalog.remember_chunks(
+                    generation_id,
+                    source_id,
+                    tuple(chunk.chunk_id for chunk in copies),
+                )
             self._catalog.activate_revision(knowledge_base_id, generation_id, next_revision)
             self._catalog.set_source_lifecycle(source_id, SourceLifecycle.ACTIVE)
             return next_revision
@@ -391,18 +444,131 @@ class KnowledgeIngestion:
         error: KnowledgeError,
     ) -> None:
         source_id = getattr(existing, "source_id", None)
+        stage = SagaStage.RECEIVED
+        payload_json = "{}"
+        try:
+            current = self._catalog.get_operation(operation)
+            payload_json = current.payload_json
+            if not isinstance(source_id, str):
+                source_id = current.source_id
+            try:
+                stage = SagaStage(current.saga_stage)
+            except ValueError:
+                stage = SagaStage.RECEIVED
+        except KnowledgeError:
+            pass
         try:
             self._catalog.record_operation(
                 operation_id=operation,
                 kind=kind,
                 knowledge_base_id=knowledge_base_id,
                 source_id=source_id if isinstance(source_id, str) else None,
-                stage=SagaStage.RECEIVED,
+                stage=stage,
+                payload_json=payload_json,
                 error_code=error.code.value,
                 error_message=str(error),
             )
         except KnowledgeError:
             return
+
+    def _write_stage(
+        self,
+        operation: str,
+        kind: OperationKind,
+        knowledge_base_id: str,
+        source_id: str | None,
+        stage: SagaStage,
+        extra: dict[str, object],
+    ) -> None:
+        payload: dict[str, object] = {}
+        try:
+            payload = dict(_payload(self._catalog.get_operation(operation)))
+        except KnowledgeError:
+            pass
+        payload.update(extra)
+        self._catalog.record_operation(
+            operation_id=operation,
+            kind=kind,
+            knowledge_base_id=knowledge_base_id,
+            source_id=source_id,
+            stage=stage,
+            payload_json=json.dumps(payload, ensure_ascii=False),
+        )
+
+    async def _resume(self, record: OperationRecord) -> IngestResult | None:
+        if record.saga_stage == SagaStage.ACTIVE.value:
+            return self._completed_result(record.operation_id)
+        payload = _payload(record)
+        if record.saga_stage == SagaStage.INDEX_VALIDATED.value:
+            return self._activate_from_payload(record, payload)
+        if record.saga_stage == SagaStage.INDEXING.value:
+            generation_id = payload.get("generation_id")
+            raw_ids = payload.get("chunk_ids")
+            if isinstance(generation_id, str) and isinstance(raw_ids, list):
+                chunk_ids: list[str] = []
+                valid = True
+                for item in cast(list[object], raw_ids):
+                    if not isinstance(item, str):
+                        valid = False
+                        break
+                    chunk_ids.append(item)
+                if not valid:
+                    return None
+                loaded = self._index.get_chunks(generation_id, tuple(chunk_ids))
+                if len(loaded) == len(chunk_ids):
+                    kind = OperationKind(record.kind)
+                    self._write_stage(
+                        record.operation_id,
+                        kind,
+                        record.knowledge_base_id,
+                        record.source_id,
+                        SagaStage.INDEX_VALIDATED,
+                        {},
+                    )
+                    return self._activate_from_payload(record, payload)
+        return None
+
+    def _activate_from_payload(
+        self, record: OperationRecord, payload: dict[str, object]
+    ) -> IngestResult | None:
+        source_id = payload.get("source_id") or record.source_id
+        version_id = payload.get("version_id") or payload.get("source_version_id")
+        revision = payload.get("next_revision") or payload.get("revision")
+        generation_id = payload.get("generation_id")
+        if (
+            not isinstance(source_id, str)
+            or not isinstance(version_id, str)
+            or not isinstance(revision, int)
+            or not isinstance(generation_id, str)
+        ):
+            return None
+        self._catalog.acquire_lease(record.operation_id, self._owner)
+        try:
+            self._catalog.activate_revision(record.knowledge_base_id, generation_id, revision)
+            self._catalog.set_source_lifecycle(
+                source_id,
+                SourceLifecycle.ACTIVE,
+                current_version_id=version_id,
+            )
+            result = IngestResult(
+                record.operation_id, source_id, version_id, revision, generation_id
+            )
+            self._write_stage(
+                record.operation_id,
+                OperationKind(record.kind),
+                record.knowledge_base_id,
+                source_id,
+                SagaStage.ACTIVE,
+                {
+                    "source_id": result.source_id,
+                    "source_version_id": result.source_version_id,
+                    "revision": result.revision,
+                    "generation_id": result.generation_id,
+                },
+            )
+            return result
+        finally:
+            self._catalog.release_lease(record.operation_id)
 
 
 def _payload(record: OperationRecord) -> dict[str, object]:

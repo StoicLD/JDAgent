@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 
 from jdagent.domain.events import CitationRecord
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
+from jdagent.knowledge.types import SourceLifecycle
 
 _REF = re.compile(r"K:([A-Za-z0-9_-]+):E([1-9][0-9]*)")
 _SUPPLEMENT = re.compile(r"(?is)\n+---\s*model[ _-]?supplement\s*---\s*(.*)\Z")
@@ -18,6 +20,20 @@ class FinalizedAnswer:
     citations: tuple[CitationRecord, ...]
     model_supplement: str
     illegal: bool
+
+
+class CitationTarget(StrEnum):
+    OPENABLE = "openable"
+    TOMBSTONE = "tombstone"
+    CORRUPT = "corrupt"
+
+
+def citation_target(lifecycle: SourceLifecycle, *, object_missing: bool) -> CitationTarget:
+    if object_missing:
+        return CitationTarget.CORRUPT
+    if lifecycle in {SourceLifecycle.DELETE_PENDING, SourceLifecycle.DELETED}:
+        return CitationTarget.TOMBSTONE
+    return CitationTarget.OPENABLE
 
 
 def finalize_answer(text: str, knowledge: PreparedTurnKnowledge) -> FinalizedAnswer:

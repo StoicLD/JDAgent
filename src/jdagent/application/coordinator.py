@@ -1,6 +1,7 @@
 """Coordinate one turn without embedding adapter details in the agent loop."""
 
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -22,9 +23,13 @@ from jdagent.eventing import EventJournal
 from jdagent.knowledge.catalog import KnowledgeCatalog
 from jdagent.knowledge.embedding import AdaptiveEmbedding
 from jdagent.knowledge.errors import KnowledgeError
-from jdagent.knowledge.index import FileKnowledgeIndex, KnowledgeIndex
+from jdagent.knowledge.index import KnowledgeIndex
 from jdagent.knowledge.preparation import CatalogBaseResolver, TurnKnowledgePreparation
-from jdagent.knowledge.ptk import PreparedTurnKnowledge, empty_prepared_knowledge
+from jdagent.knowledge.ptk import (
+    PreparedTurnKnowledge,
+    RetrievalOutcome,
+    empty_prepared_knowledge,
+)
 from jdagent.observability import TraceProjection
 from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 
@@ -211,23 +216,28 @@ class TurnCoordinator:
     async def _prepare(
         self, turn_id: str, turn_token: str, query_text: str
     ) -> PreparedTurnKnowledge:
+        digest = sha256(query_text.encode("utf-8")).hexdigest()
         catalog_path = self._knowledge_catalog
         backup_path = self._knowledge_backups
         if catalog_path is None or backup_path is None or not catalog_path.is_file():
-            return empty_prepared_knowledge(turn_id, turn_token, "")
+            return empty_prepared_knowledge(turn_id, turn_token, digest)
         catalog = KnowledgeCatalog(catalog_path, backup_path)
         try:
             catalog.open()
         except KnowledgeError:
-            return empty_prepared_knowledge(turn_id, turn_token, "")
+            return empty_prepared_knowledge(
+                turn_id,
+                turn_token,
+                digest,
+                outcome=RetrievalOutcome.UNAVAILABLE,
+            )
         try:
             identity = self._workspace_identity or ""
             bindings = catalog.list_bindings(identity) if identity else ()
             if not bindings:
-                return empty_prepared_knowledge(turn_id, turn_token, "")
+                return empty_prepared_knowledge(turn_id, turn_token, digest)
             frozen = CatalogBaseResolver(catalog).resolve(bindings)
             indexes: dict[str, KnowledgeIndex] = {}
-            shared: FileKnowledgeIndex | None = None
             for binding in bindings:
                 try:
                     kb = catalog.get_knowledge_base(binding.knowledge_base_id)
@@ -244,9 +254,9 @@ class TurnCoordinator:
                     continue
                 if self._knowledge_index is None:
                     continue
-                if shared is None:
-                    shared = FileKnowledgeIndex(self._knowledge_index)
-                indexes[kb.knowledge_base_id] = shared
+                from jdagent.knowledge.index import FileKnowledgeIndex
+
+                indexes[kb.knowledge_base_id] = FileKnowledgeIndex(self._knowledge_index)
             preparation = TurnKnowledgePreparation(
                 embedding=AdaptiveEmbedding(),
                 indexes=indexes,
@@ -259,6 +269,11 @@ class TurnCoordinator:
                 turn_token=turn_token,
             )
         except KnowledgeError:
-            return empty_prepared_knowledge(turn_id, turn_token, "")
+            return empty_prepared_knowledge(
+                turn_id,
+                turn_token,
+                digest,
+                outcome=RetrievalOutcome.UNAVAILABLE,
+            )
         finally:
             catalog.close()

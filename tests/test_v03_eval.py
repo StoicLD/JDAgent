@@ -41,6 +41,7 @@ def test_offline_child_and_ptk_eval_meet_gates(tmp_path: Path) -> None:
         if csv:
             assert sum(csv) / len(csv) >= 0.75
         drop = fake_hybrid_drop(child)
+        # Hash Fake records hybrid vs best-single; live embedding owns the §17.4 ≤0.02 gate.
         assert drop <= 1.0
 
     asyncio.run(scenario())

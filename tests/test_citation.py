@@ -1,11 +1,17 @@
 from jdagent.domain.events import CitationRecord
-from jdagent.knowledge.citation import evidence_system_part, finalize_answer
+from jdagent.knowledge.citation import (
+    CitationTarget,
+    citation_target,
+    evidence_system_part,
+    finalize_answer,
+)
 from jdagent.knowledge.ptk import (
     Evidence,
     EvidenceBudget,
     PreparedTurnKnowledge,
     RetrievalOutcome,
 )
+from jdagent.knowledge.types import SourceLifecycle
 
 
 def _ptk() -> PreparedTurnKnowledge:
@@ -53,3 +59,18 @@ def test_evidence_prompt_requires_exact_machine_references() -> None:
     assert "K:tok:E1" in prompt
     assert "machine reference" in prompt
     assert "[1]" in prompt
+
+
+def test_citation_target_distinguishes_openable_tombstone_and_corrupt() -> None:
+    assert citation_target(SourceLifecycle.ACTIVE, object_missing=False) is CitationTarget.OPENABLE
+    assert (
+        citation_target(SourceLifecycle.INACTIVE, object_missing=False) is CitationTarget.OPENABLE
+    )
+    assert (
+        citation_target(SourceLifecycle.DELETE_PENDING, object_missing=False)
+        is CitationTarget.TOMBSTONE
+    )
+    assert (
+        citation_target(SourceLifecycle.DELETED, object_missing=False) is CitationTarget.TOMBSTONE
+    )
+    assert citation_target(SourceLifecycle.ACTIVE, object_missing=True) is CitationTarget.CORRUPT

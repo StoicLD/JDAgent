@@ -111,12 +111,16 @@ class PreparedTurnKnowledge:
 
 
 def empty_prepared_knowledge(
-    turn_id: str, turn_token: str, query_fingerprint: str
+    turn_id: str,
+    turn_token: str,
+    query_fingerprint: str,
+    *,
+    outcome: RetrievalOutcome = RetrievalOutcome.NOT_CONFIGURED,
 ) -> PreparedTurnKnowledge:
     return PreparedTurnKnowledge(
         turn_id=turn_id,
         turn_token=turn_token,
-        outcome=RetrievalOutcome.NOT_CONFIGURED,
+        outcome=outcome,
         query_fingerprint=query_fingerprint,
         bases=(),
         evidence=(),

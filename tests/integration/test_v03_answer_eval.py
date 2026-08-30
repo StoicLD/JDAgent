@@ -112,6 +112,7 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
                         runtime_options=RuntimeOptions(
                             temperature=0.0,
                             include_tools=False,
+                            allow_local_index=True,
                             provider_options={"deepseek": {"thinking": {"type": "disabled"}}},
                         ),
                     )

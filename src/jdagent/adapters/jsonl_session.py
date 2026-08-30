@@ -540,7 +540,7 @@ def _decode_json_object(raw: bytes, offset: int) -> JsonObject:
 
 
 class JsonlSession:
-    """Persist schema-v1 events as one fsynced UTF-8 JSON object per line."""
+    """Persist schema-v2 events as one fsynced UTF-8 JSON object per line."""
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory.resolve(strict=False)

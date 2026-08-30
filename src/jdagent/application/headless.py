@@ -100,7 +100,11 @@ class HeadlessResult:
                     "evidence_id": item.evidence_id,
                     "knowledge_base_id": item.knowledge_base_id,
                     "source_id": item.source_id,
+                    "source_version_id": item.source_version_id,
+                    "snapshot_id": item.snapshot_id,
                     "locator": item.locator,
+                    "locator_schema_version": item.locator_schema_version,
+                    "content_hash": item.content_hash,
                 }
                 for item in self.citations
             ],

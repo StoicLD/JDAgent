@@ -98,7 +98,12 @@ def test_destructive_commands_require_confirmation_and_block_referenced_delete(
         status = catalog.knowledge_base_status(kb.knowledge_base_id)
         assert status["binding_count"] == 1
         assert status["current_revision"] == 0
-        assert isinstance(status["embedding_fingerprint"], str)
+        assert status["embedding_fingerprint"]
+        catalog.unbind(catalog.list_bindings("ws-a")[0].binding_id, confirmed=True)
+        catalog.upsert_source(knowledge_base_id=kb.knowledge_base_id, name="policy.md")
+        with pytest.raises(KnowledgeError) as sourced:
+            catalog.delete_knowledge_base(kb.knowledge_base_id, confirmed=True)
+        assert sourced.value.code is KnowledgeErrorCode.STILL_REFERENCED
 
 
 def test_reopen_catalog_preserves_state_and_creates_daily_backup(tmp_path: Path) -> None:

@@ -113,15 +113,20 @@ class TurnKnowledgePreparation:
             groups.setdefault(base.embedding_profile.fingerprint(), []).append(index)
 
         vectors: dict[str, tuple[float, ...]] = {}
+        failed_profiles: set[str] = set()
         for fingerprint, members in groups.items():
             profile = frozen[members[0]][0]
             if profile is None or profile.retrieval_profile.mode == "bm25":
                 continue
-            embedded = await self._embedding.embed(
-                (query_text,),
-                profile.embedding_profile,
-                input_kind=EmbeddingKind.QUERY,
-            )
+            try:
+                embedded = await self._embedding.embed(
+                    (query_text,),
+                    profile.embedding_profile,
+                    input_kind=EmbeddingKind.QUERY,
+                )
+            except KnowledgeError:
+                failed_profiles.add(fingerprint)
+                continue
             vectors[fingerprint] = embedded.vectors[0]
 
         base_results: list[KnowledgeBaseTurnResult] = []
@@ -151,6 +156,10 @@ class TurnKnowledgePreparation:
                 )
                 continue
             default_profile = base.retrieval_profile
+            if base.embedding_profile.fingerprint() in failed_profiles:
+                failure_count += 1
+                base_results.append(_failed_base(binding, base, QueryFailureReason.QUERY_FAILED))
+                continue
             index = self._indexes.get(base.knowledge_base_id)
             if index is None:
                 failure_count += 1

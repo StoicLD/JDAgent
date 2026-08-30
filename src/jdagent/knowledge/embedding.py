@@ -97,8 +97,9 @@ class HashEmbedding:
 class OpenAICompatibleEmbedding:
     """OpenAI-compatible HTTP /embeddings adapter."""
 
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, client: httpx.AsyncClient | None = None, api_key: str | None = None) -> None:
         self._client = client
+        self._api_key = api_key
 
     async def embed(
         self,
@@ -122,10 +123,14 @@ class OpenAICompatibleEmbedding:
             while attempts < 3:
                 attempts += 1
                 try:
+                    headers: dict[str, str] = {}
+                    if self._api_key:
+                        headers["Authorization"] = f"Bearer {self._api_key}"
                     response = await client.post(
                         "/embeddings",
                         json={"model": profile.model, "input": list(texts)},
                         timeout=profile.timeout_seconds,
+                        headers=headers,
                     )
                     if response.status_code in {429, 502, 503} and attempts < 3:
                         continue
@@ -192,9 +197,9 @@ class OpenAICompatibleEmbedding:
 class AdaptiveEmbedding:
     """Use HTTP embeddings when a profile names a provider; otherwise hash."""
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self._hash = HashEmbedding()
-        self._http = OpenAICompatibleEmbedding()
+        self._http = OpenAICompatibleEmbedding(api_key=api_key)
 
     async def embed(
         self,

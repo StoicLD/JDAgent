@@ -56,6 +56,7 @@ class RuntimeOptions:
     max_tool_calls: int = 16
     temperature: float | None = None
     include_tools: bool = True
+    allow_local_index: bool = False
     provider_options: JsonObject = field(default_factory=_empty_json_object)
 
     def __post_init__(self) -> None:
@@ -202,6 +203,10 @@ def build_runtime(
         workspace_identity=workspace_identity(workspace),
         knowledge_catalog=configuration.data_paths.knowledge_catalog,
         knowledge_backups=configuration.data_paths.knowledge_backups,
-        knowledge_index=configuration.data_paths.knowledge_directory / "index.sqlite",
+        knowledge_index=(
+            configuration.data_paths.knowledge_directory / "index.sqlite"
+            if options.allow_local_index
+            else None
+        ),
     )
     return RuntimeComposition(coordinator, model, session)

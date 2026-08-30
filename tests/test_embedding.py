@@ -37,7 +37,7 @@ def test_http_embedding_retries_then_validates() -> None:
         calls = {"count": 0}
 
         def handler(request: httpx.Request) -> httpx.Response:
-            del request
+            assert request.headers.get("Authorization") == "Bearer secret-token"
             calls["count"] += 1
             if calls["count"] < 2:
                 return httpx.Response(429, json={"error": "rate"})
@@ -48,7 +48,7 @@ def test_http_embedding_retries_then_validates() -> None:
 
         transport = httpx.MockTransport(handler)
         client = httpx.AsyncClient(transport=transport, base_url="https://embed.test")
-        adapter = OpenAICompatibleEmbedding(client)
+        adapter = OpenAICompatibleEmbedding(client, api_key="secret-token")
         profile = EmbeddingProfile(
             base_url="https://embed.test",
             model="demo",

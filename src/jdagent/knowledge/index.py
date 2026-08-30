@@ -71,6 +71,10 @@ class KnowledgeIndex(Protocol):
 
     def drop_generation(self, generation_id: str) -> None: ...
 
+    def get_chunks(
+        self, generation_id: str, chunk_ids: tuple[str, ...]
+    ) -> tuple[IndexChunk, ...]: ...
+
 
 _TOKEN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
 
@@ -175,6 +179,10 @@ class InMemoryKnowledgeIndex:
     def drop_generation(self, generation_id: str) -> None:
         self._chunks.pop(generation_id, None)
 
+    def get_chunks(self, generation_id: str, chunk_ids: tuple[str, ...]) -> tuple[IndexChunk, ...]:
+        bucket = self._chunks.get(generation_id, {})
+        return tuple(bucket[chunk_id] for chunk_id in chunk_ids if chunk_id in bucket)
+
 
 class FileKnowledgeIndex:
     """SQLite-backed local index used when Milvus is not configured."""
@@ -258,6 +266,18 @@ class FileKnowledgeIndex:
         with self._lock:
             self._db.execute("DELETE FROM chunks WHERE generation_id = ?", (generation_id,))
             self._db.commit()
+
+    def get_chunks(self, generation_id: str, chunk_ids: tuple[str, ...]) -> tuple[IndexChunk, ...]:
+        found: list[IndexChunk] = []
+        with self._lock:
+            for chunk_id in chunk_ids:
+                row = self._db.execute(
+                    "SELECT payload_json FROM chunks WHERE generation_id = ? AND chunk_id = ?",
+                    (generation_id, chunk_id),
+                ).fetchone()
+                if row is not None:
+                    found.append(_chunk_from_json(row[0]))
+        return tuple(found)
 
     def _visible(self, generation_id: str, revision: int) -> list[IndexChunk]:
         with self._lock:

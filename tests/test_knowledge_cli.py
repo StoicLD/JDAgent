@@ -107,6 +107,7 @@ def test_ordinary_agent_turn_does_not_create_knowledge_catalog(
 def test_corrupt_catalog_does_not_block_ordinary_agent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -120,8 +121,105 @@ def test_corrupt_catalog_does_not_block_ordinary_agent(
     )
     paths.knowledge_catalog.parent.mkdir(parents=True)
     paths.knowledge_catalog.write_bytes(b"corrupt-catalog")
-    code = main(["hello", "--provider", "fake", "--workspace", str(workspace)])
+    code = main(
+        [
+            "hello",
+            "--provider",
+            "fake",
+            "--workspace",
+            str(workspace),
+            "--output",
+            "json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
     assert code == 0
+    assert payload["knowledge"]["outcome"] == "unavailable"
+
+
+def test_bound_knowledge_without_milvus_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _isolate_data(tmp_path, monkeypatch)
+    gold = Path(__file__).resolve().parents[1] / "testdata" / "v0.3-gold" / "sources"
+    connection = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "connection",
+                "add",
+                "--name",
+                "local",
+            ],
+        )
+    )
+    kb = json.loads(
+        _run(
+            capsys,
+            [
+                "--workspace",
+                str(workspace),
+                "knowledge",
+                "kb",
+                "create",
+                "--connection",
+                connection["connection_id"],
+                "--name",
+                "hr",
+            ],
+        )
+    )
+    _run(
+        capsys,
+        [
+            "--workspace",
+            str(workspace),
+            "knowledge",
+            "binding",
+            "add",
+            "--connection",
+            connection["connection_id"],
+            "--kb",
+            kb["knowledge_base_id"],
+        ],
+    )
+    _run(
+        capsys,
+        [
+            "--workspace",
+            str(workspace),
+            "knowledge",
+            "source",
+            "add",
+            "--kb",
+            kb["knowledge_base_id"],
+            "--file",
+            str(gold / "zh-leave-policy.md"),
+        ],
+    )
+    code = main(
+        [
+            "年假几天",
+            "--provider",
+            "fake",
+            "--workspace",
+            str(workspace),
+            "--output",
+            "json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["knowledge"]["outcome"] == "unavailable"
+    assert payload["knowledge"]["bases"]
+    assert payload["knowledge"]["bases"][0]["failure_reason"] == "provider_unavailable"
 
 
 def test_knowledge_commands_are_not_registered_as_tools(tmp_path: Path) -> None:
