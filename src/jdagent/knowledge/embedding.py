@@ -121,7 +121,20 @@ class OpenAICompatibleEmbedding:
         try:
             for start in range(0, len(texts), batch_size):
                 batch = texts[start : start + batch_size]
-                vectors.extend(await self._embed_batch(client, batch, profile))
+                batch_vectors = await self._embed_batch(client, batch, profile)
+                validate_vectors(batch, batch_vectors, profile)
+                if profile.normalize:
+                    normalized: list[tuple[float, ...]] = []
+                    for vector in batch_vectors:
+                        norm = math.hypot(*vector)
+                        if norm == 0 or not math.isfinite(norm):
+                            raise KnowledgeError(
+                                KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                                "Embedding vector cannot be normalized",
+                            )
+                        normalized.append(tuple(value / norm for value in vector))
+                    batch_vectors = tuple(normalized)
+                vectors.extend(batch_vectors)
         finally:
             if owns_client:
                 await client.aclose()
@@ -181,6 +194,29 @@ class OpenAICompatibleEmbedding:
                 "Embedding response is missing data",
             )
         entries = cast(list[object], items)
+        indexed: dict[int, object] = {}
+        if any(isinstance(item, dict) and "index" in item for item in entries):
+            for item in entries:
+                position = (
+                    cast(dict[str, object], item).get("index") if isinstance(item, dict) else None
+                )
+                if (
+                    isinstance(position, bool)
+                    or not isinstance(position, int)
+                    or not 0 <= position < len(texts)
+                    or position in indexed
+                ):
+                    raise KnowledgeError(
+                        KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                        "Embedding response index is invalid",
+                    )
+                indexed[position] = item
+            if len(indexed) != len(texts):
+                raise KnowledgeError(
+                    KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                    "Embedding response indexes are incomplete",
+                )
+            entries = [indexed[position] for position in range(len(texts))]
         vectors: list[tuple[float, ...]] = []
         for item in entries:
             if not isinstance(item, dict):

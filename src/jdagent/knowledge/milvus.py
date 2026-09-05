@@ -87,6 +87,7 @@ class MilvusKnowledgeIndex:
                 "bm25_text",
                 "dense_vector",
                 "valid_from_revision",
+                "valid_to_revision",
                 "parent_text",
                 "locator_schema_version",
                 "knowledge_base_id",
@@ -110,6 +111,8 @@ class MilvusKnowledgeIndex:
                 str(row.get("knowledge_base_id") or ""),
             )
             for row in rows
+            if int(row.get("valid_to_revision") or 0) == 0
+            or int(row.get("valid_to_revision") or 0) > valid_to_revision
         )
         if updated:
             self.upsert_chunks(generation_id, updated)

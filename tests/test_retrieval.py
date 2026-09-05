@@ -2,6 +2,8 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from jdagent.knowledge.catalog import KnowledgeCatalog
 from jdagent.knowledge.clock import FakeClock
 from jdagent.knowledge.embedding import EmbeddingKind, EmbeddingResult, HashEmbedding
@@ -293,3 +295,56 @@ def test_catalog_resolver_missing_connection_is_binding_invalid(tmp_path: Path) 
     assert frozen is None
     assert reason is QueryFailureReason.BINDING_INVALID
     catalog.close()
+
+
+@pytest.mark.parametrize("bm25_first", [True, False])
+@pytest.mark.parametrize("embedding_fails", [True, False])
+def test_mixed_modes_share_only_required_query_embedding(
+    bm25_first: bool, embedding_fails: bool
+) -> None:
+    class CountingEmbedding(HashEmbedding):
+        calls = 0
+
+        async def embed(
+            self, texts: tuple[str, ...], profile: EmbeddingProfile, *, input_kind: EmbeddingKind
+        ) -> EmbeddingResult:
+            self.calls += 1
+            if embedding_fails:
+                raise KnowledgeError(KnowledgeErrorCode.PROVIDER_UNAVAILABLE, "offline")
+            return await super().embed(texts, profile, input_kind=input_kind)
+
+    async def scenario() -> None:
+        embedding = CountingEmbedding()
+        indexes: dict[str, InMemoryKnowledgeIndex] = {}
+        for kb_id in ("lexical", "hybrid"):
+            index = InMemoryKnowledgeIndex()
+            index.upsert_chunks(
+                "gen-1", (_chunk(kb_id, "leave policy", kb_id=kb_id, locator=kb_id),)
+            )
+            indexes[kb_id] = index
+        ordered = ("lexical", "hybrid") if bm25_first else ("hybrid", "lexical")
+        ptk = await TurnKnowledgePreparation(embedding=embedding, indexes=indexes).prepare(
+            turn_id="mixed",
+            query_text="leave",
+            bindings=tuple(_binding(kb_id) for kb_id in ordered),
+            frozen=tuple(
+                (
+                    _frozen(
+                        kb_id,
+                        profile=RetrievalProfile(
+                            mode="bm25" if kb_id == "lexical" else "hybrid_rrf"
+                        ),
+                    ),
+                    None,
+                )
+                for kb_id in ordered
+            ),
+        )
+        assert embedding.calls == 1
+        by_kb = {base.knowledge_base_id: base for base in ptk.bases}
+        assert by_kb["lexical"].status is BaseQueryStatus.SUCCEEDED
+        assert ptk.outcome is (
+            RetrievalOutcome.PARTIAL if embedding_fails else RetrievalOutcome.COMPLETE
+        )
+
+    asyncio.run(scenario())

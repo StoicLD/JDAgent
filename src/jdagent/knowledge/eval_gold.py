@@ -121,17 +121,19 @@ async def run_retrieval_eval(
             ContentAddressedStore(tmp_path / "objects"),
             index,
         )
-    source_ids: dict[str, str] = {}
+    source_keys: dict[str, str] = {}
     for path in sorted((GOLD_ROOT / "sources").iterdir()):
         key = path.stem
         kb_name = SOURCE_KB[key]
         result = await ingestion_by_kb[kb_name].add_file(kbs[kb_name], path)
-        source_ids[key] = result.source_id
+        source_keys[result.source_version_id] = key
     queries = load_jsonl(GOLD_ROOT / "queries.jsonl")
     annotations = {str(row["query_id"]): row for row in load_jsonl(GOLD_ROOT / "annotations.jsonl")}
     child_scores: list[LayerScore] = []
     ptk_scores: list[LayerScore] = []
-    preparation = TurnKnowledgePreparation(indexes=indexes)
+    preparation = TurnKnowledgePreparation(
+        indexes={kbs[name]: index for name, index in indexes.items()}
+    )
     now = catalog.get_knowledge_base(kbs["hr"]).created_at
     for query in queries:
         query_id = str(query["query_id"])
@@ -140,7 +142,7 @@ async def run_retrieval_eval(
         annotation = annotations[query_id]
         kb_names = [str(name) for name in cast(list[object], query["knowledge_bases"])]
         bindings = tuple(
-            BindingRecord(f"bind_{name}", "ws", connection.connection_id, name, now)
+            BindingRecord(f"bind_{name}", "ws", connection.connection_id, kbs[name], now)
             for name in kb_names
         )
         frozen = tuple(
@@ -148,7 +150,7 @@ async def run_retrieval_eval(
                 FrozenKnowledgeBase(
                     f"bind_{name}",
                     connection.connection_id,
-                    name,
+                    kbs[name],
                     name,
                     catalog.get_knowledge_base(kbs[name]).current_generation_id,
                     catalog.get_knowledge_base(kbs[name]).current_revision,
@@ -169,9 +171,9 @@ async def run_retrieval_eval(
             turn_token=query_id.lower(),
         )
         required = _required_locators(annotation)
-        child_hits: set[str] = set()
-        dense_hits: set[str] = set()
-        hybrid_hits: set[str] = set()
+        child_hits: set[tuple[str, str]] = set()
+        dense_hits: set[tuple[str, str]] = set()
+        hybrid_hits: set[tuple[str, str]] = set()
         query_text = str(query["text"])
         query_vector = (
             await HashEmbedding().embed(
@@ -184,7 +186,7 @@ async def run_retrieval_eval(
             frozen_base = base[0]
             if frozen_base.generation_id is None:
                 continue
-            index = indexes[frozen_base.knowledge_base_id]
+            index = indexes[frozen_base.name]
             bm25 = index.search_bm25(
                 frozen_base.generation_id,
                 frozen_base.revision,
@@ -198,14 +200,16 @@ async def run_retrieval_eval(
                 10,
             )
             hybrid = rrf_merge((dense, bm25), k=60, limit=10)
-            child_hits.update(hit.locator for hit in bm25)
-            dense_hits.update(hit.locator for hit in dense)
-            hybrid_hits.update(hit.locator for hit in hybrid)
+            child_hits.update((source_keys[hit.source_version_id], hit.locator) for hit in bm25)
+            dense_hits.update((source_keys[hit.source_version_id], hit.locator) for hit in dense)
+            hybrid_hits.update((source_keys[hit.source_version_id], hit.locator) for hit in hybrid)
         child_recall = _recall(required, child_hits)
         dense_recall = _recall(required, dense_hits)
         hybrid_recall = _recall(required, hybrid_hits)
-        ptk_locators = {item.locator for item in ptk.evidence}
-        ptk_coverage = _recall(required, ptk_locators)
+        ptk_locators = {
+            (source_keys[item.source_version_id], item.locator) for item in ptk.evidence
+        }
+        ptk_coverage = _recall(required, ptk_locators, expanded=True)
         slice_name = str(query.get("slice", ""))
         child_scores.append(
             LayerScore(
@@ -283,21 +287,30 @@ def write_failures(path: Path, layer: str, scores: tuple[LayerScore, ...]) -> No
             stream.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def _required_locators(annotation: JsonObject) -> set[str]:
+def _required_locators(annotation: JsonObject) -> set[tuple[str, str]]:
     gold = annotation.get("gold_locators")
-    locators: set[str] = set()
+    locators: set[tuple[str, str]] = set()
     if not isinstance(gold, list):
         return locators
     for item in gold:
         if isinstance(item, dict) and item.get("required") is True:
-            locators.add(str(item.get("locator")))
+            locators.add((str(item.get("source_key", "")), str(item.get("locator"))))
     return locators
 
 
-def _recall(required: set[str], actual: set[str]) -> float:
+def _recall(
+    required: set[tuple[str, str]], actual: set[tuple[str, str]], *, expanded: bool = False
+) -> float:
     if not required:
         return 1.0
-    matched = sum(1 for gold in required if any(locator_covers(gold, item) for item in actual))
+    matched = sum(
+        1
+        for key, gold in required
+        if any(
+            key == source and (locator_covers(gold, item) if expanded else gold == item)
+            for source, item in actual
+        )
+    )
     return matched / len(required)
 
 

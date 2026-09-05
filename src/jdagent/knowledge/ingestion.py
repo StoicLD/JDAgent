@@ -17,7 +17,13 @@ from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 from jdagent.knowledge.index import IndexChunk, KnowledgeIndex
 from jdagent.knowledge.parsing import format_from_path, parse_source
 from jdagent.knowledge.store import ContentAddressedStore, content_digest
-from jdagent.knowledge.types import OperationKind, OperationRecord, SagaStage, SourceLifecycle
+from jdagent.knowledge.types import (
+    OperationKind,
+    OperationRecord,
+    SagaStage,
+    SourceLifecycle,
+    SourceRecord,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +176,7 @@ class KnowledgeIngestion:
                 name=name,
                 source_id=None if existing is None else existing.source_id,
                 lifecycle=(existing.lifecycle if existing is not None else SourceLifecycle.ACTIVE),
+                current_version_id=None if existing is None else existing.current_version_id,
             )
             version_id = self._catalog.add_source_version(
                 source_id=source.source_id,
@@ -191,7 +198,9 @@ class KnowledgeIngestion:
             snapshot_id = f"snap_{snapshot_hash[:16]}"
             index_chunks = tuple(
                 IndexChunk(
-                    chunk_id=child.chunk_id,
+                    chunk_id=hashlib.sha256(f"{version_id}:{child.chunk_id}".encode()).hexdigest()[
+                        :32
+                    ],
                     source_id=source.source_id,
                     source_version_id=version_id,
                     snapshot_id=snapshot_id,
@@ -206,17 +215,6 @@ class KnowledgeIngestion:
                     knowledge_base_id=knowledge_base_id,
                 )
                 for index, (parent, child) in enumerate(children)
-            )
-            if replace and kb.current_generation_id is not None:
-                old_ids = self._catalog.chunks_for_source(
-                    kb.current_generation_id, source.source_id
-                )
-                self._index.close_chunks(kb.current_generation_id, old_ids, next_revision)
-            self._index.upsert_chunks(generation_id, index_chunks)
-            self._catalog.remember_chunks(
-                generation_id,
-                source.source_id,
-                tuple(chunk.chunk_id for chunk in index_chunks),
             )
             self._write_stage(
                 operation,
@@ -233,6 +231,17 @@ class KnowledgeIngestion:
                     "path": str(path),
                     "replace": replace,
                 },
+            )
+            if replace and kb.current_generation_id is not None:
+                old_ids = self._catalog.chunks_for_source(
+                    kb.current_generation_id, source.source_id
+                )
+                self._index.close_chunks(kb.current_generation_id, old_ids, next_revision)
+            self._index.upsert_chunks(generation_id, index_chunks)
+            self._catalog.remember_chunks(
+                generation_id,
+                source.source_id,
+                tuple(chunk.chunk_id for chunk in index_chunks),
             )
             loaded = self._index.get_chunks(
                 generation_id, tuple(chunk.chunk_id for chunk in index_chunks)
@@ -321,13 +330,15 @@ class KnowledgeIngestion:
         return await self._visibility(knowledge_base_id, source_id, SourceLifecycle.INACTIVE)
 
     async def reactivate(self, knowledge_base_id: str, source_id: str) -> int:
-        source = self._catalog.get_source(source_id)
-        if source.lifecycle is SourceLifecycle.DELETED:
+        source = self._source_for(knowledge_base_id, source_id)
+        if source.lifecycle in {SourceLifecycle.DELETE_PENDING, SourceLifecycle.DELETED}:
             raise KnowledgeError(
                 KnowledgeErrorCode.NOT_FOUND,
                 "Deleted source cannot be reactivated",
             )
         kb = self._catalog.get_knowledge_base(knowledge_base_id)
+        if source.lifecycle is SourceLifecycle.ACTIVE:
+            return kb.current_revision
         generation_id = kb.current_generation_id
         if generation_id is None:
             raise KnowledgeError(
@@ -340,6 +351,21 @@ class KnowledgeIngestion:
             next_revision = kb.current_revision + 1
             chunk_ids = self._catalog.chunks_for_source(generation_id, source_id)
             existing_chunks = self._index.get_chunks(generation_id, chunk_ids)
+            latest: dict[tuple[str, str], IndexChunk] = {}
+            for chunk in existing_chunks:
+                if chunk.source_version_id != source.current_version_id:
+                    continue
+                if chunk.valid_from_revision > kb.current_revision:
+                    continue
+                key = (chunk.snapshot_id, chunk.locator)
+                previous = latest.get(key)
+                if previous is None or chunk.valid_from_revision > previous.valid_from_revision:
+                    latest[key] = chunk
+            if not latest:
+                raise KnowledgeError(
+                    KnowledgeErrorCode.SOURCE_CORRUPT,
+                    "Current source version has no recoverable index chunks",
+                )
             copies = tuple(
                 replace(
                     chunk,
@@ -347,7 +373,7 @@ class KnowledgeIngestion:
                     valid_from_revision=next_revision,
                     valid_to_revision=0,
                 )
-                for chunk in existing_chunks
+                for chunk in latest.values()
             )
             if copies:
                 self._index.upsert_chunks(generation_id, copies)
@@ -356,8 +382,9 @@ class KnowledgeIngestion:
                     source_id,
                     tuple(chunk.chunk_id for chunk in copies),
                 )
-            self._catalog.activate_revision(knowledge_base_id, generation_id, next_revision)
-            self._catalog.set_source_lifecycle(source_id, SourceLifecycle.ACTIVE)
+            self._catalog.activate_revision_and_lifecycle(
+                knowledge_base_id, generation_id, next_revision, source_id, SourceLifecycle.ACTIVE
+            )
             return next_revision
         finally:
             self._catalog.release_lease(operation)
@@ -368,7 +395,7 @@ class KnowledgeIngestion:
                 KnowledgeErrorCode.CONFIRMATION_REQUIRED,
                 "Deleting a source requires confirmation",
             )
-        source = self._catalog.get_source(source_id)
+        source = self._source_for(knowledge_base_id, source_id)
         if source.current_version_id is not None:
             version = self._catalog.get_source_version(source.current_version_id)
             if version.raw_hash and not self._store.contains(version.raw_hash):
@@ -412,8 +439,14 @@ class KnowledgeIngestion:
     async def _visibility(
         self, knowledge_base_id: str, source_id: str, lifecycle: SourceLifecycle
     ) -> int:
-        self._catalog.get_source(source_id)
+        source = self._source_for(knowledge_base_id, source_id)
+        if source.lifecycle in {SourceLifecycle.DELETE_PENDING, SourceLifecycle.DELETED}:
+            raise KnowledgeError(
+                KnowledgeErrorCode.NOT_FOUND, "Deleted source cannot be deactivated"
+            )
         kb = self._catalog.get_knowledge_base(knowledge_base_id)
+        if source.lifecycle is lifecycle:
+            return kb.current_revision
         generation_id = kb.current_generation_id
         if generation_id is None:
             raise KnowledgeError(
@@ -426,8 +459,9 @@ class KnowledgeIngestion:
             next_revision = kb.current_revision + 1
             chunk_ids = self._catalog.chunks_for_source(generation_id, source_id)
             self._index.close_chunks(generation_id, chunk_ids, next_revision)
-            self._catalog.activate_revision(knowledge_base_id, generation_id, next_revision)
-            self._catalog.set_source_lifecycle(source_id, lifecycle)
+            self._catalog.activate_revision_and_lifecycle(
+                knowledge_base_id, generation_id, next_revision, source_id, lifecycle
+            )
             return next_revision
         finally:
             self._catalog.release_lease(operation)
@@ -452,6 +486,12 @@ class KnowledgeIngestion:
         ):
             return None
         return IngestResult(operation_id, source_id, version_id, revision, generation_id)
+
+    def _source_for(self, knowledge_base_id: str, source_id: str) -> SourceRecord:
+        source = self._catalog.get_source(source_id)
+        if source.knowledge_base_id != knowledge_base_id:
+            raise KnowledgeError(KnowledgeErrorCode.NOT_FOUND, "Source not found in knowledge base")
+        return source
 
     def _record_failure(
         self,
@@ -534,6 +574,10 @@ class KnowledgeIngestion:
                     return None
                 loaded = self._index.get_chunks(generation_id, tuple(chunk_ids))
                 if len(loaded) == len(chunk_ids):
+                    if record.source_id is not None:
+                        self._catalog.remember_chunks(
+                            generation_id, record.source_id, tuple(chunk_ids)
+                        )
                     kind = OperationKind(record.kind)
                     self._write_stage(
                         record.operation_id,
@@ -544,6 +588,10 @@ class KnowledgeIngestion:
                         {},
                     )
                     return self._activate_from_payload(record, payload)
+                raise KnowledgeError(
+                    KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
+                    "Pending index write is incomplete; keep the operation for recovery",
+                )
         return None
 
     def _activate_from_payload(
@@ -562,6 +610,15 @@ class KnowledgeIngestion:
             return None
         self._catalog.acquire_lease(record.operation_id, self._owner)
         try:
+            current = self._catalog.get_knowledge_base(record.knowledge_base_id)
+            if (
+                current.current_generation_id not in {None, generation_id}
+                or current.current_revision > revision
+            ):
+                raise KnowledgeError(
+                    KnowledgeErrorCode.KNOWLEDGE_BUSY,
+                    "Stale operation cannot replace a newer active revision",
+                )
             self._catalog.activate_revision(record.knowledge_base_id, generation_id, revision)
             self._catalog.set_source_lifecycle(
                 source_id,

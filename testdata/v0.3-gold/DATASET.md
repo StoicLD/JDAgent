@@ -165,3 +165,13 @@ BM25 与哈希碰撞的有限 dense 信号。若 Fake 下 Hybrid 门禁与真实
 
 `dataset_revision`、Embedding Profile、Retrieval Profile、DeepSeek model、prompt revision、
 temperature/settings、language profile、代码 revision、开始/结束时间、Usage（Live）。
+
+## 7. 2026-09-05 计分修正与证据边界
+
+本轮没有修改 Corpus、Query、Gold 答案或门槛。修正了只按 Locator 字符串计分的实现错误：
+检索与 Citation 必须核对对应来源身份；Child 精确命中不等同于 Parent 行扩展覆盖。
+同名 Locator 的错误来源不再算正确。历史分数不能直接代表修正后的质量。
+
+当前离线词项 Recall@10 为 `0.8125`，未满足 `0.85`，失败测试保留。Hybrid 为 `0.90625`、Final PTK
+为 `0.875`；它们不能替代失败指标或真实 Embedding/Milvus 验收。主张语义支持、完整逐次结果、
+无答案子集分母与等价来源 OR 标注仍需补齐。证据见[实现审查](../../docs/reviews/REV-20260905-001-v0.3-implementation-audit.md)。

@@ -41,3 +41,29 @@ def test_citation_metrics_cover_precision_completeness_and_unanswerable() -> Non
     )
     assert unsupported.unsupported_rate == 1.0
     assert unsupported.precision == 0.0
+
+
+def test_citation_eval_rejects_the_right_locator_from_the_wrong_source() -> None:
+    annotation = cast(
+        JsonObject,
+        {
+            "unanswerable": False,
+            "gold_locators": [{"source_key": "policy", "locator": "txt:p[0]", "required": True}],
+            "claims": [
+                {"must_cite": True, "evidence_source_key": "policy", "evidence_locator": "txt:p[0]"}
+            ],
+        },
+    )
+    wrong = score_citations(annotation, ("txt:p[0]",), protocol_failed=False)
+    assert wrong.precision == 0.0
+    assert wrong.completeness == 0.0
+    unrelated = score_citations(
+        annotation, ("txt:p[0]",), protocol_failed=False, cited_source_keys=("unrelated",)
+    )
+    assert unrelated.precision == 0.0
+    assert unrelated.completeness == 0.0
+    correct = score_citations(
+        annotation, ("txt:p[0]",), protocol_failed=False, cited_source_keys=("policy",)
+    )
+    assert correct.precision == 1.0
+    assert correct.completeness == 1.0

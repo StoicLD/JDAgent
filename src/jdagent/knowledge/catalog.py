@@ -472,6 +472,30 @@ class KnowledgeCatalog:
         with self._lock:
             db = self._db()
             row = db.execute("SELECT * FROM leases WHERE lease_id = 'global'").fetchone()
+            recovering = db.execute(
+                "SELECT knowledge_base_id FROM operations WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            recovery_base = recovering["knowledge_base_id"] if recovering is not None else None
+            pending = db.execute(
+                """
+                SELECT operation_id FROM operations
+                WHERE saga_stage IN (?, ?) AND operation_id != ?
+                AND (? IS NULL OR knowledge_base_id = ?) LIMIT 1
+                """,
+                (
+                    SagaStage.INDEXING.value,
+                    SagaStage.INDEX_VALIDATED.value,
+                    operation_id,
+                    recovery_base,
+                    recovery_base,
+                ),
+            ).fetchone()
+            if pending is not None:
+                raise KnowledgeError(
+                    KnowledgeErrorCode.KNOWLEDGE_BUSY,
+                    "An unfinished index operation requires retry or reconcile",
+                )
             if row is not None:
                 expires = _parse_time(row["expires_at"])
                 same_operation = row["operation_id"] == operation_id

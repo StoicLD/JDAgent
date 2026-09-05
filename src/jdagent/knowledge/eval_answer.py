@@ -27,14 +27,19 @@ def score_citations(
     cited_locators: tuple[str, ...],
     *,
     protocol_failed: bool,
+    cited_source_keys: tuple[str, ...] | None = None,
 ) -> CitationMetrics:
     if protocol_failed:
         unanswerable = annotation.get("unanswerable") is True
         return CitationMetrics(0.0, 0.0, 1.0 if unanswerable else 0.0)
     gold = _gold_locators(annotation)
+    sources = cited_source_keys if cited_source_keys is not None else ("",) * len(cited_locators)
+    cited_targets = tuple(zip(sources, cited_locators, strict=True))
     if cited_locators:
         matched = sum(
-            1 for locator in cited_locators if any(locator_covers(item, locator) for item in gold)
+            1
+            for source, locator in cited_targets
+            if any(source == key and locator_covers(item, locator) for key, item in gold)
         )
         precision = matched / len(cited_locators)
     else:
@@ -43,8 +48,10 @@ def score_citations(
     if must_cite:
         covered = sum(
             1
-            for locator in must_cite
-            if any(locator_covers(locator, cited) for cited in cited_locators)
+            for key, locator in must_cite
+            if any(
+                key == source and locator_covers(locator, cited) for source, cited in cited_targets
+            )
         )
         completeness = covered / len(must_cite)
     else:
@@ -54,25 +61,27 @@ def score_citations(
     return CitationMetrics(precision, completeness, unsupported)
 
 
-def _gold_locators(annotation: JsonObject) -> tuple[str, ...]:
+def _gold_locators(annotation: JsonObject) -> tuple[tuple[str, str], ...]:
     gold = annotation.get("gold_locators")
-    locators: list[str] = []
+    locators: list[tuple[str, str]] = []
     if not isinstance(gold, list):
         return ()
     for item in gold:
         if isinstance(item, dict):
-            locators.append(str(item.get("locator")))
+            locators.append((str(item.get("source_key", "")), str(item.get("locator"))))
     return tuple(locators)
 
 
-def _must_cite(annotation: JsonObject) -> tuple[str, ...]:
+def _must_cite(annotation: JsonObject) -> tuple[tuple[str, str], ...]:
     claims = annotation.get("claims")
-    locators: list[str] = []
+    locators: list[tuple[str, str]] = []
     if not isinstance(claims, list):
         return ()
     for item in claims:
         if not isinstance(item, dict):
             continue
         if item.get("must_cite") is True:
-            locators.append(str(item.get("evidence_locator")))
+            locators.append(
+                (str(item.get("evidence_source_key", "")), str(item.get("evidence_locator")))
+            )
     return tuple(locators)

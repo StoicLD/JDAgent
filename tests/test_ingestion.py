@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,7 @@ from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 from jdagent.knowledge.index import IndexChunk, InMemoryKnowledgeIndex
 from jdagent.knowledge.ingestion import KnowledgeIngestion
 from jdagent.knowledge.store import ContentAddressedStore
-from jdagent.knowledge.types import SourceLifecycle
+from jdagent.knowledge.types import OperationKind, SagaStage, SourceLifecycle
 
 GOLD = Path(__file__).resolve().parents[1] / "testdata" / "v0.3-gold" / "sources"
 
@@ -237,3 +238,141 @@ def test_retry_after_index_validation_failure_does_not_bump_revision(
         catalog.close()
 
     asyncio.run(scenario())
+
+
+def test_failed_index_write_blocks_other_mutations_until_recovered(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        clock = FakeClock()
+        with KnowledgeCatalog(
+            tmp_path / "catalog.sqlite", tmp_path / "backups", clock=clock
+        ) as catalog:
+            connection = catalog.register_connection(name="local")
+            kb = catalog.create_knowledge_base(connection_id=connection.connection_id, name="kb")
+            index = _HideChunksIndex()
+            ingestion = KnowledgeIngestion(
+                catalog, ContentAddressedStore(tmp_path / "objects"), index
+            )
+            path = tmp_path / "policy.txt"
+            path.write_text("old policy", encoding="utf-8")
+            first = await ingestion.add_file(kb.knowledge_base_id, path)
+            path.write_text("new policy", encoding="utf-8")
+            index.hide = True
+            with pytest.raises(KnowledgeError):
+                await ingestion.add_file(
+                    kb.knowledge_base_id, path, replace=True, operation_id="failed"
+                )
+            index.hide = False
+            clock.advance(301)
+            other = tmp_path / "other.txt"
+            other.write_text("other policy", encoding="utf-8")
+            with pytest.raises(KnowledgeError) as busy:
+                await ingestion.add_file(kb.knowledge_base_id, other)
+            assert busy.value.code is KnowledgeErrorCode.KNOWLEDGE_BUSY
+            assert (
+                catalog.get_knowledge_base(kb.knowledge_base_id).current_revision == first.revision
+            )
+            old = index.search_bm25(first.generation_id, first.revision, "policy", 20)
+            assert [hit.source_version_id for hit in old] == [first.source_version_id]
+            recovered = await ingestion.retry("failed")
+            assert recovered.revision == first.revision + 1
+            other_result = await ingestion.add_file(kb.knowledge_base_id, other)
+            assert other_result.revision == recovered.revision + 1
+
+    asyncio.run(scenario())
+
+
+def test_retry_of_legacy_stale_operation_cannot_roll_back_revision(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        with KnowledgeCatalog(
+            tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock()
+        ) as catalog:
+            connection = catalog.register_connection(name="local")
+            kb = catalog.create_knowledge_base(connection_id=connection.connection_id, name="kb")
+            index = _HideChunksIndex()
+            index.hide = True
+            ingestion = KnowledgeIngestion(
+                catalog, ContentAddressedStore(tmp_path / "objects"), index
+            )
+            with pytest.raises(KnowledgeError):
+                await ingestion.add_file(
+                    kb.knowledge_base_id, GOLD / "zh-leave-policy.md", operation_id="stale"
+                )
+            index.hide = False
+            payload = json.loads(catalog.get_operation("stale").payload_json)
+            catalog.activate_revision(kb.knowledge_base_id, payload["generation_id"], 3)
+            before = catalog.get_knowledge_base(kb.knowledge_base_id)
+            with pytest.raises(KnowledgeError) as stale:
+                await ingestion.retry("stale")
+            assert stale.value.code is KnowledgeErrorCode.KNOWLEDGE_BUSY
+            assert catalog.get_knowledge_base(kb.knowledge_base_id) == before
+
+    asyncio.run(scenario())
+
+
+def test_incomplete_index_retry_keeps_original_version_and_checkpoint(tmp_path: Path) -> None:
+    class FailedWriteIndex(InMemoryKnowledgeIndex):
+        def upsert_chunks(self, generation_id: str, chunks: tuple[IndexChunk, ...]) -> None:
+            raise KnowledgeError(KnowledgeErrorCode.PROVIDER_UNAVAILABLE, "write interrupted")
+
+    async def scenario() -> None:
+        with KnowledgeCatalog(
+            tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock()
+        ) as catalog:
+            connection = catalog.register_connection(name="local")
+            kb = catalog.create_knowledge_base(connection_id=connection.connection_id, name="kb")
+            ingestion = KnowledgeIngestion(
+                catalog, ContentAddressedStore(tmp_path / "objects"), FailedWriteIndex()
+            )
+            with pytest.raises(KnowledgeError):
+                await ingestion.add_file(
+                    kb.knowledge_base_id, GOLD / "zh-leave-policy.md", operation_id="interrupted"
+                )
+            operation = catalog.get_operation("interrupted")
+            assert operation.saga_stage == "indexing"
+            assert operation.source_id is not None
+            versions = catalog.list_source_versions(operation.source_id)
+            with pytest.raises(KnowledgeError):
+                await ingestion.retry("interrupted")
+            assert catalog.list_source_versions(operation.source_id) == versions
+            assert catalog.get_knowledge_base(kb.knowledge_base_id).current_revision == 0
+
+    asyncio.run(scenario())
+
+
+def test_legacy_pending_operations_in_separate_bases_can_recover_serially(tmp_path: Path) -> None:
+    with KnowledgeCatalog(
+        tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock()
+    ) as catalog:
+        connection = catalog.register_connection(name="local")
+        # Older releases could leave multiple pending operations in a single Catalog.
+        for operation_id in ("legacy-a", "legacy-b"):
+            kb = catalog.create_knowledge_base(
+                connection_id=connection.connection_id, name=operation_id
+            )
+            catalog.record_operation(
+                operation_id=operation_id,
+                kind=OperationKind.ADD,
+                knowledge_base_id=kb.knowledge_base_id,
+                source_id=None,
+                stage=SagaStage.INDEX_VALIDATED,
+            )
+        catalog.acquire_lease("legacy-a", "recovery", takeover=True)
+        with pytest.raises(KnowledgeError) as busy:
+            catalog.acquire_lease("legacy-b", "recovery", takeover=True)
+        assert busy.value.code is KnowledgeErrorCode.KNOWLEDGE_BUSY
+        catalog.release_lease("legacy-a")
+        catalog.acquire_lease("legacy-b", "recovery", takeover=True)
+        catalog.release_lease("legacy-b")
+        with pytest.raises(KnowledgeError) as new_write:
+            catalog.acquire_lease("new-write", "writer")
+        assert new_write.value.code is KnowledgeErrorCode.KNOWLEDGE_BUSY
+        catalog.record_operation(
+            operation_id="legacy-conflict",
+            kind=OperationKind.ADD,
+            knowledge_base_id=catalog.get_operation("legacy-a").knowledge_base_id,
+            source_id=None,
+            stage=SagaStage.INDEXING,
+        )
+        with pytest.raises(KnowledgeError) as same_base:
+            catalog.acquire_lease("legacy-a", "recovery", takeover=True)
+        assert same_base.value.code is KnowledgeErrorCode.KNOWLEDGE_BUSY

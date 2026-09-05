@@ -3,10 +3,12 @@
 状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Implemented（学习出口待执行）`。
+`Implemented（工程复核未通过，学习出口待执行）`。
 
-验收状态：v0.1、v0.2 均已完成；v0.3 P1 工程代码已合入 `0.3.0`，对 `40b9aee` 的独立实现评审
-High 已处置，学习出口待学习者本人完成。
+验收状态：v0.1、v0.2 均已完成；v0.3 P1 核心代码已合入 `0.3.0`，2026-09-05 复核仍有工程缺口。
+本轮修复后离线 `197 passed, 1 failed, 5 skipped`；唯一失败是正确计分后的检索质量门槛。
+详见[实现审查](docs/reviews/REV-20260905-001-v0.3-implementation-audit.md)与
+[改进方案（Proposed）](docs/plans/v0.3-rag-improvement-proposal.md)，学习出口待学习者本人完成。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -26,8 +28,8 @@ AI 可以作为资深指导者、实现者、批判者和模拟面试官承担�
 [模块学习检查表模板](docs/learning/module-learning-checklist-template.md)实例化专属出口。
 
 v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层设计和
-[分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，当前先完成 M0 的
-详细需求、合同、Eval 与学习清单。后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
+[分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，P1 核心实现已存在；M0
+详细需求、合同、Eval 与学习清单仍待批准，当前先补齐审查发现与工程验收。后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
 Orchestration 与 Compaction，见[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
@@ -40,7 +42,7 @@ v0.2 已实现可安装的持久交互式 CLI，包括增强型行式 REPL、九
 [v0.2 CLI 体验需求](docs/requirements/v0.2-cli-experience.md) 和
 [CLI 应用层架构](docs/architecture/cli-application.md)。
 
-## 当前 v0.2 快速开始
+## Runtime / CLI 快速开始
 
 需要 Python 3.11 和 [uv](https://docs.astral.sh/uv/)：
 

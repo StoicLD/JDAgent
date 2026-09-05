@@ -21,6 +21,8 @@
   工程实现已合入 `0.3.0`；学习出口、Milvus Live 与独立评审处置见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
   默认值、P2 后续增强和升级条件
+- [v0.3 RAG 工程补齐与检索质量改进方案](../plans/v0.3-rag-improvement-proposal.md) — `Proposed`，
+  2026-09-05 实现审查后的恢复、真实运行路径、来源核验与 Eval 改进
 - [v0.3 RAG 需求与可追踪验收标准](../requirements/v0.3-knowledge-retrieval.md) — `Proposed`，
   FR/AC 与 Milestone 映射
 - [v0.3 知识 Port、Payload 与 Runtime Event v2 合同](../architecture/knowledge-contracts-v0.3.md)
@@ -84,6 +86,9 @@
   `Approved`，记录 Cursor finding 的接受、调整后接受、拒绝与修订位置
 - [v0.3 P1 实现独立评审处置](../reviews/REV-20260830-001-v0.3-p1-rag-disposition.md) —
   对 `40b9aee` 的 `fail` 结论与 High/Medium 处置；不是对修复 SHA 的二次独立评审
+- [v0.3 实现状态审查与修复](../reviews/REV-20260905-001-v0.3-implementation-audit.md) — `Implemented`，
+  基线 `ac17c40`；七类问题已修复，最终 `197 passed, 1 failed, 5 skipped`；工程复核 `fail`，
+  含剩余缺口、正确来源计分、自测与限范围只读回归复核，不是全部 v0.3 独立验收
 
 ## 学习出口
 

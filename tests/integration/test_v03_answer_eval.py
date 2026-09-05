@@ -67,8 +67,10 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
                 embedding_profile=EmbeddingProfile(dimension=32),
             )
             kbs[name] = kb.knowledge_base_id
+        source_keys: dict[str, str] = {}
         for path in sorted((GOLD_ROOT / "sources").iterdir()):
-            await ingestion.add_file(kbs[SOURCE_KB[path.stem]], path)
+            ingested = await ingestion.add_file(kbs[SOURCE_KB[path.stem]], path)
+            source_keys[ingested.source_version_id] = path.stem
         identity = workspace_identity(workspace)
         queries = load_jsonl(GOLD_ROOT / "queries.jsonl")
         annotations = {
@@ -125,6 +127,10 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
                         annotations[query_id],
                         tuple(item.locator for item in turn.result.citations),
                         protocol_failed=failed,
+                        cited_source_keys=tuple(
+                            source_keys.get(item.source_version_id, "")
+                            for item in turn.result.citations
+                        ),
                     )
                     runs_precision.append(metrics.precision)
                     runs_completeness.append(metrics.completeness)
@@ -134,6 +140,7 @@ def test_answer_and_citation_medians_meet_gates(tmp_path: Path) -> None:
                 unsupported_medians.append(median(tuple(runs_unsupported)))
                 scored_queries.append(query_id)
         finally:
+            index.close()
             catalog.close()
         report = list(
             zip(

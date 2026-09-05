@@ -95,3 +95,76 @@ def test_http_embedding_honors_profile_batch_size() -> None:
         await client.aclose()
 
     asyncio.run(scenario())
+
+
+def test_http_embedding_orders_indexed_vectors_and_normalizes() -> None:
+    async def scenario() -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"index": 1, "embedding": [0.0, 2.0]},
+                        {"index": 0, "embedding": [3.0, 0.0]},
+                    ]
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://embed.test/v1"
+        ) as client:
+            adapter = OpenAICompatibleEmbedding(client)
+            profile = EmbeddingProfile(base_url="https://embed.test/v1", model="demo", dimension=2)
+            result = await adapter.embed(("a", "b"), profile, input_kind=EmbeddingKind.DOCUMENT)
+            assert result.vectors == ((1.0, 0.0), (0.0, 1.0))
+
+    asyncio.run(scenario())
+
+
+def test_http_embedding_validates_each_batch_before_sending_the_next() -> None:
+    async def scenario() -> None:
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            # Wrong counts would cancel out across batches if checked only at the end.
+            count = 1 if calls == 1 else 2
+            return httpx.Response(200, json={"data": [{"embedding": [1.0, 0.0]}] * count})
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://embed.test"
+        ) as client:
+            profile = EmbeddingProfile(
+                base_url="https://embed.test", model="demo", dimension=2, batch_size=2
+            )
+            with pytest.raises(KnowledgeError):
+                await OpenAICompatibleEmbedding(client).embed(
+                    ("a", "b", "c"), profile, input_kind=EmbeddingKind.DOCUMENT
+                )
+            assert calls == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("indexes", [(0, 0), (0, 2), (True, 1), (0, None)])
+def test_http_embedding_rejects_invalid_response_indexes(indexes: tuple[object, object]) -> None:
+    async def scenario() -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [{"index": position, "embedding": [1.0, 0.0]} for position in indexes]
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://embed.test"
+        ) as client:
+            profile = EmbeddingProfile(base_url="https://embed.test", model="demo", dimension=2)
+            with pytest.raises(KnowledgeError):
+                await OpenAICompatibleEmbedding(client).embed(
+                    ("a", "b"), profile, input_kind=EmbeddingKind.DOCUMENT
+                )
+
+    asyncio.run(scenario())

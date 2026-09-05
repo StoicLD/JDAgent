@@ -150,7 +150,9 @@ class InMemoryKnowledgeIndex:
         bucket = self._chunks.get(generation_id, {})
         for chunk_id in chunk_ids:
             current = bucket.get(chunk_id)
-            if current is not None:
+            if current is not None and (
+                current.valid_to_revision == 0 or current.valid_to_revision > valid_to_revision
+            ):
                 bucket[chunk_id] = replace(current, valid_to_revision=valid_to_revision)
 
     def search_dense(
@@ -245,7 +247,10 @@ class FileKnowledgeIndex:
                 ).fetchone()
                 if row is None:
                     continue
-                chunk = replace(_chunk_from_json(row[0]), valid_to_revision=valid_to_revision)
+                current = _chunk_from_json(row[0])
+                if 0 < current.valid_to_revision <= valid_to_revision:
+                    continue
+                chunk = replace(current, valid_to_revision=valid_to_revision)
                 self._db.execute(
                     """
                     UPDATE chunks SET payload_json = ?

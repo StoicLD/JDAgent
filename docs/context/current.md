@@ -3,13 +3,16 @@
 状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Implemented（学习出口待执行）`。P1 工程代码已合入 `0.3.0`；M0 需求/合同/Eval 规格仍为
-`Proposed`（实现者不得自批）；Milvus Live 未跑。对 `40b9aee` 的独立实现评审已记录并处置
-High；修复 SHA 尚未由未参与该修复的评审方复核。对 `5254905` 的自审修复仍在工作树，未 commit。
+`Implemented（工程复核未通过，学习出口待执行）`。P1 核心代码已合入 `0.3.0`；M0 需求/合同/Eval
+规格仍为 `Proposed`（实现者不得自批）；Milvus Live 未跑。2026-09-05 对 `ac17c40` 审查后修复七类
+问题，最终离线 `197 passed, 1 failed, 5 skipped`；正确计分后的 Recall 未达门槛，来源恢复、删除和
+真实 RAG 路径仍有缺口。详见[本轮审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)。
+`5254905` 之后的上一轮修复已提交为 `ac17c40`；本轮新修复仍在工作树，未 commit。
 
 验收状态：v0.1 工程、真实 DeepSeek 与 M10b 人工学习出口全部通过；v0.2 CLI 工程验收通过，
-学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 P1 离线门禁、clean-env 安装、
-DeepSeek 流式/Tool Call 与 Gold Answer/Citation Live（每题 3 次中位数）已通过；对
+学习门禁于 2026-08-24 由项目所有者按范围裁定关闭。v0.3 曾通过当时的 P1 离线门禁、clean-env 安装、
+DeepSeek 流式/Tool Call 与 Gold Answer/Citation Live（每题 3 次中位数）；本轮发现旧 Eval 忽略来源身份，
+历史分数不能证明正确来源或语义支持质量，当前工程验收未通过。对
 `40b9aee` 的独立实现评审为 `fail`（0 Blocker，High 未关闭），F01–F06 已在 `2b28228`
 处置；人工学习出口未执行。
 
@@ -134,12 +137,18 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
   `git diff --check` 通过。未重跑 DeepSeek Live、Gold Answer Live、Milvus Live 或 clean-env
   wheel。
 - 本机 `127.0.0.1:19530` 无 Milvus，未运行 `JDAGENT_RUN_RAG_LIVE=1`。M0 合同仍为 `Proposed`。
-- 2026-08-30：Cursor 对当前 `main` HEAD `5254905` 的 v0.3 实现做自审（非独立评审），并在工作树
+- 2026-08-30：Cursor 对当时 `main` HEAD `5254905` 的 v0.3 实现做自审（非独立评审），并在工作树
   中修复仍违反已批准架构的缺口：缺失 Connection 记为 `BINDING_INVALID`、PTK 指纹使用冻结
   Profile、Evidence 注入 KB/来源/Version、HTTP embedding `batch_size`、缺失 Generation 为
   `PROVIDER_UNAVAILABLE`、Delete 先墓碑再 GC 无引用对象、Catalog Citation Resolver、Index
   连接关闭。自审后离线门禁 `173 passed, 5 skipped`，Ruff format/check、Pyright strict、
-  `git diff --check` 通过。这些修复尚未 commit。未重跑 Live 或 clean-env wheel。
+  `git diff --check` 通过。这些修复之后已提交为 `ac17c40`。未重跑 Live 或 clean-env wheel。
+- 2026-09-05：以干净 `ac17c404a7378974209fab4683cee98629e549b3` 为基线，先审查后按用户授权修复。
+  旧默认套件 `173 passed, 5 skipped`；本轮新增 25 个场景，最终 `197 passed, 1 failed, 5 skipped`，
+  Ruff format/check、Pyright strict 与 `git diff --check` 通过。唯一失败为正确按来源计分后的词项
+  Recall@10 `0.8125 < 0.85`；同一正确计分器在原 HEAD 上也为 `0.8125`。Hybrid `0.90625`、PTK
+  `0.875` 保持一致，Fake Dense 从 `0.78125` 降至 `0.71875`，不能宣称全部指标无下降。未重跑
+  Live/安装；Milvus 默认端口不可达。完整发现、证据与残余风险见[本轮审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)。
 
 ## 后续模块治理
 
@@ -171,18 +180,21 @@ v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
 
 ## v0.3 工程状态
 
-- P1 代码、离线测试、DeepSeek Live 与 Gold Answer/Citation Live、`0.3.0` clean-env 安装已完成。
+- P1 核心代码已有实现，历史 Live/安装证据保留；2026-09-05 工程复核为 `fail`，不是已完成验收。
 - `40b9aee` 的独立实现评审 High 已在 `2b28228` 处置；修复 SHA 未再做独立复核。
-- 对 `5254905` 的自审又修复若干已批准架构缺口；修复仍在工作树，不是独立评审。
+- 对 `5254905` 的自审修复已在 `ac17c40`；本轮七类问题的修复仍在工作树。完整验证属于自测；
+  另有只读 Agent 对本轮改动做回归复核，发现并闭环两个追加问题，不代表全部 v0.3 独立验收通过。
 - 未关闭：M0 设计包仍为 `Proposed`；Milvus Standalone Live；修复 SHA 的独立复核（可选）；
-  人工学习出口。延期项 F09/F11/F13/F16/F17 与 `credential_ref` 解析仍未做。
+  人工学习出口。历史延期项 F09/F11/F13/F16/F17 与 `credential_ref` 解析仍未做；本轮又确认恢复、
+  物理删除、历史 Citation、真实配置和 Eval 缺口，具体 ID 以[本轮审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)为准。
 - AI 不得勾选 [v0.3 学习检查表](../learning/v0.3-rag-learning-checklist.md)。
 
 ## 下一步
 
-1. 项目所有者决定是否将 M0 需求、合同、Eval 规格和学习清单从 `Proposed` 转为 `Approved`。
-2. 在可达的 Milvus Standalone 上运行 `JDAGENT_RUN_RAG_LIVE=1` 来源生命周期 Live。
-3. 若需关闭独立实现评审门禁，由未参与 `2b28228` 修复的评审方对该 SHA 取证。
+1. 按[改进方案](../plans/v0.3-rag-improvement-proposal.md)补齐持久恢复/删除与真实 RAG 路径；
+   该方案为 `Proposed`，不自动改变范围或批准迁移。
+2. 关闭正确计分后的 Eval 失败，并在可达的真实 Milvus/Embedding 上验证；保留原门槛。
+3. 项目所有者处理 M0 合同审批；对最终固定实现执行相称独立复核，而非仅复核历史 `2b28228`。
 4. 学习者本人完成 [v0.3 RAG 学习检查表](../learning/v0.3-rag-learning-checklist.md)；AI 不得
    代填。
 5. 在人工环境矩阵中继续观察中文 IME、legacy console 与真实窗口强关；强关不承诺执行 finally，

@@ -113,7 +113,7 @@ class TurnKnowledgePreparation:
 
         groups: dict[str, list[int]] = {}
         for index, (base, failure) in enumerate(frozen):
-            if base is None or failure is not None:
+            if base is None or failure is not None or base.retrieval_profile.mode == "bm25":
                 continue
             groups.setdefault(base.embedding_profile.fingerprint(), []).append(index)
 
@@ -161,7 +161,10 @@ class TurnKnowledgePreparation:
                 )
                 continue
             default_profile = base.retrieval_profile
-            if base.embedding_profile.fingerprint() in failed_profiles:
+            if (
+                base.retrieval_profile.mode != "bm25"
+                and base.embedding_profile.fingerprint() in failed_profiles
+            ):
                 failure_count += 1
                 base_results.append(_failed_base(binding, base, QueryFailureReason.QUERY_FAILED))
                 continue
