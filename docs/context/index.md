@@ -50,6 +50,8 @@
 
 ## 领域语言
 
+- [用一份休假政策读懂 v0.3 RAG](v0.3-rag-illustrated-guide.md) — `Implemented`（图解说明），
+  六张图从文件、来源、版本、内容对象讲到本轮证据与引用；不表示设计缺口已实现
 - [v0.3 知识检索语境](v0.3-rag-glossary.md) — `Approved`，RAG、知识访问、来源生命周期、
   Evidence 与 Citation 的限定语境词汇表
 
@@ -67,6 +69,8 @@
 - [Agent 协作与评审规则](../development/agent-collaboration.md) — `Approved`，定义事实归属、
   角色与写入边界、正式评审接口、并行 worktree 和失败行为
 - [Python 工程规范](../development/python-style.md) — `Approved`
+- [v0.3 RAG 手动验证报告](../development/v0.3-rag-manual-verification.md) — `Proposed`，
+  基于 `657ecf5` 的 PowerShell 操作、证据检查、生命周期实验与本地诊断脚本；人工结果待填写
 - [模块交付与学习工作流](../development/module-delivery-workflow.md) — `Approved`，定义模块边界、
   AI/学习者角色、设计包、Eval、工程验收和学习验收
 
