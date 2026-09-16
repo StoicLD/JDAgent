@@ -101,5 +101,5 @@
   于 2026-08-24 按学习范围裁定关闭；原题保留为可选复习材料
 - [模块学习检查表模板](../learning/module-learning-checklist-template.md) — `Approved`，每个后续
   实质性模块设计完成时实例化并填充具体机制、数据流和故障实验
-- [v0.3 RAG 人工学习检查表](../learning/v0.3-rag-learning-checklist.md) — `Proposed`，工程关闭后
-  仍须由学习者本人完成
+- [v0.3 RAG 人工学习检查表](../learning/v0.3-rag-learning-checklist.md) — `Implemented`，项目所有者
+  于 2026-09-16 裁定学习验证完成、学习出口关闭；原清单保留为可选复习材料

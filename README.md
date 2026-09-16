@@ -3,12 +3,13 @@
 状态：`Implemented`
 
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Implemented（工程复核未通过，学习出口待执行）`。
+`Implemented（工程复核未通过，学习验证已完成）`。
 
 验收状态：v0.1、v0.2 均已完成；v0.3 P1 核心代码已合入 `0.3.0`，2026-09-05 复核仍有工程缺口。
 本轮修复后离线 `197 passed, 1 failed, 5 skipped`；唯一失败是正确计分后的检索质量门槛。
 详见[实现审查](docs/reviews/REV-20260905-001-v0.3-implementation-audit.md)与
-[改进方案（Proposed）](docs/plans/v0.3-rag-improvement-proposal.md)，学习出口待学习者本人完成。
+[改进方案（Proposed）](docs/plans/v0.3-rag-improvement-proposal.md)。学习出口已于 2026-09-16
+由项目所有者裁定关闭，详见[学习完成记录](docs/learning/v0.3-rag-learning-checklist.md)。
 
 JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
 
@@ -29,7 +30,8 @@ AI 可以作为资深指导者、实现者、批判者和模拟面试官承担�
 
 v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层设计和
 [分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，P1 核心实现已存在；M0
-详细需求、合同、Eval 与学习清单仍待批准，当前先补齐审查发现与工程验收。后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
+详细需求、合同与 Eval 规格仍待批准；学习验证已于 2026-09-16 裁定完成，工程缺口继续单独跟踪。
+后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
 Orchestration 与 Compaction，见[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
@@ -112,8 +114,8 @@ Key 优先级。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1
 
 [v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 已于 2026-08-24 由项目所有者按
 学习范围裁定关闭：CLI/UI 不属于当前最优先的 Agent 核心学习内容，原练习保留为可选复习材料，
-不再阻塞 v0.3。[v0.3 RAG 学习检查表](docs/learning/v0.3-rag-learning-checklist.md) 须由学习者
-本人完成，工程合入不能代替。
+不再阻塞 v0.3。[v0.3 RAG 学习检查表](docs/learning/v0.3-rag-learning-checklist.md) 已于 2026-09-16
+由项目所有者裁定学习验证完成；原清单保留为可选复习材料，学习门禁关闭，工程验收单独跟踪。
 
 恢复工作请依次阅读：
 
