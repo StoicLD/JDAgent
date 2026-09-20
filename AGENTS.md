@@ -26,3 +26,15 @@
 - 未经用户明确授权，不 commit、pull、push、merge、改写历史、切换分支或配置 remote。
 - 不在仓库中保存密钥、Token、账号密码、支付信息或不必要的个人敏感数据。
 - 若入口链接缺失、权威事实冲突或 Git 状态无法确认，停止写入，保留现场并报告准确证据。
+
+## Agent skills
+
+### Issue tracker
+
+工程技能通过 GitHub Issues 跟踪任务；读取、创建或更新任务前，参见
+[任务跟踪约定](docs/agents/issue-tracker.md)。
+
+### Domain docs
+
+采用 single-context 布局，复用现有文档索引、领域词汇表与 ADR；
+开展领域建模或架构分析前，参见[领域文档约定](docs/agents/domain.md)。

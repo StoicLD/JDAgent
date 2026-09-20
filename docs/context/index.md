@@ -15,8 +15,9 @@
 - [v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md) — `Approved`
 - [v0.2 CLI 实施计划](../plans/v0.2-cli-implementation.md) — `Implemented`，工程与学习门禁
   全部关闭
-- [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，批准
-  v0.3–v0.5 的学习方向与顺序，不替代各版本的具体需求和设计审批
+- [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，2026-09-16
+  调整为 v0.4 Tool Registry & Function Calling → v0.5 Memory → v0.6 Context / Compaction；
+  MCP 为后续候选。v0.4 进入需求与设计准备，路线不替代各版本的具体需求和设计审批
 - [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，P1 M0–M6
   工程实现已合入 `0.3.0`；学习出口、Milvus Live 与独立评审处置见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
@@ -66,6 +67,8 @@
 
 ## 开发规范
 
+- [工程技能任务跟踪约定](../agents/issue-tracker.md) — `Approved`，GitHub Issues 与 gh 操作约定
+- [工程技能领域文档约定](../agents/domain.md) — `Approved`，复用现有领域文档和 ADR 的读取与路径规则
 - [Agent 协作与评审规则](../development/agent-collaboration.md) — `Approved`，定义事实归属、
   角色与写入边界、正式评审接口、并行 worktree 和失败行为
 - [Python 工程规范](../development/python-style.md) — `Approved`

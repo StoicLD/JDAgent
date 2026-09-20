@@ -31,8 +31,11 @@ AI 可以作为资深指导者、实现者、批判者和模拟面试官承担�
 v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层设计和
 [分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，P1 核心实现已存在；M0
 详细需求、合同与 Eval 规格仍待批准；学习验证已于 2026-09-16 裁定完成，工程缺口继续单独跟踪。
-后续方向仍为 v0.4 长期记忆生命周期、v0.5 Context
-Orchestration 与 Compaction，见[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
+项目所有者于 2026-09-16 调整后续顺序：v0.4 Tool Registry & Function Calling，v0.5 长期记忆
+生命周期，v0.6 Context Orchestration 与 Compaction；MCP 保留为后续候选。v0.4 将在已有三工具
+和调用闭环上增加实用工具、完善模块边界，为后续能力提供基础。当前进入需求与设计准备，具体
+工具清单和设计包尚待形成；v0.3 工程缺口继续跟踪，实质性实现的启动边界见
+[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
 ContextBuilder、三种工具、权限审批、append-only JSONL Session、恢复、Trace、Fake Model
