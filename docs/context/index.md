@@ -18,6 +18,8 @@
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，2026-09-16
   调整为 v0.4 Tool Registry & Function Calling → v0.5 Memory → v0.6 Context / Compaction；
   MCP 为后续候选。v0.4 进入需求与设计准备，路线不替代各版本的具体需求和设计审批
+- [v0.4 工具执行层设计讨论](../plans/v0.4-tool-execution-design-discussion.md) — `Proposed`，23 题
+  取舍已记录；Q23 已裁定按依赖划分跨版本工程门禁，汇总设计仍待整体审阅
 - [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，P1 M0–M6
   工程实现已合入 `0.3.0`；学习出口、Milvus Live 与独立评审处置见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
@@ -46,11 +48,14 @@
 - [v0.2 Session 异常恢复表示](../architecture/session-recovery-v0.2.md) — `Approved`
 - [v0.2 Session Permission Rule 合同](../architecture/permission-rules-v0.2.md) — `Approved`
 - [v0.2 Windows 终端附录](../architecture/windows-terminal-v0.2.md) — `Approved`
+- [v0.4 工具执行层设计提案](../architecture/v0.4-tool-execution.md) — `Proposed`，汇合 Q1–Q23 的
+  范围、模块 Interface、核心合同、失败模型、验收与阶段计划；具体字段、默认值和整体设计待审阅
 - [v0.3 RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md) —
   `Approved`，项目所有者于 2026-08-30 批准按分阶段实施计划推进
 
 ## 领域语言
 
+- [v0.4 工具执行语境](v0.4-tools-glossary.md) — `Proposed`，汇总设计访谈已澄清的领域术语
 - [用一份休假政策读懂 v0.3 RAG](v0.3-rag-illustrated-guide.md) — `Implemented`（图解说明），
   六张图从文件、来源、版本、内容对象讲到本轮证据与引用；不表示设计缺口已实现
 - [v0.3 知识检索语境](v0.3-rag-glossary.md) — `Approved`，RAG、知识访问、来源生命周期、
@@ -104,5 +109,7 @@
   于 2026-08-24 按学习范围裁定关闭；原题保留为可选复习材料
 - [模块学习检查表模板](../learning/module-learning-checklist-template.md) — `Approved`，每个后续
   实质性模块设计完成时实例化并填充具体机制、数据流和故障实验
+- [v0.4 工具执行层学习检查表](../learning/v0.4-tools-learning-checklist.md) — `Proposed`，已填充
+  工具许可、文件冲突、进程清理、结果与 Eval 的具体机制和实验，未执行学习验收
 - [v0.3 RAG 人工学习检查表](../learning/v0.3-rag-learning-checklist.md) — `Implemented`，项目所有者
   于 2026-09-16 裁定学习验证完成、学习出口关闭；原清单保留为可选复习材料
