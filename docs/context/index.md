@@ -90,6 +90,9 @@
 
 ## 评审与证据
 
+- [v0.4 DeepSeek 三次真实验收](../reviews/v0.4-live-verification.md) — `Implemented`（记录），
+  2/3 通过，首次漏用 search_text；三次原始结果、事件与用量全部保留
+
 - [v0.1 实现审查](../reviews/v0.1-implementation-review.md) — `pass_with_findings`；离线实现
   无未处理代码 finding；后续真实 DeepSeek 与 M10b 验收已通过并记录于当前状态
 - [v0.1 完成度审计](../reviews/v0.1-completion-audit.md) — `Implemented`，按 FR、验收标准、

@@ -1,0 +1,79 @@
+{
+  "revision": "7e18a1a09c4c2daedcb8af20904f24cffb7b12ba",
+  "provider": "https://api.deepseek.com",
+  "model": "deepseek-v4-flash",
+  "thinking": "disabled",
+  "pytest_result": "1 failed, 2 passed in 15.92s",
+  "redaction": "Local absolute paths replaced; hashes refer to original bytes. Session IDs and full model reports retained.",
+  "attempts": [
+    {
+      "attempt": 1,
+      "result": "fail: missing search_text",
+      "model_calls": 5,
+      "tool_calls": 6,
+      "usage": {
+        "input_tokens": 10941,
+        "output_tokens": 651,
+        "cached_tokens": 8192
+      },
+      "original_report_sha256": "703bf8708b476caf344a5b10989c51406d886fde50aac11f5c16e939b39d0d6a",
+      "original_events_sha256": "553994e2709e699074e9e866e5d4205c9964335de6d4cb8b4bf125e818b644db",
+      "independent_checks_passed": 3,
+      "protected_files_unchanged": [
+        "verify.py",
+        "notes.txt",
+        "DATASET.md"
+      ],
+      "persisted_streams": {
+        "stdout": "Verification passed\r\n",
+        "stderr": ""
+      }
+    },
+    {
+      "attempt": 2,
+      "result": "pass",
+      "model_calls": 5,
+      "tool_calls": 8,
+      "usage": {
+        "input_tokens": 13132,
+        "output_tokens": 701,
+        "cached_tokens": 11008
+      },
+      "original_report_sha256": "1f3388cd23f19cfa5b0ddd570843e4123b4df23ee5907dd3dfed06c311150432",
+      "original_events_sha256": "8095d3c7f63102c60b9c77e8958e67e212dd68c7bd111a4e645bc33d6846a904",
+      "independent_checks_passed": 3,
+      "protected_files_unchanged": [
+        "verify.py",
+        "notes.txt",
+        "DATASET.md"
+      ],
+      "persisted_streams": {
+        "stdout": "Verification passed\r\n",
+        "stderr": ""
+      }
+    },
+    {
+      "attempt": 3,
+      "result": "pass",
+      "model_calls": 5,
+      "tool_calls": 6,
+      "usage": {
+        "input_tokens": 11549,
+        "output_tokens": 631,
+        "cached_tokens": 9856
+      },
+      "original_report_sha256": "df34d4fa0dfb68117dc15510a1280c9e3b5c2f6cbfac2857ec73b8f897b2d3b2",
+      "original_events_sha256": "5ec3f3295361bdf1a4aaf16d3500d3bc1dc6c5e2547f50cd6e2d6b3dc81d046f",
+      "independent_checks_passed": 3,
+      "protected_files_unchanged": [
+        "verify.py",
+        "notes.txt",
+        "DATASET.md"
+      ],
+      "persisted_streams": {
+        "stdout": "Verification passed\r\n",
+        "stderr": ""
+      }
+    }
+  ]
+}

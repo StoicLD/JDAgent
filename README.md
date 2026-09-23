@@ -132,7 +132,7 @@ uv run pytest -q
 真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
 `tests/integration/test_deepseek_live.py` 与 Gold Answer/Citation Eval；测试同样遵循上述
 Key 优先级。v0.4 三次固定工具任务为 `tests/integration/test_v04_tools_live.py`；
-本轮尚未执行，外发测试内容的授权状态见实现记录。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
+用户授权后已执行三次，2/3 通过，首次漏用 search_text；详见 [Live 验收记录](docs/reviews/v0.4-live-verification.md)。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
 
 ## 学习出口
 
