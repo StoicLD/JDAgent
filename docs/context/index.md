@@ -101,6 +101,9 @@
 - [v0.3 实现状态审查与修复](../reviews/REV-20260905-001-v0.3-implementation-audit.md) — `Implemented`，
   基线 `ac17c40`；七类问题已修复，最终 `197 passed, 1 failed, 5 skipped`；工程复核 `fail`，
   含剩余缺口、正确来源计分、自测与限范围只读回归复核，不是全部 v0.3 独立验收
+- [v0.4 工具执行层设计独立评审](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md) —
+  `Proposed`（原始报告，待处置），基线 `9ab50b0`；设计层面 `fail`，4 High、10 Medium、5 Low，
+  F01–F19 处置均为 `pending`
 
 ## 学习出口
 

@@ -158,6 +158,11 @@ v0.3 学习验证完成，详见[学习完成记录](../learning/v0.3-rag-learni
   Recall@10 `0.8125 < 0.85`；同一正确计分器在原 HEAD 上也为 `0.8125`。Hybrid `0.90625`、PTK
   `0.875` 保持一致，Fake Dense 从 `0.78125` 降至 `0.71875`，不能宣称全部指标无下降。未重跑
   Live/安装；Milvus 默认端口不可达。完整发现、证据与残余风险见[本轮审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)。
+- 2026-09-23：Cursor 对 `9ab50b0` 的 v0.4 工具执行层设计提案做只读独立评审，结论 `fail`
+  （设计层面），4 High、10 Medium、5 Low。High 集中在取消/超时/异常路径、Session 恢复对不确定
+  副作用的识别、命令前缀尾参与 Windows 批处理解析、批次中途停止后的 tool call 配对。原始报告见
+  [REV-20260923-001](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)，状态
+  `Proposed`，F01–F19 尚未处置；未运行测试或 Windows/Live 实验。
 
 ## 后续模块治理
 
@@ -217,6 +222,9 @@ v0.3 学习验证完成，详见[学习完成记录](../learning/v0.3-rag-learni
 默认限额、失败恢复计数和 Live 重复门槛为待审阅建议。整体设计确认后，再补齐实施所需的详细
 Schema、固定 Eval 和 Windows 机制实验；按 Q23 核对实际依赖，不把无关 RAG 收尾作为统一
 前提。本轮只完成文档，不开始实现。
+
+维护方先逐项处置[独立评审 REV-20260923-001](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)
+F01–F19，按处置结果修订设计提案后，再提交项目所有者整体审阅；评审结论不自动改变提案状态。
 
 以下继续作为 v0.3 工程收尾事项跟踪，不因模块顺序调整而视为完成：
 
