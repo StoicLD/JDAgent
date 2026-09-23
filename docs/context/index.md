@@ -49,7 +49,8 @@
 - [v0.2 Session Permission Rule 合同](../architecture/permission-rules-v0.2.md) — `Approved`
 - [v0.2 Windows 终端附录](../architecture/windows-terminal-v0.2.md) — `Approved`
 - [v0.4 工具执行层设计提案](../architecture/v0.4-tool-execution.md) — `Proposed`，汇合 Q1–Q23 的
-  范围、模块 Interface、核心合同、失败模型、验收与阶段计划；具体字段、默认值和整体设计待审阅
+  范围、模块 Interface、核心合同、失败模型、验收与阶段计划；具体字段、默认值和整体设计待审阅；
+  评审后已补入简单滑动窗口、开发期旧 Session 清理及用户明确接受的局部取舍
 - [v0.3 RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md) —
   `Approved`，项目所有者于 2026-08-30 批准按分阶段实施计划推进
 
