@@ -209,7 +209,7 @@ def test_model_adapter_exception_is_classified_without_leaking_message(tmp_path:
     assert "unsafe provider detail" not in persisted
 
 
-def test_task_cancellation_during_tool_stops_without_completion_event(tmp_path: Path) -> None:
+def test_task_cancellation_during_tool_records_result_before_stopping(tmp_path: Path) -> None:
     events_after_cancel: list[RuntimeEventType] = []
 
     async def scenario() -> None:
@@ -254,8 +254,7 @@ def test_task_cancellation_during_tool_stops_without_completion_event(tmp_path: 
         finally:
             events_after_cancel.extend(event.event_type for event in journal.events)
 
-    with pytest.raises(asyncio.CancelledError):
-        asyncio.run(scenario())
+    asyncio.run(scenario())
 
     assert events_after_cancel[-1] is RuntimeEventType.TURN_FAILED
-    assert RuntimeEventType.TOOL_EXECUTION_COMPLETED not in events_after_cancel
+    assert RuntimeEventType.TOOL_EXECUTION_COMPLETED in events_after_cancel

@@ -1,5 +1,6 @@
 """Tool, permission, and approval domain types."""
 
+import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -12,12 +13,33 @@ def _empty_json_object() -> JsonObject:
     return {}
 
 
+def command_log_id(call_id: str) -> str:
+    """Derive the opaque log reference recoverable from a durable start event."""
+    return hashlib.sha256(call_id.encode("utf-8")).hexdigest()
+
+
 class RiskLevel(StrEnum):
     """Risk attached to a registered tool."""
 
     PURE = "pure"
     READ = "read"
     WRITE = "write"
+    EXECUTE = "execute"
+
+
+class ToolCapability(StrEnum):
+    """Host-selected cumulative tool availability for one turn."""
+
+    ANALYZE = "analyze"
+    EDIT = "edit"
+    EXECUTE = "execute"
+
+    def allows(self, risk: RiskLevel) -> bool:
+        if risk in (RiskLevel.PURE, RiskLevel.READ):
+            return True
+        if risk is RiskLevel.WRITE:
+            return self is not ToolCapability.ANALYZE
+        return self is ToolCapability.EXECUTE
 
 
 class PermissionDecision(StrEnum):
@@ -33,6 +55,7 @@ class PermissionTargetKind(StrEnum):
 
     FILE = "file"
     DIRECTORY = "directory"
+    COMMAND = "command"
 
 
 class ApprovalDecision(StrEnum):
@@ -51,6 +74,9 @@ class SessionPermissionRule:
     tool_name: str
     target_kind: PermissionTargetKind
     target: str
+    args_prefix: tuple[str, ...] = ()
+    cwd: str = ""
+    environment_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,12 +102,53 @@ class ToolErrorCode(StrEnum):
     """Stable failures at the tool seam."""
 
     UNKNOWN_TOOL = "unknown_tool"
+    TOOL_UNAVAILABLE = "tool_unavailable"
     INVALID_ARGUMENTS = "invalid_arguments"
     PERMISSION_DENIED = "permission_denied"
     APPROVAL_REJECTED = "approval_rejected"
     PATH_OUTSIDE_WORKSPACE = "path_outside_workspace"
     TIMEOUT = "timeout"
     EXECUTION_FAILED = "execution_failed"
+    CONFLICT = "conflict"
+    NOT_EXECUTED = "not_executed"
+    CANCELLED = "cancelled"
+    UNCERTAIN = "uncertain"
+    CAPACITY = "capacity"
+    UNSUPPORTED = "unsupported"
+
+
+@dataclass(frozen=True, slots=True)
+class ToolOutcome:
+    """Execution facts, independent of whether the user's task passed."""
+
+    data: JsonObject = field(default_factory=_empty_json_object)
+    completed: bool = True
+    effect: str = "none"
+    observed_failure: bool = False
+    error_code: ToolErrorCode | None = None
+    message: str = ""
+    cancelled: bool = False
+    requires_stop: bool = False
+
+    def __post_init__(self) -> None:
+        if self.effect not in {"none", "committed", "unknown", "possible"}:
+            raise ValueError("Invalid effect state")
+
+    @property
+    def stop_turn(self) -> bool:
+        return self.cancelled or self.effect == "unknown" or self.requires_stop
+
+    def to_data(self) -> JsonObject:
+        return {
+            "data": self.data,
+            "completed": self.completed,
+            "effect": self.effect,
+            "observed_failure": self.observed_failure,
+            "error_code": self.error_code.value if self.error_code else None,
+            "message": self.message,
+            "cancelled": self.cancelled,
+            "requires_stop": self.requires_stop,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,9 +167,11 @@ class ToolExecutionContext:
     session_id: str
     turn_id: str
     workspace: Path
+    readable_log_sessions: tuple[str, ...] = ()
+    call_id: str = ""
 
 
-ToolHandler = Callable[[JsonObject, ToolExecutionContext], Awaitable[str]]
+ToolHandler = Callable[[JsonObject, ToolExecutionContext], Awaitable[str | ToolOutcome]]
 ToolPreflight = Callable[[JsonObject, ToolExecutionContext], JsonObject]
 
 
@@ -116,6 +185,8 @@ class ToolDefinition:
     risk: RiskLevel
     handler: ToolHandler
     preflight: ToolPreflight | None = None
+    result_schema: JsonObject | None = None
+    manages_timeout: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +201,11 @@ class ToolResult:
     error_message: str | None = None
     duration_ms: int = 0
     metadata: JsonObject = field(default_factory=_empty_json_object)
+    outcome: ToolOutcome | None = None
+
+    @property
+    def stop_turn(self) -> bool:
+        return self.outcome is not None and self.outcome.stop_turn
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,3 +218,4 @@ class ApprovalRequest:
     call_id: str = ""
     session_id: str = ""
     target: str | None = None
+    display: JsonObject = field(default_factory=_empty_json_object, repr=False)

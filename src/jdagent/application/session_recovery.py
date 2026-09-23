@@ -1,5 +1,6 @@
 """Classify physical and logical session recovery outcomes."""
 
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -18,8 +19,9 @@ from jdagent.domain.events import (
     ToolExecutionStartedPayload,
     TurnFailedPayload,
 )
-from jdagent.domain.tools import RiskLevel
-from jdagent.eventing import EventJournal
+from jdagent.domain.model import MessageRole, ModelMessage
+from jdagent.domain.tools import RiskLevel, command_log_id
+from jdagent.eventing import EventJournal, close_pending_calls
 from jdagent.ports import SessionPort
 
 
@@ -75,6 +77,27 @@ class PreparedResume:
 def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecovery:
     """Classify a structurally valid prefix without guessing missing side effects."""
 
+    started_all = {
+        event.payload.call_id: event.payload.risk
+        for event in events
+        if isinstance(event.payload, ToolExecutionStartedPayload)
+    }
+    completed_all = {
+        event.payload.result.call_id: event.payload.result
+        for event in events
+        if isinstance(event.payload, ToolExecutionCompletedPayload)
+    }
+    if any(
+        result.outcome is not None and result.outcome.effect == "unknown"
+        for result in completed_all.values()
+    ):
+        return LogicalRecovery.UNCERTAIN_SIDE_EFFECT
+    if any(
+        risk not in {RiskLevel.PURE, RiskLevel.READ}
+        for call_id, risk in started_all.items()
+        if call_id not in completed_all
+    ):
+        return LogicalRecovery.UNCERTAIN_SIDE_EFFECT
     terminal_types = {RuntimeEventType.TURN_COMPLETED, RuntimeEventType.TURN_FAILED}
     last_terminal = max(
         (index for index, event in enumerate(events) if event.event_type in terminal_types),
@@ -94,7 +117,7 @@ def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecove
         if isinstance(event.payload, ToolExecutionCompletedPayload)
     }
     unresolved_risks = [risk for call_id, risk in started.items() if call_id not in completed]
-    if any(risk in {None, RiskLevel.WRITE} for risk in unresolved_risks):
+    if any(risk not in {RiskLevel.PURE, RiskLevel.READ} for risk in unresolved_risks):
         return LogicalRecovery.UNCERTAIN_SIDE_EFFECT
     return LogicalRecovery.INTERRUPTED_SAFE
 
@@ -137,8 +160,39 @@ async def create_recovery_session(
     terminal_indexes = [
         index for index, event in enumerate(source_events) if event.event_type in terminal_types
     ]
-    safe_index = terminal_indexes[-1] if terminal_indexes else 0
+    safe_index = next(
+        (
+            index
+            for index in reversed(terminal_indexes)
+            if classify_logical_recovery(source_events[: index + 1])
+            is not LogicalRecovery.UNCERTAIN_SIDE_EFFECT
+        ),
+        0,
+    )
     safe_events = source_events[: safe_index + 1]
+    recovered_messages = project_messages(safe_events)
+    log_refs = [
+        event.payload.result.outcome.data.get("log_id")
+        for event in source_events
+        if isinstance(event.payload, ToolExecutionCompletedPayload)
+        and event.payload.result.outcome is not None
+        and event.payload.result.outcome.data.get("log_id") is not None
+    ]
+    log_refs.extend(
+        command_log_id(event.payload.call_id)
+        for event in source_events
+        if isinstance(event.payload, ToolExecutionStartedPayload)
+        and event.payload.risk is RiskLevel.EXECUTE
+    )
+    if log_refs:
+        recovered_messages = (
+            *recovered_messages,
+            ModelMessage(
+                MessageRole.USER,
+                "Recovery: previous side effects are uncertain. Do not replay them. "
+                "Parent-session command logs are available read-only: " + json.dumps(log_refs),
+            ),
+        )
     actual_session_id = new_session_id or str(uuid4())
     journal = await EventJournal.open(session, actual_session_id)
     await journal.record(
@@ -155,7 +209,8 @@ async def create_recovery_session(
         RecoverySnapshotPayload(
             parent_session_id=source_events[0].session_id,
             through_sequence=safe_events[-1].sequence,
-            messages=project_messages(safe_events),
+            messages=recovered_messages,
+            protected_tail_messages=1 if log_refs else 0,
         ),
     )
     return actual_session_id
@@ -189,6 +244,7 @@ async def close_interrupted_turn(
         events[0].session_id,
         require_existing=True,
     )
+    await close_pending_calls(journal, active_turn_id)
     return await journal.record(
         active_turn_id,
         RuntimeEventType.TURN_FAILED,

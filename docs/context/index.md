@@ -10,6 +10,9 @@
 
 ## 需求与计划
 
+- [v0.4 实现与验证记录](../plans/v0.4-implementation.md) — `Approved`（实施授权），八工具与
+  离线链已实现；Live 和学习门禁未关闭，含实际合同和 Windows 机制
+
 - [v0.1 Agent Runtime 需求](../requirements/v0.1-agent-runtime.md) — `Approved`
 - [v0.1 实施计划](../plans/v0.1-implementation.md) — `Approved`，全部里程碑与学习出口已完成
 - [v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md) — `Approved`
@@ -17,9 +20,9 @@
   全部关闭
 - [v0.2 之后的模块学习路线](../plans/post-v0.2-learning-roadmap.md) — `Approved`，2026-09-16
   调整为 v0.4 Tool Registry & Function Calling → v0.5 Memory → v0.6 Context / Compaction；
-  MCP 为后续候选。v0.4 进入需求与设计准备，路线不替代各版本的具体需求和设计审批
+  MCP 为后续候选。v0.4 实现授权与验收状态见下方实施记录，路线不替代具体授权
 - [v0.4 工具执行层设计讨论](../plans/v0.4-tool-execution-design-discussion.md) — `Proposed`，23 题
-  取舍已记录；Q23 已裁定按依赖划分跨版本工程门禁，汇总设计仍待整体审阅
+  取舍已记录；Q23 已裁定按依赖划分跨版本工程门禁，历史状态保留
 - [v0.3 RAG 分阶段实施计划](../plans/v0.3-rag-implementation.md) — `Approved`，P1 M0–M6
   工程实现已合入 `0.3.0`；学习出口、Milvus Live 与独立评审处置见当前状态
 - [v0.3 实施计划 P1/P2 附页](../plans/v0.3-rag-p1-p2-appendix.md) — `Approved`，记录 P1 起始
@@ -35,6 +38,8 @@
 
 ## Eval 数据
 
+- [v0.4 固定工具任务](../../testdata/v0.4-tools/DATASET.md) — `Approved`，离线整链及三次 Live 使用同一夹具
+
 - [v0.3 Gold Corpus 与无 RAG 基线](../../testdata/v0.3-gold/DATASET.md) — `Proposed`，
   dataset revision `v0.3-gold-r1`
 
@@ -49,7 +54,7 @@
 - [v0.2 Session Permission Rule 合同](../architecture/permission-rules-v0.2.md) — `Approved`
 - [v0.2 Windows 终端附录](../architecture/windows-terminal-v0.2.md) — `Approved`
 - [v0.4 工具执行层设计提案](../architecture/v0.4-tool-execution.md) — `Proposed`，汇合 Q1–Q23 的
-  范围、模块 Interface、核心合同、失败模型、验收与阶段计划；具体字段、默认值和整体设计待审阅；
+  范围、模块 Interface、核心合同、失败模型、验收与阶段计划；历史提案，实施授权与细化另见实现记录；
   评审后已补入简单滑动窗口、开发期旧 Session 清理及用户明确接受的局部取舍
 - [v0.3 RAG 与来源可追踪知识检索高层设计](../architecture/v0.3-knowledge-retrieval.md) —
   `Approved`，项目所有者于 2026-08-30 批准按分阶段实施计划推进
@@ -103,8 +108,9 @@
   基线 `ac17c40`；七类问题已修复，最终 `197 passed, 1 failed, 5 skipped`；工程复核 `fail`，
   含剩余缺口、正确来源计分、自测与限范围只读回归复核，不是全部 v0.3 独立验收
 - [v0.4 工具执行层设计独立评审](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md) —
-  `Proposed`（原始报告，待处置），基线 `9ab50b0`；设计层面 `fail`，4 High、10 Medium、5 Low，
-  F01–F19 处置均为 `pending`
+  `Proposed`（原始报告保留），基线 `9ab50b0`；设计层面 `fail`，4 High、10 Medium、5 Low
+- [v0.4 实施审查与设计处置](../reviews/v0.4-implementation-review.md) — 原设计 F01–F19 处置、
+  Standards/Spec 独立实现审查、离线与 Live 证据边界
 
 ## 学习出口
 

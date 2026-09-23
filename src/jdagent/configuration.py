@@ -21,6 +21,8 @@ _USER_FIELDS = frozenset(
         "max_context_tokens",
         "fake_delay_seconds",
         "write_permission",
+        "command_permission",
+        "tool_scope",
     }
 )
 _PROJECT_FIELDS = frozenset(
@@ -31,6 +33,8 @@ _PROJECT_FIELDS = frozenset(
         "max_context_tokens",
         "fake_delay_seconds",
         "write_permission",
+        "command_permission",
+        "tool_scope",
     }
 )
 
@@ -52,6 +56,8 @@ class CliOverrides:
     fake_delay_seconds: float | None = None
     write_permission: str | None = None
     data_dir: Path | None = None
+    command_permission: str | None = None
+    tool_scope: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +77,8 @@ class ResolvedConfiguration:
     workspace: Path
     session_directory: Path
     data_paths: DataPaths
+    command_permission: str = "ask"
+    tool_scope: str = "execute"
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -137,6 +145,10 @@ def _validate(values: dict[str, object]) -> None:
     values["write_permission"] = permission
     if permission not in {"ask", "deny"}:
         raise ConfigurationError("Configuration field write_permission must be ask or deny")
+    if values["command_permission"] not in {"ask", "deny"}:
+        raise ConfigurationError("command_permission must be ask or deny")
+    if values["tool_scope"] not in {"analyze", "edit", "execute"}:
+        raise ConfigurationError("tool_scope must be analyze, edit or execute")
 
 
 def _apply_layer(values: dict[str, object], layer: Mapping[str, object]) -> None:
@@ -161,9 +173,11 @@ def resolve_configuration(
         "base_url": "https://api.deepseek.com",
         "model_timeout_seconds": 30.0,
         "tool_timeout_seconds": 10.0,
-        "max_context_tokens": None,
+        "max_context_tokens": 64000,
         "fake_delay_seconds": 0.0,
         "write_permission": "ask",
+        "command_permission": "ask",
+        "tool_scope": "execute",
     }
     user = _read_layer(paths.user_config_file, layer="user", allowed=_USER_FIELDS)
     project = _read_layer(paths.project_config_file, layer="project", allowed=_PROJECT_FIELDS)
@@ -178,6 +192,8 @@ def resolve_configuration(
         raise ConfigurationError(
             "Project configuration cannot relax user write_permission from deny to ask"
         )
+    if user.get("command_permission") == "deny" and project.get("command_permission") == "ask":
+        raise ConfigurationError("Project cannot relax user command_permission")
     _apply_layer(values, user)
     _apply_layer(values, project)
     for item in fields(overrides):
@@ -187,6 +203,9 @@ def resolve_configuration(
         if value is not None:
             values[item.name] = value
     _validate(values)
+    for permission_name in ("write_permission", "command_permission"):
+        if user.get(permission_name) == "deny" or project.get(permission_name) == "deny":
+            values[permission_name] = "deny"
 
     api_key_file: Path | None = None
     if api_key_file_value is not None:
@@ -213,4 +232,6 @@ def resolve_configuration(
         workspace=paths.workspace,
         session_directory=overrides.data_dir or paths.sessions_directory,
         data_paths=paths,
+        command_permission=cast(str, values["command_permission"]),
+        tool_scope=cast(str, values["tool_scope"]),
     )

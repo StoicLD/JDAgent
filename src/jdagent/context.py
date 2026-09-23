@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -72,7 +73,9 @@ def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]
             if not isinstance(payload, ToolExecutionCompletedPayload):
                 raise TypeError("tool_execution_completed event has the wrong payload")
             result = payload.result
-            if result.status is ToolResultStatus.SUCCESS:
+            if result.outcome is not None:
+                content = json.dumps(result.outcome.to_data(), ensure_ascii=False)
+            elif result.status is ToolResultStatus.SUCCESS:
                 content = result.output
             else:
                 error_code = result.error_code.value if result.error_code else "execution_failed"
@@ -90,7 +93,7 @@ def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]
 
 
 class ContextBuilder:
-    """Build complete ModelRequest values without dropping session history."""
+    """Project requests, optionally omitting complete old turns without editing facts."""
 
     def __init__(
         self,
@@ -101,6 +104,7 @@ class ContextBuilder:
         settings: ModelSettings | None = None,
         max_context_tokens: int | None = None,
         provider_options: JsonObject | None = None,
+        sliding_window: bool = False,
     ) -> None:
         if max_context_tokens is not None and max_context_tokens <= 0:
             raise ValueError("max_context_tokens must be positive")
@@ -110,6 +114,7 @@ class ContextBuilder:
         self._settings = settings or ModelSettings()
         self._max_context_tokens = max_context_tokens
         self._provider_options = provider_options or {}
+        self._sliding_window = sliding_window
 
     def build(
         self,
@@ -163,6 +168,61 @@ class ContextBuilder:
         ]
         if limits:
             hard_limit = min(limits)
+            if self._sliding_window:
+                omitted: list[str] = []
+                retained = list(events)
+                while estimated_tokens > hard_limit:
+                    snapshot_removed = False
+                    for index, event in enumerate(retained):
+                        if not isinstance(event.payload, RecoverySnapshotPayload):
+                            continue
+                        history = event.payload.messages
+                        removable = len(history) - event.payload.protected_tail_messages
+                        if removable == 0:
+                            continue
+                        boundary = next(
+                            (i for i in range(1, removable) if history[i].role is MessageRole.USER),
+                            removable,
+                        )
+                        retained[index] = replace(
+                            event, payload=replace(event.payload, messages=history[boundary:])
+                        )
+                        omitted.append(f"snapshot:{event.sequence}:{len(omitted)}")
+                        snapshot_removed = True
+                        break
+                    current_turn = next(
+                        (
+                            event.turn_id
+                            for event in reversed(retained)
+                            if event.turn_id is not None
+                        ),
+                        None,
+                    )
+                    oldest = next(
+                        (event.turn_id for event in retained if event.turn_id is not None), None
+                    )
+                    if not snapshot_removed and (oldest is None or oldest == current_turn):
+                        break
+                    if not snapshot_removed and not any(
+                        event.turn_id == oldest
+                        and event.event_type
+                        in {RuntimeEventType.TURN_COMPLETED, RuntimeEventType.TURN_FAILED}
+                        for event in retained
+                    ):
+                        break
+                    if not snapshot_removed:
+                        retained = [event for event in retained if event.turn_id != oldest]
+                        assert oldest is not None
+                        omitted.append(oldest)
+                    messages = project_messages(retained)
+                    if repair_message:
+                        messages = (*messages, ModelMessage(MessageRole.USER, repair_message))
+                    request = replace(
+                        request,
+                        messages=messages,
+                        metadata={**metadata, "omitted_turn_ids": ",".join(omitted)},
+                    )
+                    estimated_tokens = self._estimate_tokens(request)
             if estimated_tokens > hard_limit:
                 raise ContextLimitError(estimated_tokens, hard_limit)
         return request
@@ -170,7 +230,14 @@ class ContextBuilder:
     @staticmethod
     def _estimate_tokens(request: ModelRequest) -> int:
         serialized_tools = json.dumps(
-            [tool.input_schema for tool in request.tools],
+            [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema,
+                }
+                for tool in request.tools
+            ],
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -187,4 +254,7 @@ class ContextBuilder:
                     separators=(",", ":"),
                 )
         text += serialized_tools
-        return max(1, (len(text) + 3) // 4)
+        # UTF-8 byte count is a conservative upper estimate, including CJK and JSON.
+        return max(1, len(text.encode("utf-8")) + 32 * len(request.messages)) + (
+            request.settings.max_output_tokens or 0
+        )

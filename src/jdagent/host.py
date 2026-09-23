@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TextIO
 
 from jdagent.adapters.jsonl_recovery import JsonlRecoveryStore
-from jdagent.adapters.legacy_sessions import import_legacy_sessions
 from jdagent.adapters.terminal import (
     PromptToolkitTerminal,
     RichPresenter,
@@ -49,6 +48,8 @@ class CliStartup:
     data_dir: Path | None
     show_trace: bool
     output: str | None
+    tool_scope: str | None = None
+    command_permission: str | None = None
 
 
 async def run_single_turn(
@@ -130,15 +131,12 @@ async def run_cli(startup: CliStartup) -> int:
             max_context_tokens=startup.max_context_tokens,
             fake_delay_seconds=startup.fake_delay_seconds,
             data_dir=startup.data_dir,
+            tool_scope=startup.tool_scope,
+            command_permission=startup.command_permission,
         ),
     )
     if startup.data_dir is None or startup.prompt is None:
         resolved.data_paths.ensure_project_partition()
-    if startup.data_dir is None:
-        await import_legacy_sessions(
-            resolved.workspace / ".jdagent" / "sessions",
-            resolved.session_directory,
-        )
     presenter = RichPresenter() if startup.prompt is None else None
     terminal = (
         PromptToolkitTerminal(history_file=resolved.data_paths.input_history)
@@ -217,6 +215,7 @@ async def run_cli(startup: CliStartup) -> int:
                 model=resolved.model,
                 workspace=resolved.workspace,
                 write_permission=resolved.write_permission,
+                command_output_directory=resolved.session_directory / "command-output",
                 model_timeout_seconds=resolved.model_timeout_seconds,
                 tool_timeout_seconds=resolved.tool_timeout_seconds,
                 max_context_tokens=resolved.max_context_tokens,

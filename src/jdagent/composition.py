@@ -13,12 +13,14 @@ from jdagent.core.loop import AgentLoop, LoopLimits, ModelEventObserver
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.json import JsonObject
 from jdagent.domain.model import ModelSettings, ResponseCompleted, SystemPart, TextDelta
-from jdagent.domain.tools import PermissionDecision
+from jdagent.domain.tools import PermissionDecision, ToolCapability
 from jdagent.ports import ApprovalPort, EventObserver, ModelPort, RuntimeJournal
-from jdagent.tools.builtins import create_builtin_tools
+from jdagent.tools.builtins import create_calculator_tool
+from jdagent.tools.command_output import CommandLogs
+from jdagent.tools.commands import create_command_tools
+from jdagent.tools.files import create_file_tools
 from jdagent.tools.permissions import SessionPermissionPolicy, active_session_rules
 from jdagent.tools.runtime import ToolRegistry, ToolRuntime
-from jdagent.tools.workspace import WorkspacePathResolver
 
 DEVELOPMENT_DEEPSEEK_API_KEY_FILE = (
     Path(__file__).resolve().parents[3] / "tmp" / "keys" / "deepseek-api-key.txt"
@@ -52,8 +54,8 @@ def load_deepseek_api_key(
 class RuntimeOptions:
     """Loop-only knobs that do not duplicate resolved host configuration."""
 
-    max_model_calls: int = 8
-    max_tool_calls: int = 16
+    max_model_calls: int = 16
+    max_tool_calls: int = 32
     temperature: float | None = None
     include_tools: bool = True
     allow_local_index: bool = False
@@ -97,6 +99,8 @@ class ConfiguredLoopFactory:
     provider_options: JsonObject
     model_event_observers: tuple[ModelEventObserver, ...]
     write_permission: PermissionDecision = PermissionDecision.ASK
+    command_permission: PermissionDecision = PermissionDecision.ASK
+    capability: ToolCapability = ToolCapability.EXECUTE
 
     def create(self, journal: RuntimeJournal) -> AgentLoop:
         if not journal.events:
@@ -109,18 +113,21 @@ class ConfiguredLoopFactory:
                 session_id=session_id,
                 rules=active_session_rules(tuple(journal.events)),
                 write_ceiling=self.write_permission,
+                command_ceiling=self.command_permission,
             ),
             self.approval,
             timeout_seconds=self.tool_timeout_seconds,
             recorder=journal,
+            capability=self.capability,
         )
         context_builder = ContextBuilder(
             model=self.model_name,
             system_parts=self.system_parts,
-            tools=self.registry.definitions(),
+            tools=self.registry.definitions(self.capability),
             settings=self.model_settings,
             max_context_tokens=self.max_context_tokens,
             provider_options=self.provider_options,
+            sliding_window=True,
         )
         return AgentLoop(
             self.model,
@@ -146,7 +153,6 @@ def build_runtime(
 
     options = runtime_options or RuntimeOptions()
     workspace = configuration.workspace.resolve(strict=True)
-    resolver = WorkspacePathResolver(workspace)
     if configuration.provider == "fake":
         model: ModelPort = FakeModelPort(
             scripts=(
@@ -175,7 +181,17 @@ def build_runtime(
         raise ValueError(f"Unsupported provider: {configuration.provider}")
 
     session = JsonlSession(configuration.session_directory)
-    tools = create_builtin_tools(resolver) if options.include_tools else ()
+    tools = (
+        (
+            create_calculator_tool(),
+            *create_file_tools(workspace),
+            *create_command_tools(
+                workspace, CommandLogs(configuration.session_directory / "command-output")
+            ),
+        )
+        if options.include_tools
+        else ()
+    )
     loop_factory = ConfiguredLoopFactory(
         model=model,
         model_name=configuration.model,
@@ -187,6 +203,7 @@ def build_runtime(
         model_settings=ModelSettings(
             timeout_seconds=configuration.model_timeout_seconds,
             temperature=options.temperature,
+            max_output_tokens=4096,
         ),
         max_context_tokens=configuration.max_context_tokens,
         limits=LoopLimits(options.max_model_calls, options.max_tool_calls),
@@ -194,6 +211,8 @@ def build_runtime(
         provider_options=options.provider_options,
         model_event_observers=model_event_observers,
         write_permission=PermissionDecision(configuration.write_permission),
+        command_permission=PermissionDecision(configuration.command_permission),
+        capability=ToolCapability(configuration.tool_scope),
     )
     coordinator = TurnCoordinator(
         session=session,

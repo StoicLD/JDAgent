@@ -46,15 +46,18 @@ _COMMANDS = (
     "/rename",
     "/permissions",
     "/knowledge",
+    "/logs",
     "/trace",
     "/exit",
 )
 
 
 def format_approval_request(request: ApprovalRequest) -> str:
-    """Render only the pre-redacted approval summary supplied by the runtime."""
+    """Render complete prepared arguments, escaping terminal control characters."""
 
-    parameters = json.dumps(request.arguments, ensure_ascii=False, sort_keys=True)
+    parameters = json.dumps(
+        request.display or request.arguments, ensure_ascii=False, sort_keys=True
+    )
     return (
         f"Approval required: tool={request.tool_name} target={request.target or 'n/a'} "
         f"parameters={parameters} risk={request.risk.value} call={request.call_id}"
@@ -133,7 +136,11 @@ class PromptToolkitTerminal:
         try:
             answer = await self._session.prompt_async(
                 f"{format_approval_request(request)}\n"
-                "Allow [o]nce, session [f]ile, session [d]irectory? [N] ",
+                + (
+                    "Allow [o]nce or session [c]ommand prefix? [N] "
+                    if "program" in request.display
+                    else "Allow [o]nce, session [f]ile, session [d]irectory? [N] "
+                ),
                 multiline=False,
                 bottom_toolbar=lambda: (
                     f" JDAgent | {self._status.session} | {self._status.model} | "
@@ -147,6 +154,30 @@ class PromptToolkitTerminal:
         normalized = answer.strip().lower()
         if normalized in {"o", "once", "y", "yes"}:
             return ApprovalChoice(ApprovalDecision.APPROVE, ApprovalScope.ONCE)
+        if normalized == "c" and "program" in request.display:
+            args = request.display.get("args", [])
+            if not isinstance(args, list) or not args:
+                return ApprovalChoice(ApprovalDecision.REJECT)
+            try:
+                raw_count = await self._session.prompt_async(
+                    f"Fixed leading argument count (1..{len(args)}): ", multiline=False
+                )
+                count = int(raw_count)
+                if not 1 <= count <= len(args):
+                    return ApprovalChoice(ApprovalDecision.REJECT)
+                confirm = await self._session.prompt_async(
+                    "Allow this fixed prefix with ANY variable trailing arguments/options: "
+                    + json.dumps(args[:count], ensure_ascii=False)
+                    + "? [y/N] ",
+                    multiline=False,
+                )
+                if confirm.strip().lower() == "y":
+                    return ApprovalChoice(
+                        ApprovalDecision.APPROVE, ApprovalScope.SESSION_COMMAND, count
+                    )
+            except (ValueError, EOFError, KeyboardInterrupt):
+                pass
+            return ApprovalChoice(ApprovalDecision.REJECT)
         if normalized in {"f", "file"}:
             return ApprovalChoice(ApprovalDecision.APPROVE, ApprovalScope.SESSION_FILE)
         if normalized in {"d", "directory", "dir"}:

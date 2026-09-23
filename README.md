@@ -35,7 +35,8 @@ v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层
 生命周期，v0.6 Context Orchestration 与 Compaction；MCP 保留为后续候选。v0.4 将在已有三工具
 和调用闭环上增加实用工具、完善模块边界，为后续能力提供基础。2026-09-23 已完成 23 题设计
 访谈并形成[工具执行层设计提案](docs/architecture/v0.4-tool-execution.md)（`Proposed`），覆盖
-文件操作、受信任 Windows 命令执行、失败处理与真实模型验收；整体设计待审阅，未开始实现。
+文件操作、受信任 Windows 命令执行、失败处理与真实模型验收。随后所有者授权实施，八工具
+与离线整链已落地；真实 DeepSeek 与学习门禁尚未关闭，见[实现记录](docs/plans/v0.4-implementation.md)。
 v0.3 遗留项按实际依赖判断是否阻塞 v0.4，无关 RAG 缺口独立跟踪，具体启动边界见
 [v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
@@ -99,6 +100,26 @@ uv run jdagent "用 calculator 计算 17 * 23"
 Session 规则在 `/exit` 后恢复同一 Session 时继续有效，可用 `/permissions` 查看和撤销，但新建
 Session 不继承。Headless 模式不会阻塞等待审批。读写路径始终限制在显式 workspace 内。
 
+## v0.4 工具执行
+
+Windows 上可使用 `calculator`、`find_files`、`read_file`、`search_text`、`create_file`、
+`edit_file`、`run_command` 和 `read_command_output`。读取返回完整文件 revision，编辑提交
+该 revision 与精确的旧/新文本；创建不会覆盖文件，编辑冲突要求重新读取。
+
+```powershell
+uv run jdagent --workspace E:\Projects\Example --tool-scope analyze
+uv run jdagent --workspace E:\Projects\Example --tool-scope edit
+uv run jdagent --workspace E:\Projects\Example --tool-scope execute --command-permission ask
+```
+
+默认 execute。写入与命令需要审批；命令使用明确程序与 argv，拒绝直接执行 bat/cmd。
+Session 命令授权会展示固定前缀及允许变化的尾参，并受用户/项目 DENY 上限约束。
+命令仍在可信本机宿主运行，不提供代码沙箱。
+
+命令输出保留在当前 workspace 的会话数据分区，模型可按 log_id 分段读取；`/logs clear`
+清空当前 Session 输出并保留清理标记。新格式使用 `sessions-v4`，旧会话数据保持原样，
+不会自动迁移。未知副作用会停止当前轮次，恢复时创建不继承许可的新会话并保留旧日志读取能力。
+
 ## 质量门禁
 
 ```powershell
@@ -110,7 +131,8 @@ uv run pytest -q
 
 真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
 `tests/integration/test_deepseek_live.py` 与 Gold Answer/Citation Eval；测试同样遵循上述
-Key 优先级。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
+Key 优先级。v0.4 三次固定工具任务为 `tests/integration/test_v04_tools_live.py`；
+本轮尚未执行，外发测试内容的授权状态见实现记录。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
 
 ## 学习出口
 

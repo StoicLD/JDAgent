@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from jdagent.domain.json import JsonObject, JsonValue
-from jdagent.domain.tools import RiskLevel, ToolDefinition, ToolExecutionContext
+from jdagent.domain.tools import RiskLevel, ToolDefinition, ToolExecutionContext, ToolOutcome
 from jdagent.tools.workspace import WorkspacePathResolver
 
 BinaryOperation = Callable[[float, float], float]
@@ -111,13 +111,29 @@ async def _write_text_file(
     return f"Wrote {len(content)} characters to {path.name}"
 
 
-def _object_schema(properties: JsonObject, required: list[JsonValue]) -> JsonObject:
+def object_schema(properties: JsonObject, required: list[JsonValue]) -> JsonObject:
     return {
         "type": "object",
         "properties": properties,
         "required": required,
         "additionalProperties": False,
     }
+
+
+def create_calculator_tool() -> ToolDefinition:
+    """Create the v0.4 calculator with a validated structured result."""
+
+    async def calculate(arguments: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
+        return ToolOutcome(data={"value": await _calculate(arguments, context)})
+
+    return ToolDefinition(
+        "calculator",
+        "Evaluate a basic arithmetic expression (at most 200 characters).",
+        object_schema({"expression": {"type": "string", "maxLength": 200}}, ["expression"]),
+        RiskLevel.PURE,
+        calculate,
+        result_schema=object_schema({"value": {"type": "string"}}, ["value"]),
+    )
 
 
 def create_builtin_tools(resolver: WorkspacePathResolver) -> tuple[ToolDefinition, ...]:
@@ -133,7 +149,7 @@ def create_builtin_tools(resolver: WorkspacePathResolver) -> tuple[ToolDefinitio
         ToolDefinition(
             "calculator",
             "Evaluate a basic arithmetic expression.",
-            _object_schema(
+            object_schema(
                 {"expression": {"type": "string", "maxLength": 200}},
                 ["expression"],
             ),
@@ -143,7 +159,7 @@ def create_builtin_tools(resolver: WorkspacePathResolver) -> tuple[ToolDefinitio
         ToolDefinition(
             "read_text_file",
             "Read a UTF-8 text file inside the configured workspace.",
-            _object_schema({"path": {"type": "string", "minLength": 1}}, ["path"]),
+            object_schema({"path": {"type": "string", "minLength": 1}}, ["path"]),
             RiskLevel.READ,
             read_handler,
             _path_preflight(resolver, "read"),
@@ -151,7 +167,7 @@ def create_builtin_tools(resolver: WorkspacePathResolver) -> tuple[ToolDefinitio
         ToolDefinition(
             "write_text_file",
             "Write UTF-8 text inside the configured workspace after approval.",
-            _object_schema(
+            object_schema(
                 {
                     "path": {"type": "string", "minLength": 1},
                     "content": {"type": "string"},

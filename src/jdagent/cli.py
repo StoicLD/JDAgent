@@ -29,6 +29,8 @@ _VALUE_FLAGS = frozenset(
         "--workspace",
         "--data-dir",
         "--output",
+        "--tool-scope",
+        "--command-permission",
     }
 )
 
@@ -63,6 +65,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-timeout-seconds", type=float)
     parser.add_argument("--tool-timeout-seconds", type=float)
     parser.add_argument("--max-context-tokens", type=int)
+    parser.add_argument("--tool-scope", choices=("analyze", "edit", "execute"))
+    parser.add_argument("--command-permission", choices=("ask", "deny"))
     parser.add_argument(
         "--fake-delay-seconds",
         type=float,
@@ -102,6 +106,8 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
         data_dir=supplied_data_dir,
         show_trace=cast(bool, namespace.show_trace),
         output=cast(str | None, namespace.output),
+        tool_scope=cast(str | None, namespace.tool_scope),
+        command_permission=cast(str | None, namespace.command_permission),
     )
 
 

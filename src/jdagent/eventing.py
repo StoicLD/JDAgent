@@ -3,8 +3,16 @@
 from collections.abc import AsyncIterator
 
 from jdagent.domain.errors import SessionError, SessionErrorCode
-from jdagent.domain.events import RuntimeEvent, RuntimeEventType, RuntimePayload
-from jdagent.ports import EventObserver, SessionPort
+from jdagent.domain.events import (
+    AssistantMessageCompletedPayload,
+    RuntimeEvent,
+    RuntimeEventType,
+    RuntimePayload,
+    ToolExecutionCompletedPayload,
+    ToolExecutionStartedPayload,
+)
+from jdagent.domain.tools import RiskLevel, ToolErrorCode, ToolOutcome, ToolResult, ToolResultStatus
+from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 
 
 async def _collect(items: AsyncIterator[RuntimeEvent]) -> list[RuntimeEvent]:
@@ -82,3 +90,47 @@ class EventJournal:
         self._events.append(event)
         for observer in self._observers:
             await observer.observe(event)
+
+
+async def close_pending_calls(journal: RuntimeJournal, turn_id: str) -> None:
+    """Record explicit non-execution for unstarted calls before ending a batch."""
+    events = [event for event in journal.events if event.turn_id == turn_id]
+    completed = {
+        event.payload.result.call_id
+        for event in events
+        if isinstance(event.payload, ToolExecutionCompletedPayload)
+    }
+    started = {
+        event.payload.call_id
+        for event in events
+        if isinstance(event.payload, ToolExecutionStartedPayload)
+        and event.payload.risk in {RiskLevel.WRITE, RiskLevel.EXECUTE}
+    }
+    for event in events:
+        if not isinstance(event.payload, AssistantMessageCompletedPayload):
+            continue
+        for call in event.payload.tool_calls:
+            if call.call_id in completed:
+                continue
+            unknown = call.call_id in started
+            outcome = ToolOutcome(
+                completed=False,
+                effect="unknown" if unknown else "none",
+                error_code=ToolErrorCode.UNCERTAIN if unknown else ToolErrorCode.NOT_EXECUTED,
+                message="Turn ended before a result was available",
+            )
+            await journal.record(
+                turn_id,
+                RuntimeEventType.TOOL_EXECUTION_COMPLETED,
+                ToolExecutionCompletedPayload(
+                    ToolResult(
+                        call.call_id,
+                        call.name,
+                        ToolResultStatus.ERROR,
+                        error_code=outcome.error_code,
+                        error_message=outcome.message,
+                        outcome=outcome,
+                    )
+                ),
+            )
+            completed.add(call.call_id)

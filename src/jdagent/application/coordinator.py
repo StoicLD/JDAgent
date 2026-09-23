@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from jdagent.application.session_recovery import LogicalRecovery, classify_logical_recovery
 from jdagent.core.loop import AgentLoop, CancellationToken, TurnResult
-from jdagent.domain.errors import StopReason
+from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
+    RecoverySnapshotPayload,
     RetrievalBaseRecord,
     RetrievalBudgetRecord,
     RetrievalEvidenceRecord,
@@ -149,6 +151,14 @@ class TurnCoordinator:
             observers=(trace, *self._event_observers),
             require_existing=session_id is not None,
         )
+        if (
+            classify_logical_recovery(tuple(journal.events))
+            is LogicalRecovery.UNCERTAIN_SIDE_EFFECT
+        ):
+            raise SessionError(
+                SessionErrorCode.CORRUPT_EVENT,
+                "Session has uncertain side effects; inspect logs and use /resume",
+            )
         if not journal.events:
             await journal.record(
                 None,
@@ -191,7 +201,16 @@ class TurnCoordinator:
         loop = self._loop_factory.create(journal)
         result = await loop.run(
             turn_id,
-            ToolExecutionContext(actual_session_id, turn_id, self._workspace),
+            ToolExecutionContext(
+                actual_session_id,
+                turn_id,
+                self._workspace,
+                tuple(
+                    event.payload.parent_session_id
+                    for event in journal.events
+                    if isinstance(event.payload, RecoverySnapshotPayload)
+                ),
+            ),
             cancellation=cancellation,
             knowledge=knowledge,
         )

@@ -357,10 +357,10 @@ def test_approval_request_redacts_write_content_and_uses_relative_target(
 
     assert result.error_code is ToolErrorCode.APPROVAL_REJECTED
     assert approval.requests[0].target == "private/note.txt"
-    assert approval.requests[0].arguments == {
-        "content": "<18 chars>",
-        "path": "private/note.txt",
-    }
+    assert approval.requests[0].arguments["content"] == "<18 chars>"
+    assert approval.requests[0].arguments["path"] == "private/note.txt"
+    assert len(str(approval.requests[0].arguments["display_sha256"])) == 64
+    assert approval.requests[0].display["content"] == "api-secret-content"
     assert "api-secret-content" not in repr(approval.requests[0])
 
 

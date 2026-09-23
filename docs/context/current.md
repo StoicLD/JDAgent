@@ -2,6 +2,8 @@
 
 状态：`Implemented`
 
+v0.4：工具代码及离线链已实现；工程验收待真实 DeepSeek，学习验收未完成。
+
 版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
 `Implemented（工程复核未通过，学习验证已完成）`。P1 核心代码已合入 `0.3.0`；M0 需求/合同/Eval
 规格仍为 `Proposed`（实现者不得自批）；Milvus Live 未跑。2026-09-05 对 `ac17c40` 审查后修复七类
@@ -38,18 +40,22 @@ v0.3 学习验证完成，详见[学习完成记录](../learning/v0.3-rag-learni
 
 项目所有者于 2026-09-16 决定下一模块为 v0.4 Tool Registry & Function Calling，扩展可调用工具
 并完善相关模块设计；长期记忆与 Context / Compaction 依次顺延为 v0.5、v0.6，MCP 仍为后续
-候选。截至 2026-09-23，v0.4 设计访谈收敛于 Q1–Q23，已形成
-[设计提案](../architecture/v0.4-tool-execution.md)、术语表与专属学习清单，均为 `Proposed`，
-整体设计尚未批准，未开始产品实现。Q23 已裁定按实际依赖判断 v0.3 遗留项的阻塞范围；
-无关 RAG 缺口独立跟踪，不再统一阻塞 v0.4，v0.3 工程验收状态保持原记录。
+候选。2026-09-23 设计访谈收敛于 Q1–Q23，形成
+[设计提案](../architecture/v0.4-tool-execution.md)。项目所有者随后明确要求根据该方案开始实现，
+并先提交当前草案：草案提交为 `54303ff8736ca4c132771bd12b4321bbc967251f`，实现前 Git 已清理。
 
-评审后用户进一步确认：v0.4 在完整压缩之前先提供简单滑动窗口；当前仅开发者使用，旧版
-Session 可在升级时清理，不承担兼容工程。另已认同保留可变尾参授权、拒绝批处理文件直接
-启动、区分执行完成与验证通过；随后确认仅统一 CRLF/LF 进行匹配并保留未改字节，要求审批
-展示完整命令与文件改动。来源见[用户批注补充](../plans/v0.4-tool-execution-design-discussion.md)
-末节；具体窗口合同、评估实施方案及其余评审建议仍待审阅，当前未实现功能或实际清理 Session。
+v0.4 工具实现及离线整链已落地；工程验收尚未关闭，真实 DeepSeek 三次验收被自动审批拦截，
+待明确授权外部服务接收测试夹具与上下文。当前完整离线为 `236 passed, 1 failed, 8 skipped`，
+唯一失败仍是 v0.3 既有 Recall 门槛。具体授权、合同细化、机制与验证证据见
+[实现记录](../plans/v0.4-implementation.md)，原始设计/讨论/评审文档保留历史状态，不能据此
+误读为尚未授权实现。学习验收仍待本人完成，无关 RAG 缺口按 Q23 独立跟踪。
 
 ## 已批准事实
+
+- 2026-09-23 项目所有者明确授权按上一轮 v0.4 设计实施，并要求先提交草案、保持 Git 干净。
+  范围与采用的具体默认项记录于 [v0.4 实现记录](../plans/v0.4-implementation.md)。
+- Q23 裁定：按实际依赖判断 v0.3 遗留项的阻塞范围；权限、会话、工具和基础回归的相关缺口
+  需处理，无关 RAG 质量缺口独立跟踪。此裁定不表示 v0.3 工程验收通过。
 
 - 当前产品 Git 仓库同时承载产品、工程与项目级协作事实，是唯一权威仓库。
 - 用户于 2026-08-26 批准[ADR-0005](../decisions/ADR-0005-agent-context-free-startup.md)：Agent
@@ -90,8 +96,8 @@ Session 可在升级时清理，不承担兼容工程。另已认同保留可变
 
 - 模型无关 `ModelPort`、脚本化 Fake Model 与 DeepSeek SSE Adapter。
 - 基于规范事件投影的薄 ContextBuilder 与小型 Agent Loop。
-- Tool Registry、JSON Schema 校验、集中式 workspace 路径解析、`calculator`、
-  `read_text_file`、`write_text_file`。
+- Tool Registry、参数/结果 JSON Schema 校验、三档工具可用性；正常运行暴露八个 v0.4 工具，
+  包括版本约束精确编辑、Job 管理命令、会话日志与完整旧轮次滑动窗口。
 - `ALLOW | ASK | DENY` 权限策略、CLI 审批与副作用前检查。
 - InMemory 与 append-only JSONL Session、显式 resume、损坏数据 fail closed。
 - 同源 Runtime Event 的 Trace 投影、Usage、超时、取消与调用预算。
@@ -103,7 +109,7 @@ Session 可在升级时清理，不承担兼容工程。另已认同保留可变
 - Prompt Toolkit 行式 REPL、Rich 流式 Markdown 与持续状态 footer、九条内建斜杠命令、历史、
   多行输入和 workspace 级 Session Catalog。
 - Session 生命周期事实、名称/短 ID 解析、legacy 非破坏导入、物理尾行修复、逻辑未完成 Turn
-  分类与副作用不确定时的恢复快照。
+  分类与副作用不确定时的恢复快照。v0.4 改用 schema v3 与 sessions-v4 分区，停止自动 legacy 导入。
 - 可取消 Turn 与可恢复主循环；运行中 `Ctrl+C` 返回 idle，空闲 `Ctrl+C` 返回 130，`/exit`/EOF
   正常保留 Session。
 - 可审计/可撤销的 Session 文件或目录允许规则；恢复同一 Session 后仍有效，新 Session 不继承，
@@ -168,7 +174,8 @@ Session 可在升级时清理，不承担兼容工程。另已认同保留可变
   （设计层面），4 High、10 Medium、5 Low。High 集中在取消/超时/异常路径、Session 恢复对不确定
   副作用的识别、命令前缀尾参与 Windows 批处理解析、批次中途停止后的 tool call 配对。原始报告见
   [REV-20260923-001](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)，状态
-  `Proposed`，F01–F19 尚未处置；未运行测试或 Windows/Live 实验。
+  `Proposed`（保留原始报告）；当时未运行实验。本次处置与证据见
+  [v0.4 实施审查](../reviews/v0.4-implementation-review.md)。
 
 ## 后续模块治理
 
@@ -184,7 +191,7 @@ Session 可在升级时清理，不承担兼容工程。另已认同保留可变
 - v0.4 已形成待审阅设计提案。项目所有者于 2026-09-23 在
   [Q23](../plans/v0.4-tool-execution-design-discussion.md) 选择按依赖划分跨版本工程门禁：影响
   工具执行、权限、Session 和基础回归的遗留问题须在相关实现前处理；无关 RAG 缺口独立跟踪。
-  此裁定不豁免新回归、不批准整体设计、不授权实现，也不表示 v0.3 工程验收通过。
+  此裁定本身不豁免新回归、不授权实现，也不表示 v0.3 工程验收通过；随后独立的实现授权见上文。
 - v0.3 高层设计与实施计划已获批，P1 工程实现已合入 `0.3.0`，学习出口已于 2026-09-16
   由项目所有者裁定关闭。
 - v0.3 的 M0 详细需求、合同、Eval 规格仍为 `Proposed`；学习完成裁定不改变这些设计包的审批状态。
@@ -223,15 +230,9 @@ Session 可在升级时清理，不承担兼容工程。另已认同保留可变
 
 ## 下一步
 
-审阅 v0.4 [设计提案](../architecture/v0.4-tool-execution.md)与
-[专属学习清单](../learning/v0.4-tools-learning-checklist.md)：23 题范围取舍已记录，具体字段、
-默认限额、失败恢复计数和 Live 重复门槛为待审阅建议。整体设计确认后，再补齐实施所需的详细
-Schema、固定 Eval 和 Windows 机制实验；按 Q23 核对实际依赖，不把无关 RAG 收尾作为统一
-前提。本轮只完成文档，不开始实现。
-
-维护方先逐项处置[独立评审 REV-20260923-001](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)
-F01–F19，按处置结果修订设计提案后，再提交项目所有者整体审阅；评审结论不自动改变提案状态。
-用户批注已经推进部分取舍，尚未形成全部 finding 的正式处置记录；原始评审报告不回写成已解决。
+取得 DeepSeek 固定夹具外发的明确授权后，执行三次真实任务并保存所有尝试，核对独立检查、
+实际命令证据与模型最终报告；再判断 v0.4 工程门禁。学习者执行
+[专属学习清单](../learning/v0.4-tools-learning-checklist.md)，工程和学习分别记录。
 
 以下继续作为 v0.3 工程收尾事项跟踪，不因模块顺序调整而视为完成：
 

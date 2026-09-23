@@ -14,6 +14,7 @@ from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     CitationRecord,
+    ContextWindowSelectedPayload,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
     PermissionResolvedPayload,
@@ -40,6 +41,7 @@ from jdagent.domain.json import (
     JsonObject,
     normalize_json,
     optional_string,
+    require_array,
     require_integer,
     require_object,
     require_string,
@@ -54,6 +56,7 @@ from jdagent.domain.tools import (
     SessionPermissionRule,
     ToolCall,
     ToolErrorCode,
+    ToolOutcome,
     ToolResult,
     ToolResultStatus,
 )
@@ -131,6 +134,7 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
         "error_message": result.error_message,
         "duration_ms": result.duration_ms,
         "metadata": result.metadata,
+        "outcome": result.outcome.to_data() if result.outcome else None,
     }
 
 
@@ -157,9 +161,12 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "parent_session_id": payload.parent_session_id,
             "through_sequence": payload.through_sequence,
             "messages": [_model_message_to_data(message) for message in payload.messages],
+            "protected_tail_messages": payload.protected_tail_messages,
         }
     if isinstance(payload, UserMessagePayload):
         return {"content": payload.content}
+    if isinstance(payload, ContextWindowSelectedPayload):
+        return {"omitted_turn_ids": list(payload.omitted_turn_ids)}
     if isinstance(payload, TurnRetrievalRecordedPayload):
         return {
             "outcome": payload.outcome,
@@ -214,6 +221,9 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
                 "tool_name": rule.tool_name,
                 "target_kind": rule.target_kind.value,
                 "target": rule.target,
+                "args_prefix": list(rule.args_prefix),
+                "cwd": rule.cwd,
+                "environment_id": rule.environment_id,
             }
         }
     if isinstance(payload, PermissionRuleRevokedPayload):
@@ -327,6 +337,24 @@ def _evidence_record_from_data(data: JsonObject) -> RetrievalEvidenceRecord:
 
 def _tool_result(data: JsonObject) -> ToolResult:
     error_code = optional_string(data, "error_code")
+    raw_outcome = data.get("outcome")
+    outcome = None
+    if raw_outcome is not None:
+        value = require_object(raw_outcome, "outcome")
+        for key in ("completed", "observed_failure", "cancelled", "requires_stop"):
+            if not isinstance(value.get(key), bool):
+                raise ValueError(f"{key} must be boolean")
+        code = optional_string(value, "error_code")
+        outcome = ToolOutcome(
+            data=require_object(value.get("data"), "data"),
+            completed=value["completed"] is True,
+            effect=require_string(value, "effect"),
+            observed_failure=value["observed_failure"] is True,
+            error_code=ToolErrorCode(code) if code else None,
+            message=require_string(value, "message"),
+            cancelled=value["cancelled"] is True,
+            requires_stop=value.get("requires_stop") is True,
+        )
     return ToolResult(
         require_string(data, "call_id"),
         require_string(data, "tool_name"),
@@ -336,6 +364,7 @@ def _tool_result(data: JsonObject) -> ToolResult:
         error_message=optional_string(data, "error_message"),
         duration_ms=require_integer(data, "duration_ms"),
         metadata=require_object(data.get("metadata"), "metadata"),
+        outcome=outcome,
     )
 
 
@@ -370,6 +399,7 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
             messages=tuple(
                 _model_message(require_object(item, "message")) for item in raw_messages
             ),
+            protected_tail_messages=require_integer(data, "protected_tail_messages", 0),
         )
     if event_type is RuntimeEventType.USER_MESSAGE:
         return UserMessagePayload(require_string(data, "content"))
@@ -424,6 +454,13 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
         )
     if event_type is RuntimeEventType.TOOL_CALL_REQUESTED:
         return ToolCallRequestedPayload(_tool_call(require_object(data.get("call"), "call")))
+    if event_type is RuntimeEventType.CONTEXT_WINDOW_SELECTED:
+        return ContextWindowSelectedPayload(
+            tuple(
+                require_string({"id": value}, "id")
+                for value in require_array(data.get("omitted_turn_ids"), "omitted_turn_ids")
+            )
+        )
     if event_type is RuntimeEventType.PERMISSION_REQUESTED:
         request = require_object(data.get("request"), "request")
         return PermissionRequestedPayload(
@@ -452,6 +489,12 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
                 tool_name=require_string(rule, "tool_name"),
                 target_kind=PermissionTargetKind(require_string(rule, "target_kind")),
                 target=require_string(rule, "target"),
+                args_prefix=tuple(
+                    require_string({"arg": value}, "arg")
+                    for value in require_array(rule.get("args_prefix", []), "args_prefix")
+                ),
+                cwd=optional_string(rule, "cwd") or "",
+                environment_id=optional_string(rule, "environment_id") or "",
             )
         )
     if event_type is RuntimeEventType.PERMISSION_RULE_REVOKED:
@@ -504,7 +547,7 @@ def event_from_data(data: JsonObject) -> RuntimeEvent:
     """Validate and reconstruct one schema-v2 canonical event."""
 
     schema_version = require_integer(data, "schema_version")
-    if schema_version != 2:
+    if schema_version != 3:
         raise SessionError(
             SessionErrorCode.UNSUPPORTED_SCHEMA,
             f"Unsupported schema version: {schema_version}",

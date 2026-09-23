@@ -1,4 +1,4 @@
-"""Canonical runtime event schema version 2."""
+"""Canonical runtime event schema version 3."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,6 +26,7 @@ class RuntimeEventType(StrEnum):
     SESSION_RENAMED = "session_renamed"
     RECOVERY_SNAPSHOT = "recovery_snapshot"
     USER_MESSAGE = "user_message"
+    CONTEXT_WINDOW_SELECTED = "context_window_selected"
     TURN_RETRIEVAL_RECORDED = "turn_retrieval_recorded"
     ASSISTANT_MESSAGE_COMPLETED = "assistant_message_completed"
     TOOL_CALL_REQUESTED = "tool_call_requested"
@@ -62,6 +63,11 @@ class RecoverySnapshotPayload:
     parent_session_id: str
     through_sequence: int
     messages: tuple[ModelMessage, ...]
+    protected_tail_messages: int = 0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.protected_tail_messages <= len(self.messages):
+            raise ValueError("Invalid recovery snapshot protected tail")
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,13 @@ class UserMessagePayload:
     """A user message accepted by the coordinator."""
 
     content: str
+
+
+@dataclass(frozen=True, slots=True)
+class ContextWindowSelectedPayload:
+    """History omitted from a model request, without deleting session facts."""
+
+    omitted_turn_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +254,7 @@ RuntimePayload: TypeAlias = (
     | SessionRenamedPayload
     | RecoverySnapshotPayload
     | UserMessagePayload
+    | ContextWindowSelectedPayload
     | TurnRetrievalRecordedPayload
     | AssistantMessageCompletedPayload
     | ToolCallRequestedPayload
@@ -279,10 +293,10 @@ class RuntimeEvent:
         event_type: RuntimeEventType,
         payload: RuntimePayload,
     ) -> "RuntimeEvent":
-        """Create a schema-v2 event with a unique ID and UTC timestamp."""
+        """Create a schema-v3 event with a unique ID and UTC timestamp."""
 
         return cls(
-            schema_version=2,
+            schema_version=3,
             event_id=str(uuid4()),
             session_id=session_id,
             turn_id=turn_id,

@@ -9,6 +9,7 @@ from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     CitationRecord,
+    ContextWindowSelectedPayload,
     ModelUsageRecordedPayload,
     RuntimeEventType,
     ToolCallRequestedPayload,
@@ -25,7 +26,11 @@ from jdagent.domain.model import (
     ToolCallDelta,
     UsageReported,
 )
-from jdagent.domain.tools import ToolCall, ToolExecutionContext
+from jdagent.domain.tools import (
+    ToolCall,
+    ToolExecutionContext,
+)
+from jdagent.eventing import close_pending_calls
 from jdagent.knowledge.citation import finalize_answer, repair_message
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
@@ -41,8 +46,9 @@ class ModelEventObserver(Protocol):
 class LoopLimits:
     """Hard call-count limits for one turn."""
 
-    max_model_calls: int = 8
-    max_tool_calls: int = 16
+    max_model_calls: int = 16
+    max_tool_calls: int = 32
+    max_failure_recoveries: int = 2
 
     def __post_init__(self) -> None:
         if self.max_model_calls <= 0 or self.max_tool_calls <= 0:
@@ -120,8 +126,14 @@ class AgentLoop:
         model_calls = 0
         tool_calls = 0
         text_parts: list[str] = []
-        seen_call_ids: set[str] = set()
+        seen_call_ids = {
+            call.call_id
+            for event in self._journal.events
+            if isinstance(event.payload, AssistantMessageCompletedPayload)
+            for call in event.payload.tool_calls
+        }
         repaired = False
+        observed_failures = 0
 
         while True:
             if cancellation.cancelled:
@@ -162,6 +174,13 @@ class AgentLoop:
                     text_parts,
                 )
 
+            omitted = request.metadata.get("omitted_turn_ids")
+            if omitted:
+                await self._journal.record(
+                    turn_id,
+                    RuntimeEventType.CONTEXT_WINDOW_SELECTED,
+                    ContextWindowSelectedPayload(tuple(omitted.split(","))),
+                )
             model_calls += 1
             response_text: list[str] = []
             response_calls: list[ToolCall] = []
@@ -304,6 +323,18 @@ class AgentLoop:
                             text_parts,
                         )
                     repaired = True
+                    if cancellation.cancelled or model_calls >= self._limits.max_model_calls:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.CANCELLED
+                            if cancellation.cancelled
+                            else StopReason.LIMIT_REACHED,
+                            "cancelled" if cancellation.cancelled else "model_call_limit",
+                            "Citation repair cannot start",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
                     try:
                         repair_request = self._context_builder.build(
                             self._journal.events,
@@ -328,16 +359,65 @@ class AgentLoop:
                     try:
                         async with asyncio.timeout(repair_request.settings.timeout_seconds):
                             async for event in self._model.stream(repair_request):
+                                if cancellation.cancelled:
+                                    raise asyncio.CancelledError
                                 if isinstance(event, TextDelta):
                                     repair_text.append(event.text)
                                 elif isinstance(event, ResponseCompleted):
-                                    repair_completed = True
+                                    repair_completed = event.finish_reason == "stop"
+                                elif isinstance(event, (ToolCallCompleted, ToolCallDelta)):
+                                    return await self._model_protocol_failure(
+                                        turn_id,
+                                        "Citation repair cannot request tools",
+                                        model_calls,
+                                        tool_calls,
+                                        text_parts,
+                                    )
+                                elif isinstance(event, UsageReported):
+                                    await self._journal.record(
+                                        turn_id,
+                                        RuntimeEventType.MODEL_USAGE_RECORDED,
+                                        ModelUsageRecordedPayload(
+                                            self._provider_name, repair_request.model, event.usage
+                                        ),
+                                    )
+                                else:
+                                    return await self._fail(
+                                        turn_id,
+                                        StopReason.MODEL_ERROR,
+                                        event.category.value,
+                                        event.message,
+                                        model_calls,
+                                        tool_calls,
+                                        text_parts,
+                                    )
                     except TimeoutError:
                         return await self._fail(
                             turn_id,
                             StopReason.MODEL_ERROR,
                             ModelErrorCategory.TIMEOUT.value,
                             "Model call timed out",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                    except asyncio.CancelledError:
+                        await self._record_failure(
+                            turn_id,
+                            StopReason.CANCELLED,
+                            "cancelled",
+                            "Citation repair cancelled",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
+                        raise
+                    except Exception as error:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.MODEL_ERROR,
+                            "provider_internal",
+                            f"Citation repair failed: {type(error).__name__}",
                             model_calls,
                             tool_calls,
                             text_parts,
@@ -454,6 +534,29 @@ class AgentLoop:
                     RuntimeEventType.TOOL_EXECUTION_COMPLETED,
                     ToolExecutionCompletedPayload(result),
                 )
+                if result.stop_turn:
+                    cancelled = result.outcome is not None and result.outcome.cancelled
+                    return await self._fail(
+                        turn_id,
+                        StopReason.CANCELLED if cancelled else StopReason.LIMIT_REACHED,
+                        "cancelled" if cancelled else "uncertain_side_effect",
+                        "Tool execution stopped the turn",
+                        model_calls,
+                        tool_calls,
+                        text_parts,
+                    )
+                if result.outcome is not None and result.outcome.observed_failure:
+                    observed_failures += 1
+                    if observed_failures > self._limits.max_failure_recoveries:
+                        return await self._fail(
+                            turn_id,
+                            StopReason.LIMIT_REACHED,
+                            "failure_recovery_limit",
+                            "Failure recovery budget exhausted",
+                            model_calls,
+                            tool_calls,
+                            text_parts,
+                        )
 
     async def _model_protocol_failure(
         self,
@@ -513,6 +616,7 @@ class AgentLoop:
         text_parts: list[str],
     ) -> None:
         del text_parts
+        await close_pending_calls(self._journal, turn_id)
         await self._journal.record(
             turn_id,
             RuntimeEventType.TURN_FAILED,

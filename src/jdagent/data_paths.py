@@ -126,7 +126,7 @@ class DataPaths:
             user_config_file=actual_config_root / application_name / "config.toml",
             project_config_file=canonical / ".jdagent" / "config.toml",
             project_directory=project_directory,
-            sessions_directory=project_directory / "sessions",
+            sessions_directory=project_directory / "sessions-v4",
             catalog_index=project_directory / "catalog-index.json",
             input_history=project_directory / "input-history",
             knowledge_directory=knowledge_directory,

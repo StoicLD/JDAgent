@@ -21,6 +21,7 @@ class ApprovalScope(StrEnum):
     ONCE = "once"
     SESSION_FILE = "session_file"
     SESSION_DIRECTORY = "session_directory"
+    SESSION_COMMAND = "session_command"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class ApprovalChoice:
 
     decision: ApprovalDecision
     scope: ApprovalScope = ApprovalScope.ONCE
+    prefix_length: int = 0
 
     def __post_init__(self) -> None:
         if self.decision is ApprovalDecision.REJECT and self.scope is not ApprovalScope.ONCE:
@@ -51,6 +53,33 @@ class ScopedApproval:
         choice = await self._choices.request(request)
         if choice.decision is ApprovalDecision.REJECT or choice.scope is ApprovalScope.ONCE:
             return ApprovalOutcome(choice.decision)
+        if choice.scope is ApprovalScope.SESSION_COMMAND:
+            args = request.display.get("args")
+            program = request.display.get("program")
+            cwd = request.display.get("cwd")
+            environment_id = request.display.get("environment_id")
+            if (
+                not isinstance(args, list)
+                or not 1 <= choice.prefix_length <= len(args)
+                or not isinstance(program, str)
+                or not isinstance(cwd, str)
+                or not isinstance(environment_id, str)
+                or not request.session_id
+            ):
+                return ApprovalOutcome(ApprovalDecision.REJECT)
+            return ApprovalOutcome(
+                ApprovalDecision.APPROVE,
+                SessionPermissionRule(
+                    str(uuid4()),
+                    request.session_id,
+                    request.tool_name,
+                    PermissionTargetKind.COMMAND,
+                    program,
+                    tuple(str(value) for value in args[: choice.prefix_length]),
+                    cwd,
+                    environment_id,
+                ),
+            )
         if not request.session_id or request.target is None:
             return ApprovalOutcome(ApprovalDecision.REJECT)
         target = PurePosixPath(request.target)

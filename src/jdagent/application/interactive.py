@@ -28,6 +28,7 @@ from jdagent.knowledge.catalog import KnowledgeCatalog
 from jdagent.knowledge.errors import KnowledgeError
 from jdagent.observability import TraceProjection
 from jdagent.ports import SessionPort
+from jdagent.tools.command_output import CommandLogs
 from jdagent.tools.permissions import active_session_rules
 
 
@@ -43,6 +44,7 @@ class CommandName(StrEnum):
     PERMISSIONS = "permissions"
     TRACE = "trace"
     KNOWLEDGE = "knowledge"
+    LOGS = "logs"
     EXIT = "exit"
 
 
@@ -138,6 +140,7 @@ class InteractiveContext:
     max_context_tokens: int | None = None
     knowledge_catalog: Path | None = None
     knowledge_backups: Path | None = None
+    command_output_directory: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +174,7 @@ def parse_user_action(raw: str) -> UserAction:
 _HELP = (
     "/help /status /new /sessions /resume <name|id> /rename <name> "
     "/permissions [revoke <rule-id>] /knowledge status|bindings|sources /trace /exit\n"
+    "/logs clear (clear current session command output)\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
@@ -413,6 +417,16 @@ class InteractiveApplication:
                 )
             elif action.name is CommandName.PERMISSIONS:
                 await self._permissions(action.arguments)
+            elif action.name is CommandName.LOGS:
+                if action.arguments != ("clear",) or self._context.command_output_directory is None:
+                    raise CommandError("usage: /logs clear")
+                session_id = self._require_session()
+                await asyncio.to_thread(
+                    CommandLogs(self._context.command_output_directory).clear, session_id
+                )
+                await self._presenter.publish(
+                    UiEvent(UiEventKind.INFO, "Session command output cleared")
+                )
             elif action.name is CommandName.KNOWLEDGE:
                 await self._knowledge(action.arguments)
             elif action.name is CommandName.TRACE:
