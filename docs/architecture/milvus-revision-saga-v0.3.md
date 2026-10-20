@@ -2,6 +2,9 @@
 
 状态：`Proposed`
 
+当前阅读提示：本文保留尚待批准的详细合同。现有 Saga 恢复、删除和 Milvus 适配器
+仍有工程缺口，见[知识模块](../modules/knowledge.md)；合同目标不代表已通过真实服务验证。
+
 日期：2026-08-30
 
 关联架构：[高层设计 §7–§9、§8](v0.3-knowledge-retrieval.md)

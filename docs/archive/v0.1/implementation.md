@@ -1,5 +1,9 @@
 # v0.1 实施计划
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/runtime.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Approved`
 
 批准日期：2026-08-12
@@ -12,14 +16,14 @@
 - M10a：Ruff、Pyright strict、`61 passed, 2 skipped` 的默认测试及 `63 passed` 的显式 live
   全量测试已通过。没有已知代码级阻塞 finding。
 - M10b：学习者已于 2026-08-20 完成并确认人工学习出口，记录见
-  [v0.1 学习检查表](../learning/v0.1-learning-checklist.md)。
+  [v0.1 学习检查表](../../learning/v0.1-learning-checklist.md)。
 - 当前结论：工程实现、真实 Provider 验收和人工学习出口均已完成；v0.1 最终验收通过。工程
-  证据见 [v0.1 实现审查](../reviews/v0.1-implementation-review.md)。
+  证据见 [v0.1 实现审查](../../reviews/v0.1-implementation-review.md)。
 
 ## 前置批准与阶段闸门
 
-- [v0.1 需求](../requirements/v0.1-agent-runtime.md) 已于 2026-08-09 获得用户批准。
-- 开始 M0 前，用户需批准 [Agent Runtime 架构](../architecture/agent-runtime.md)、[Runtime 核心契约](../architecture/runtime-contracts.md)、[ModelPort 设计](../architecture/model-port.md)、[Python 工程规范](../development/python-style.md) 和本实施计划。
+- [v0.1 需求](agent-runtime-requirements.md) 已于 2026-08-09 获得用户批准。
+- 开始 M0 前，用户需批准 [Agent Runtime 架构](agent-runtime.md)、[Runtime 核心契约](runtime-contracts.md)、[ModelPort 设计](../../architecture/model-port.md)、[Python 工程规范](../../development/python-style.md) 和本实施计划。
 - 开始 M0 前确认 Python import package 名和 distribution 名；二者可以相同，也可以显式区分。
 - DeepSeek model ID、base URL 和真实集成测试配置只在进入 M9 前确认，不阻塞离线 Runtime 的 M0–M8。
 - API Key 只由用户在本机安全提供；显式 Key 优先，缺省时可读取用户批准的工作区

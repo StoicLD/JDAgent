@@ -1,14 +1,18 @@
 # v0.2 CLI 实施计划
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/cli.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Implemented`（M0–M10 全部关闭）
 
 批准日期：2026-08-20
 
 评审修订日期：2026-08-20（`REV-20260820-001`）
 
-适用需求：[v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md)
+适用需求：[v0.2 CLI 体验需求](cli-requirements.md)
 
-适用架构：[CLI 应用层架构](../architecture/cli-application.md)
+适用架构：[CLI 应用层架构](cli-application.md)
 
 ## 当前状态
 
@@ -207,7 +211,7 @@ legacy console 与真实窗口关闭仍保留为人工环境观察项，不改�
 - 口述 Prompt、斜杠命令、Tool Approval、取消和 Headless 的五条数据流。
 - 使用 Trace 与 Session 事实区分物理尾部损坏、逻辑未完成 Turn 和副作用不确定 Turn。
 - 解释为什么 Prompt Toolkit/Rich 类型不能进入 Core，以及 Catalog 索引为何不是事实源。
-- 退出条件：完成 [v0.2 学习检查表](../learning/v0.2-learning-checklist.md)，未知项诚实进入后续版本。
+- 退出条件：完成 [v0.2 学习检查表](../../learning/v0.2-learning-checklist.md)，未知项诚实进入后续版本。
 
 ## 测试矩阵
 

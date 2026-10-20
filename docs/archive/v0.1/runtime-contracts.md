@@ -1,5 +1,9 @@
 # Runtime 核心契约
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/runtime.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Approved`
 
 批准日期：2026-08-12
@@ -209,7 +213,7 @@ explicit Session Recovery
    包含安全字节偏移、backup 标识和诊断；不得输出记录正文。
 7. 物理修复完成后仍须执行逻辑 Turn 分类；`REPAIRED` 不等于 Session 可以自动继续。
 
-逻辑恢复继续遵循 [CLI 应用层架构](cli-application.md) 的物理×逻辑分类。写风险工具存在
+逻辑恢复继续遵循 [CLI 应用层架构](../v0.2/cli-application.md) 的物理×逻辑分类。写风险工具存在
 `tool_execution_started` 而缺少对应 `tool_execution_completed` 时，副作用状态不确定，必须
 阻止自动继续。异常恢复 Session 的持久表示和 ContextBuilder 投影在 M3 开工闸门单独批准。
 

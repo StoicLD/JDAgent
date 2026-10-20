@@ -1,10 +1,14 @@
 # v0.4 工具执行层设计提案
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/tools.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Proposed`
 
 更新日期：2026-09-23
 
-依据：[Q1–Q23 设计讨论](../plans/v0.4-tool-execution-design-discussion.md)。访谈中已确认的
+依据：[Q1–Q23 设计讨论](design-discussion.md)。访谈中已确认的
 取舍以该记录为准；本文把它们组织为可审阅的设计。具体字段、默认限额和实现阶段是 AI 提案，
 尚未整体获批，不构成实现授权。Q23 已裁定跨版本工程门禁按实际依赖划分。
 
@@ -352,11 +356,11 @@ RAG 失败与本版新回归，不能以旧失败清单为由降低新改动的�
 
 ### 10.2 先固定调用步骤，再让真实模型自行完成任务
 
-复用 [FakeModelPort](../../src/jdagent/adapters/fake.py) 和
-[测试 Coordinator 工厂](../../tests/runtime_factory.py)，预设发现、读取、搜索、修改、运行
+复用 [FakeModelPort](../../../src/jdagent/adapters/fake.py) 和
+[测试 Coordinator 工厂](../../../tests/runtime_factory.py)，预设发现、读取、搜索、修改、运行
 验证的模型事件；其下仍使用真实工具及临时测试项目。根据前一步实测结果填入读取版本等动态
 参数，避免伪造版本绕过检查。这样失败能定位到工程链路，不混入模型随机选择。
-已有 [Live 测试入口](../../tests/integration/test_deepseek_live.py) 可继续扩充真实任务评估；
+已有 [Live 测试入口](../../../tests/integration/test_deepseek_live.py) 可继续扩充真实任务评估；
 当前的计算器往返测试不能替代新的完整主线。
 
 一个具体主线案例：小项目中 `sum_prices` 把求和写成减法，另有同名文本作干扰。测试先确认
@@ -391,7 +395,7 @@ RAG 失败与本版新回归，不能以旧失败清单为由降低新改动的�
 4. **命令闭环**：进程管理、Session 前缀规则、输出日志、超时取消与清理；完成真实 Windows
    故障实验，再接入预算内失败修复。
 5. **验收与学习出口**：固定 Eval、真实 DeepSeek、基础回归、安装与相称独立评审；学习者完成
-   [专属学习清单](../learning/v0.4-tools-learning-checklist.md)。工程与学习分别记状态。
+   [专属学习清单](../../learning/v0.4-tools-learning-checklist.md)。工程与学习分别记状态。
 
 本文不直接创建 GitHub Issues，不执行代码实现、commit 或发布。设计共识形成后再按已配置的
 任务跟踪约定拆分任务。无需为此次常规模块扩展增加一份重复既有模型无关 ADR 的新 ADR。
@@ -407,10 +411,10 @@ RAG 失败与本版新回归，不能以旧失败清单为由降低新改动的�
   新测试或实验结果，不能把设计要求写成已实现的保证。
 - **保留取舍**：首版不能覆盖不可信代码执行、大文件/多编码编辑、长驻交互进程和多平台。
 
-来源：逐题记录、[当前项目状态](../context/current.md)、
-[模块交付工作流](../development/module-delivery-workflow.md)、
-[工具领域类型](../../src/jdagent/domain/tools.py)、
-[Session 编解码](../../src/jdagent/adapters/jsonl_session.py)、
-[通用 Loop](../../src/jdagent/core/loop.py)、
-[路径解析](../../src/jdagent/tools/workspace.py)。外部平台实现资料在详细机制选型时补充，本文
+来源：逐题记录、[当前项目状态](../context/current-before-2026-10-20.md)、
+[模块交付工作流](../../development/module-delivery-workflow.md)、
+[工具领域类型](../../../src/jdagent/domain/tools.py)、
+[Session 编解码](../../../src/jdagent/adapters/jsonl_session.py)、
+[通用 Loop](../../../src/jdagent/core/loop.py)、
+[路径解析](../../../src/jdagent/tools/workspace.py)。外部平台实现资料在详细机制选型时补充，本文
 未据未经核验的 Windows API 行为作实现承诺。

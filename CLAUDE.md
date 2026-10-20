@@ -1,23 +1,4 @@
-# Claude 项目入口
+# Claude 兼容入口
 
-本文件是 Claude Code 从产品 Git 仓库根启动时的原生入口。本仓库是需求、架构、决策、代码、
-测试、验收证据、协作规则和项目当前状态的唯一权威事实来源。
-
-开始任务前依次执行：
-
-1. 阅读共同的[项目文档索引](docs/context/index.md)。
-2. 阅读[当前项目状态](docs/context/current.md)。
-3. 阅读[Agent 协作与评审规则](docs/development/agent-collaboration.md)。
-4. 只打开索引中与当前设计、实现、诊断或评审有关的权威文档。
-5. 检查本仓库的 branch、HEAD、remote、工作树和未提交变更。
-
-Claude 主要侧重代码实现和评审，也可以按任务需要参与需求、架构与方案设计；这是默认侧重，
-不是固定职责。承担实现任务时按已批准范围写入并验证；承担正式评审时在该次任务中默认只读，
-固定评审对象并保持独立。不得读取仓库外的同级 Agent Context、其他工具的私有状态或尚未定稿
-的独立评审。
-
-若入口链接缺失、权威事实冲突、评审对象不固定或 Git 状态无法确认，停止写入和定论，保留现场
-并报告证据边界。
-
-使用工程技能跟踪任务、开展领域建模或架构分析前，阅读
-[AGENTS.md 的 Agent skills 配置入口](AGENTS.md#agent-skills)。
+项目规则统一维护在 [AGENTS.md](AGENTS.md)，按其中规定的启动顺序执行。
+共同文档入口为[文档 Map](docs/map.md)；[旧索引路径](docs/context/index.md)保留兼容导航。

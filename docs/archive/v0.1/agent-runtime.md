@@ -1,5 +1,9 @@
 # Agent Runtime 架构
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/runtime.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Approved`
 
 批准日期：2026-08-12
@@ -78,11 +82,11 @@ flowchart LR
 - Interactive Application 管理当前 Session 引用和
   `STARTING/IDLE/RUNNING_TURN/WAITING_APPROVAL/RUNNING_TOOL/CANCELLING/EXITING` 短暂状态，
   不保存消息历史副本；Presenter 使用的 UI 标签映射以
-  [CLI 应用层架构](cli-application.md#interactive-application)为准。
+  [CLI 应用层架构](../v0.2/cli-application.md#interactive-application)为准。
 - Terminal Adapter 将输入转换为有类型用户动作；Prompt Toolkit 类型不越过 Adapter seam。
 - Presentation Module 将同源 Runtime Event 转换为 Rich、纯文本或 JSON 输出；Presenter 不改变事实。
 - Session Catalog 提供发现、选择和命名用例；其索引是可重建投影，不替代 Session 生命周期事实。
-- 详细设计见 [CLI 应用层架构](cli-application.md)。
+- 详细设计见 [CLI 应用层架构](../v0.2/cli-application.md)。
 
 ### Agent Core
 

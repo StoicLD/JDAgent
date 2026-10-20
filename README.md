@@ -1,151 +1,61 @@
 # JDAgentProject
 
-状态：`Implemented`
+状态：`Implemented`（项目说明）
 
-版本状态：v0.1 `Implemented`；v0.2 `Implemented`（工程与学习门禁全部关闭）；v0.3
-`Implemented（工程复核未通过，学习验证已完成）`。
+JDAgent 是一个以实践学习 Agent 核心机制的 Python 项目，先建设通用 Runtime，
+后续再通过独立领域包增加求职能力。当前已有模型／工具循环、持久 CLI、RAG P1 和
+八工具执行层；RAG 与 v0.4 工具阶段仍有验收缺口。
 
-验收状态：v0.1、v0.2 均已完成；v0.3 P1 核心代码已合入 `0.3.0`，2026-09-05 复核仍有工程缺口。
-本轮修复后离线 `197 passed, 1 failed, 5 skipped`；唯一失败是正确计分后的检索质量门槛。
-详见[实现审查](docs/reviews/REV-20260905-001-v0.3-implementation-audit.md)与
-[改进方案（Proposed）](docs/plans/v0.3-rag-improvement-proposal.md)。学习出口已于 2026-09-16
-由项目所有者裁定关闭，详见[学习完成记录](docs/learning/v0.3-rag-learning-checklist.md)。
+从[文档 Map](docs/map.md)按模块了解当前实现；
+[当前状态](docs/context/current.md)记录待办与门禁，
+[验证与验收](docs/modules/verification.md)提供原始证据入口。
+包版本仍为 `0.3.0`，功能阶段与包版本分别记录。
 
-JDAgent 是一个通过实践学习 Agent 核心机制的项目，当前工作名尚不代表未来公开发布名称。
+## 快速开始
 
-项目分为两个阶段：
-
-1. 构建领域无关、模型无关、可观察且可测试的通用 Agent Runtime，系统掌握 LLM、Function Calling、工具、权限、会话、上下文、记忆、RAG 和 MCP 等机制。
-2. 在通用 Runtime 上增加求职领域包，接入职位、面经和技术经验来源，并针对采集、检索、分析和质量评测做领域优化。
-
-## 学习驱动的模块交付
-
-JDAgent 的后续版本不以功能数量为首要结果。每个实质性模块必须同时交付可工作的端到端能力、
-明确的 Interface 与 Trade-off、实现前后 Eval、故障实验，以及由学习者本人完成的闭卷学习出口。
-
-AI 可以作为资深指导者、实现者、批判者和模拟面试官承担主要代码实现；学习者负责在实现前形成
-初始模型和候选方案，决定范围与取舍，并在实现后依据 Diff、测试、Trace 和实验控制与解释产出。
-详细规则见[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，每个模块从
-[模块学习检查表模板](docs/learning/module-learning-checklist-template.md)实例化专属出口。
-
-v0.2 学习门禁已经关闭。v0.3 RAG 与来源可追踪知识检索的高层设计和
-[分阶段实施计划](docs/plans/v0.3-rag-implementation.md)已于 2026-08-30 获批，P1 核心实现已存在；M0
-详细需求、合同与 Eval 规格仍待批准；学习验证已于 2026-09-16 裁定完成，工程缺口继续单独跟踪。
-项目所有者于 2026-09-16 调整后续顺序：v0.4 Tool Registry & Function Calling，v0.5 长期记忆
-生命周期，v0.6 Context Orchestration 与 Compaction；MCP 保留为后续候选。v0.4 将在已有三工具
-和调用闭环上增加实用工具、完善模块边界，为后续能力提供基础。2026-09-23 已完成 23 题设计
-访谈并形成[工具执行层设计提案](docs/architecture/v0.4-tool-execution.md)（`Proposed`），覆盖
-文件操作、受信任 Windows 命令执行、失败处理与真实模型验收。随后所有者授权实施，八工具
-与离线整链已落地；真实 DeepSeek 与学习门禁尚未关闭，见[实现记录](docs/plans/v0.4-implementation.md)。
-v0.3 遗留项按实际依赖判断是否阻塞 v0.4，无关 RAG 缺口独立跟踪，具体启动边界见
-[v0.2 之后的模块学习路线](docs/plans/post-v0.2-learning-roadmap.md)。
-
-v0.1 通用 Agent Runtime 已完成最终验收，包含模型无关 `ModelPort`、Agent Loop、
-ContextBuilder、三种工具、权限审批、append-only JSONL Session、恢复、Trace、Fake Model
-与 DeepSeek Adapter。离线门禁、真实 DeepSeek 流式文本与 Tool Call 闭环、人工学习出口均已
-通过；MCP、RAG、长期记忆和求职领域包不属于 v0.1。
-
-v0.2 已实现可安装的持久交互式 CLI，包括增强型行式 REPL、九条内建斜杠命令、多 Session
-发现与恢复、可取消 Turn、可读审批、异常关闭恢复，以及稳定 text/json 输出。设计范围见
-[v0.2 CLI 体验需求](docs/requirements/v0.2-cli-experience.md) 和
-[CLI 应用层架构](docs/architecture/cli-application.md)。
-
-## Runtime / CLI 快速开始
-
-需要 Python 3.11 和 [uv](https://docs.astral.sh/uv/)：
+需要 Python 3.11+ 和 uv，在产品仓库根目录执行：
 
 ```powershell
 uv sync
 uv run jdagent
 ```
 
-不带 Prompt 时进入交互模式；使用 `/help` 查看命令，`/sessions` 发现当前 workspace 的会话，
-`/resume <名称或ID>` 恢复，`/exit` 正常退出并保留当前 Session。一个 workspace 可拥有多个
-Session；Session、输入历史和 Catalog 位于按 workspace identity 分区的本机用户数据目录，
-不污染工作区。
-
-默认 Provider 是 DeepSeek。离线开发和确定性测试应显式使用 Fake：
+无 Prompt 时进入交互模式，`/help` 查看命令，`/sessions` 查看会话，
+`/resume <名称或ID>` 恢复，`/exit` 退出并保留会话。
+默认使用 DeepSeek；离线体验显式选择 Fake：
 
 ```powershell
 uv run jdagent --provider fake
 uv run jdagent --provider fake --output json "离线测试"
 ```
 
-Headless text/json 输出和显式 Session 恢复示例：
+单次请求、JSON 输出和工作区工具范围示例：
 
 ```powershell
 uv run jdagent "解释 ModelPort"
 uv run jdagent --output json --show-trace "解释 ModelPort"
 uv run jdagent --session-id <SESSION_ID> "继续"
-```
-
-模型、base URL、模型超时、工具超时和可选硬上下文限制均可通过 CLI 参数配置；运行
-`uv run jdagent --help` 查看完整选项。
-
-DeepSeek Key 来源按以下顺序解析：
-
-1. `DEEPSEEK_API_KEY` 环境变量。
-2. 用户配置中的 `api_key_file`。
-3. 开发期默认文件 `../tmp/keys/deepseek-api-key.txt`。
-
-默认文件位于产品仓库之外，不得加入 Git；环境变量始终优先。生产或共享环境应使用批准的
-秘密管理方案，而不是依赖开发机文件。
-
-```powershell
-$env:DEEPSEEK_API_KEY = "..."
-uv run jdagent "用 calculator 计算 17 * 23"
-```
-
-写文件工具受用户/项目权限上限约束。交互审批可选择仅本次、当前 Session 的具体文件或目录；
-Session 规则在 `/exit` 后恢复同一 Session 时继续有效，可用 `/permissions` 查看和撤销，但新建
-Session 不继承。Headless 模式不会阻塞等待审批。读写路径始终限制在显式 workspace 内。
-
-## v0.4 工具执行
-
-Windows 上可使用 `calculator`、`find_files`、`read_file`、`search_text`、`create_file`、
-`edit_file`、`run_command` 和 `read_command_output`。读取返回完整文件 revision，编辑提交
-该 revision 与精确的旧/新文本；创建不会覆盖文件，编辑冲突要求重新读取。
-
-```powershell
 uv run jdagent --workspace E:\Projects\Example --tool-scope analyze
 uv run jdagent --workspace E:\Projects\Example --tool-scope edit
 uv run jdagent --workspace E:\Projects\Example --tool-scope execute --command-permission ask
 ```
 
-默认 execute。写入与命令需要审批；命令使用明确程序与 argv，拒绝直接执行 bat/cmd。
-Session 命令授权会展示固定前缀及允许变化的尾参，并受用户/项目 DENY 上限约束。
-命令仍在可信本机宿主运行，不提供代码沙箱。
+DeepSeek Key 优先取 `DEEPSEEK_API_KEY`，其次取用户配置的 `api_key_file`，
+最后回退开发文件 `../tmp/keys/deepseek-api-key.txt`。完整配置、11 条交互命令和
+数据位置见[CLI 与配置](docs/modules/cli.md)。
 
-命令输出保留在当前 workspace 的会话数据分区，模型可按 log_id 分段读取；`/logs clear`
-清空当前 Session 输出并保留清理标记。新格式使用 `sessions-v4`，旧会话数据保持原样，
-不会自动迁移。未知副作用会停止当前轮次，恢复时创建不继承许可的新会话并保留旧日志读取能力。
+Windows 八工具支持文件发现、读取、搜索、创建、精确编辑及命令执行。
+默认工具范围为 execute，文件写入与命令默认需要审批；命令在受信任宿主上运行，
+不提供代码沙箱。文件 revision、审批范围、进程清理和日志机制见[工具模块](docs/modules/tools.md)。
 
-## 质量门禁
+## 开发与学习
 
-```powershell
-uv run ruff format --check .
-uv run ruff check .
-uv run pyright
-uv run pytest -q
-```
+常规检查和真实服务测试入口见[验证与验收](docs/modules/verification.md)。
+最近保留的完整离线结果仍有一项 RAG Recall 失败；v0.4 真实三次主线仅 2/3 通过。
 
-真实 Provider 测试默认跳过。显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1` 后运行
-`tests/integration/test_deepseek_live.py` 与 Gold Answer/Citation Eval；测试同样遵循上述
-Key 优先级。v0.4 三次固定工具任务为 `tests/integration/test_v04_tools_live.py`；
-用户授权后已执行三次，2/3 通过，首次漏用 search_text；详见 [Live 验收记录](docs/reviews/v0.4-live-verification.md)。Milvus 来源生命周期 Live 需另设 `JDAGENT_RUN_RAG_LIVE=1`。
+后续实质性模块遵循[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，
+工程验收和学习出口分别判断。长期记忆与 Context / Compaction 的规划见
+[后续模块路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
-## 学习出口
-
-[v0.1 学习检查表](docs/learning/v0.1-learning-checklist.md) 已于 2026-08-20 完成。检查表包含
-闭卷架构图、Tool Call 数据流讲解和一个无需真实 API 的 Fake Model 超时 Trace 故障练习。
-
-[v0.2 CLI 学习检查表](docs/learning/v0.2-learning-checklist.md) 已于 2026-08-24 由项目所有者按
-学习范围裁定关闭：CLI/UI 不属于当前最优先的 Agent 核心学习内容，原练习保留为可选复习材料，
-不再阻塞 v0.3。[v0.3 RAG 学习检查表](docs/learning/v0.3-rag-learning-checklist.md) 已于 2026-09-16
-由项目所有者裁定学习验证完成；原清单保留为可选复习材料，学习门禁关闭，工程验收单独跟踪。
-
-恢复工作请依次阅读：
-
-1. [Agent 地图](AGENTS.md)
-2. [当前项目状态](docs/context/current.md)
-3. [项目文档索引](docs/context/index.md)
+Agent 开始工作按 [AGENTS.md](AGENTS.md) 进入 Map、当前状态和协作规则。
+旧版设计及已完成计划见[归档索引](docs/archive/README.md)。

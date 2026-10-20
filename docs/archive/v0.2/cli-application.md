@@ -1,14 +1,18 @@
 # CLI 应用层架构
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/cli.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Approved`
 
 批准日期：2026-08-20
 
 评审修订日期：2026-08-20（`REV-20260820-001`）
 
-适用需求：[v0.2 CLI 体验需求](../requirements/v0.2-cli-experience.md)
+适用需求：[v0.2 CLI 体验需求](cli-requirements.md)
 
-相关决策：[ADR-0004：CLI 应用层与终端 Adapter](../decisions/ADR-0004-cli-application-layer.md)
+相关决策：[ADR-0004：CLI 应用层与终端 Adapter](../../decisions/ADR-0004-cli-application-layer.md)
 
 ## 架构目标
 
@@ -405,7 +409,7 @@ Claude Code 文档是非规范性参考，用于观察成熟交互流程、职�
 - 进程生命周期：真实子进程加确定性故障同步点。
 
 测试通过相同接口观察行为，不穿透模块验证私有状态。详细阶段与退出条件见
-[v0.2 实施计划](../plans/v0.2-cli-implementation.md)。
+[v0.2 实施计划](implementation.md)。
 
 ## 延后边界
 

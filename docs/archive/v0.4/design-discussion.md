@@ -1,5 +1,9 @@
 # v0.4 工具执行层设计讨论
 
+> 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
+> 当前实现从[模块说明](../../modules/tools.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+
+
 状态：`Proposed`
 
 开始日期：2026-09-20
@@ -8,7 +12,7 @@
 
 本文记录项目所有者逐题讨论中的候选方向、已确认取舍和待决问题。单题结论不表示整个需求、架构
 或实施计划已获批准；当前只讨论和记录，不实现产品代码。收敛后形成范围、模块边界、核心契约与
-验收方案。既有路线见[模块学习路线](post-v0.2-learning-roadmap.md)。
+验收方案。既有路线见[模块学习路线](../../plans/post-v0.2-learning-roadmap.md)。
 
 访谈方式：项目所有者于 2026-09-20 将“每轮一题”调整为可合并独立问题；每轮 3–4 题，目标约
 20 题，总数包含 Q1、Q2 在内不超过 30 题。依赖尚未确定答案的问题留到后续轮次；已明确的
@@ -32,19 +36,19 @@
 核对 revision：`21a5aa4066dc0ea318f8949b8c0bd8cc4e62c909`。以下为代码与现有测试的静态核对，
 本次未运行测试，不构成新验收证据。
 
-- [AgentLoop](../../src/jdagent/core/loop.py) 通过 `ToolRuntimePort.execute()` 串行分派工具，
+- [AgentLoop](../../../src/jdagent/core/loop.py) 通过 `ToolRuntimePort.execute()` 串行分派工具，
   没有按工具名分支；请求与结果写入规范事件。
-- [Composition Root](../../src/jdagent/composition.py) 将 Registry 全量定义交给 ContextBuilder；
-  [ToolRuntime](../../src/jdagent/tools/runtime.py) 按注册名称查找，再校验参数与权限，没有独立的
+- [Composition Root](../../../src/jdagent/composition.py) 将 Registry 全量定义交给 ContextBuilder；
+  [ToolRuntime](../../../src/jdagent/tools/runtime.py) 按注册名称查找，再校验参数与权限，没有独立的
   本轮可用工具集合执行门禁。
-- [内建工具](../../src/jdagent/tools/builtins.py) 仅有计算器、全文读取与整文件写入。写入允许
+- [内建工具](../../../src/jdagent/tools/builtins.py) 仅有计算器、全文读取与整文件写入。写入允许
   覆盖，无修改冲突检查；没有本轮候选的文件发现、搜索、精确编辑或命令执行能力。
-- [工具类型](../../src/jdagent/domain/tools.py) 的 Handler 返回字符串，ToolResult 有通用
+- [工具类型](../../../src/jdagent/domain/tools.py) 的 Handler 返回字符串，ToolResult 有通用
   metadata，但尚未定义截断、冲突、进程结果或副作用状态合同。
 - 现有审批与 Session 允许规则主要围绕文件路径；审批摘要将非路径字符串表示为字符数，不能
   直接承担待设计的具体命令或编辑内容展示。
 - 文件 I/O 通过 `asyncio.to_thread()` 执行；Runtime 的 Handler 超时与取消不能据此证明底层
-  写入已停止。[现有控制测试](../../tests/test_runtime_controls.py) 使用可取消的异步等待，
+  写入已停止。[现有控制测试](../../../tests/test_runtime_controls.py) 使用可取消的异步等待，
   未证明线程写入或未来进程已停止。
 
 ## 逐题结论与待决项
@@ -66,7 +70,7 @@
 - 用户明确认为 sandbox 级隔离应作为独立开发模块；本次记录这一模块边界，不为该模块分配
   版本号或冻结方案。
 - 工作目录约束与审批不等于沙箱，项目受信任也不自动授予每次工具调用的执行许可。
-- 术语见[v0.4 工具执行语境](../context/v0.4-tools-glossary.md)。
+- 术语见[v0.4 工具执行语境](../../context/v0.4-tools-glossary.md)。
 
 ### Q3：平台范围
 
@@ -216,7 +220,7 @@
   现有读取路径天然兼容，可保留，但不为本版增加旧记录兼容工程。
 - 用户追问为何新增工具会影响 Session。核对结论：单纯增加注册项通常无需改旧 Session；
   本版另外调整结果合同与权限规则，而这些是已持久化的数据，可能涉及恢复兼容。
-- 代码证据：[JSONL Session](../../src/jdagent/adapters/jsonl_session.py) 的
+- 代码证据：[JSONL Session](../../../src/jdagent/adapters/jsonl_session.py) 的
   `_tool_result_to_data`（第 124 行）保存 `output/status/error_code/metadata` 等字段；
   `_tool_result`（第 328 行）要求 `output` 为字符串，并按现有枚举重建；`event_from_data`
   （第 503 行）只接受 schema v2。新增可选字段未必破坏读取，但更换必需字段、枚举或事件版本
@@ -253,7 +257,7 @@
   继续处理明确的验证失败。
 - Q19–Q22 已确定宿主控制命令环境、字面搜索、不要求旧 Session 恢复，以及真实 DeepSeek
   闭环作为必过验收。
-- [设计提案](../architecture/v0.4-tool-execution.md)汇合范围、模块 Interface、核心合同、失败
+- [设计提案](tool-execution-proposal.md)汇合范围、模块 Interface、核心合同、失败
   模型、默认限额建议与验收方案；单题已确认项和 AI 提出的具体默认值分开标记。
 - Q23 已确定按实际依赖阻塞，不要求先关闭无关的 v0.3 RAG 缺口。设计选择阶段收敛于 23 题，
   不再为技术事实追加偏好问题；文件并发提交和进程清理机制留待实施准备时验证。
@@ -262,7 +266,7 @@
 ## 2026-09-23 评审后的用户批注补充
 
 以下记录针对 Cursor 评审及维护方意见的后续澄清，不增加访谈题号，也不把提问视为批准。
-对应原始评审为 [REV-20260923-001](../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)。
+对应原始评审为 [REV-20260923-001](../../reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)。
 
 | 批注 | 对应事项 | 用户反馈及当前结论 |
 | --- | --- | --- |

@@ -9,7 +9,7 @@
 ## 阅读顺序
 
 1. 完成 `AGENTS.md` 规定的固定启动顺序。
-2. 通过 `docs/context/index.md` 定位当前任务涉及的领域、架构和合同。
+2. 通过[文档 Map](../map.md)定位当前任务涉及的模块、领域、架构和合同。
 3. 涉及知识检索时，阅读 `docs/context/v0.3-rag-glossary.md`。
 4. 阅读 `docs/decisions/` 中与当前任务有关的 ADR。
 
@@ -18,7 +18,8 @@
 - 技能中的 `CONTEXT.md`：对应索引指向的领域文档与词汇表。
 - 技能中的 `docs/adr/`：对应本仓库 `docs/decisions/`。
 - 新领域术语进入相应领域文档；新 ADR 沿用现有目录和编号约定。
-- 本次不另建 `CONTEXT.md`、`CONTEXT-MAP.md` 或 `docs/adr/`。
+- 当前实现说明维护在 `docs/modules/`，由 `docs/map.md` 统一索引；
+  `docs/context/index.md` 只保留兼容导航。继续复用既有词汇表与 `docs/decisions/`。
 
 ## 使用规则
 

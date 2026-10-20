@@ -54,14 +54,14 @@ v0.3 及后续核心模块的学习门禁。
 当前基线：v0.1 已实现 `ToolRegistry`、`ToolDefinition`、JSON Schema 参数校验、权限审批、
 超时与错误归一化，以及 `calculator`、`read_text_file`、`write_text_file`；ModelPort、Agent Loop
 和 Session 已支持 Tool Call / Tool Result 闭环。v0.4 的增量是扩展工具能力并完善这些边界。
-事实依据见[Runtime 核心契约](../architecture/runtime-contracts.md)、
+事实依据见[Runtime 核心契约](../archive/v0.1/runtime-contracts.md)、
 [ModelPort 设计](../architecture/model-port.md)与[工具运行时](../../src/jdagent/tools/runtime.py)。
 
 设计必须覆盖：
 
 - 新增工具解决的具体任务、输入/输出与调用示例；已确认文件发现、分段读取、字面搜索、创建、
   精确编辑及真实验证命令进入本版，具体命名和字段见待审阅的
-  [设计提案](../architecture/v0.4-tool-execution.md)，不在路线中重复冻结。
+  [设计提案](../archive/v0.4/tool-execution-proposal.md)，不在路线中重复冻结。
 - 工具定义、名称冲突、注册与装配、可用工具集合及 Schema 导出；明确 Registry、Tool Runtime、
   ModelPort、Agent Loop 与各 Handler 的职责和依赖方向。
 - Function Calling 的完整数据流：Schema 发给模型、流式参数组装、完整调用校验、执行、结果
@@ -128,10 +128,12 @@ v0.3 RAG、v0.4 Tools 和 v0.5 Memory 只实现各自端到端结果所需的最
 
 ## 2026-09-23 范围收敛与启动裁定
 
-- v0.4 访谈收敛于 23 题，已形成[设计提案](../architecture/v0.4-tool-execution.md)和
+- v0.4 访谈收敛于 23 题，已形成[设计提案](../archive/v0.4/tool-execution-proposal.md)和
   [专属学习清单](../learning/v0.4-tools-learning-checklist.md)，状态为 `Proposed`；具体字段与
-  默认限额仍待整体审阅，当前没有实现授权。
-- 项目所有者在[Q23](v0.4-tool-execution-design-discussion.md) 选择按依赖划分：影响工具执行、
+  默认限额在该次收敛时仍待整体审阅，当时尚未获得实现授权。随后所有者于同日明确授权实施，
+  八工具代码及离线链已实现；授权、合同细化与尚未关闭的验收见
+  [v0.4 实现记录](v0.4-implementation.md)和[当前状态](../context/current.md)。
+- 项目所有者在[Q23](../archive/v0.4/design-discussion.md) 选择按依赖划分：影响工具执行、
   权限、Session 和基础回归的遗留问题须在相关实现前处理；无关 RAG 缺口独立跟踪，允许
   v0.4 在满足自身设计与实现门禁后推进，不要求先关闭全部 v0.3 工程问题。
 - 此裁定只适用于 v0.3 → v0.4，不宣称 v0.3 工程验收通过，不豁免新回归或后续模块门禁。

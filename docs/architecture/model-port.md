@@ -4,13 +4,18 @@
 
 批准日期：2026-08-12
 
+当前实现见[模型模块](../modules/models.md)；本设计中的 Provider 列举是扩展边界，
+现有真实生成模型适配器为 DeepSeek，Fake 用于测试。
+
 ## 目的
 
 `ModelPort` 是 Agent Core 使用模型能力的唯一接口。Core 只理解项目定义的请求、事件、能力和错误；DeepSeek、OpenAI、Anthropic、本地模型和 Fake Model 通过各自 Adapter 实现相同契约。
 
 模型无关不等于抹平模型差异。通用能力进入稳定领域类型，Provider 特性通过能力声明和受控扩展表达，不能把原始 SDK 对象泄漏给 Core。
 
-本文件只定义模型边界；跨 Runtime 的停止原因、分层错误映射和事件持久化规则见 [Runtime 核心契约](runtime-contracts.md)。
+本文件只定义模型边界；当前停止条件见[运行时模块](../modules/runtime.md)，
+持久化与格式见[会话模块](../modules/sessions.md)。
+早期分层错误和停止语义保留在[Runtime 核心契约](../archive/v0.1/runtime-contracts.md)。
 
 ## 概念接口
 

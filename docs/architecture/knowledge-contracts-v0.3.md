@@ -2,6 +2,10 @@
 
 状态：`Proposed`
 
+当前阅读提示：本文保留尚待批准的 v0.3 详细设计，事件 v2 是当时的提案版本。
+现有 Session 已使用事件 v3，Headless JSON 仍为 v2；分别见[会话模块](../modules/sessions.md)
+和[CLI 模块](../modules/cli.md)。RAG 实现与未完成项见[知识模块](../modules/knowledge.md)。
+
 日期：2026-08-30
 
 关联需求：[v0.3 需求](../requirements/v0.3-knowledge-retrieval.md)
