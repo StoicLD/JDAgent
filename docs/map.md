@@ -2,8 +2,9 @@
 
 状态：`Implemented`（文档整理）
 
-核对日期：2026-10-20。实现基准：`12196d6895f97fdc140c6f46aee34ce90aabe4c8`。
-本轮只整理文档；下表描述该基准的现有代码，验收结论按原始证据单独记录。
+实现核对日期：2026-10-20；设计导航更新：2026-10-21。
+实现基准：`12196d6895f97fdc140c6f46aee34ce90aabe4c8`。
+下表描述该基准的现有代码；v0.5 设计单独列出，验收结论按原始证据记录。
 
 ## 从哪里开始
 
@@ -40,14 +41,18 @@
 | RAG 尚待批准的详细规格 | [需求与验收](requirements/v0.3-knowledge-retrieval.md)、[知识 Port 与事件 v2 提案](architecture/knowledge-contracts-v0.3.md)、[Milvus 与 Saga 提案](architecture/milvus-revision-saga-v0.3.md) |
 | RAG 工程收尾 | [改进方案](plans/v0.3-rag-improvement-proposal.md)、[人工验证操作报告](development/v0.3-rag-manual-verification.md) |
 | v0.4 实施授权与合同细化 | [实现与验证记录](plans/v0.4-implementation.md) |
-| 后续学习模块顺序 | [v0.4 工具 → v0.5 Memory → v0.6 Context](plans/post-v0.2-learning-roadmap.md) |
+| v0.5 已确认产品行为 | [上下文、跨会话与记忆规格](requirements/v0.5-context-memory.md)、[访谈与术语](context/v0.5-context-memory-design-discussion.md) |
+| v0.5 工程细化提案 | [架构](architecture/v0.5-context-memory.md)、[四阶段计划](plans/v0.5-context-memory-implementation.md)、[验收与 Eval](development/v0.5-context-memory-validation.md) |
+| v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
+| 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
 ## 术语与学习资料
 
 - RAG：[词汇表](context/v0.3-rag-glossary.md)、[休假政策图解](context/v0.3-rag-illustrated-guide.md)。
 - 工具：[设计阶段词汇表](context/v0.4-tools-glossary.md)（`Proposed`）；当前工具行为见工具模块。
 - 学习出口：[v0.1](learning/v0.1-learning-checklist.md)、[v0.2](learning/v0.2-learning-checklist.md)、
-  [v0.3](learning/v0.3-rag-learning-checklist.md)、[v0.4](learning/v0.4-tools-learning-checklist.md)。
+  [v0.3](learning/v0.3-rag-learning-checklist.md)、[v0.4](learning/v0.4-tools-learning-checklist.md)、
+  [v0.5](learning/v0.5-context-memory-learning-checklist.md)（待执行）。
 - 后续模块：[交付与学习工作流](development/module-delivery-workflow.md)、
   [学习检查表模板](learning/module-learning-checklist-template.md)。
 
@@ -59,6 +64,8 @@
 - [ADR-0004 CLI 应用层](decisions/ADR-0004-cli-application-layer.md)
 - [ADR-0005 产品仓库作为唯一启动事实源](decisions/ADR-0005-agent-context-free-startup.md)
 - [ADR-0006 Milvus Standalone](decisions/ADR-0006-milvus-standalone-knowledge-index.md)
+
+待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)（`Proposed`）。
 
 ## 工程规范
 
@@ -75,6 +82,15 @@
 | v0.3 | [高层设计评审处置](reviews/REV-20260829-001-v0.3-rag-design-disposition.md)、[P1 实现评审处置](reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)、[2026-09-05 实现审查与修复](reviews/REV-20260905-001-v0.3-implementation-audit.md) |
 | v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
 | Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
+
+## 实现参考
+本项目的参考实现为codex和Dify，其中codex为JDAgent大部分模块的实现参考，Dify主要参考RAG部分的实现。参考目录并不意味着我们的项目是完全一致的复刻，而是作为设计灵感的来源，具体复杂问题的处理的参考，
+比如codex可能某个模块已经有成熟的实现了，那么我们的项目在设计对应模块的时候也可以进行参考。
+本地codex项目目录：
+E:\Projects\Codex_Projects_Overall\OpenSourceAgentAnalysis\codex
+
+本地Dify项目目录：
+E:\Projects\Codex_Projects_Overall\OpenSourceAgentAnalysis\dify
 
 ## 历史归档
 

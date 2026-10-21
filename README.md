@@ -54,8 +54,9 @@ Windows 八工具支持文件发现、读取、搜索、创建、精确编辑及
 最近保留的完整离线结果仍有一项 RAG Recall 失败；v0.4 真实三次主线仅 2/3 通过。
 
 后续实质性模块遵循[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，
-工程验收和学习出口分别判断。长期记忆与 Context / Compaction 的规划见
-[后续模块路线](docs/plans/post-v0.2-learning-roadmap.md)。
+工程验收和学习出口分别判断。v0.5 已确认合并上下文、压缩、跨会话检索与长期记忆，
+[需求规格](docs/requirements/v0.5-context-memory.md)及配套设计已形成，产品尚未实现；
+推进条件见[后续模块路线](docs/plans/post-v0.2-learning-roadmap.md)。
 
 Agent 开始工作按 [AGENTS.md](AGENTS.md) 进入 Map、当前状态和协作规则。
 旧版设计及已完成计划见[归档索引](docs/archive/README.md)。

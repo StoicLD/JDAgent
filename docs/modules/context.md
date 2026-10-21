@@ -35,7 +35,8 @@ Citation repair 使用 `allow_tools=False`，并追加修复指令。它沿用�
 ## 当前范围
 
 目前已实现确定性投影、完整旧轮次裁剪和硬限制；没有摘要压缩、长期记忆提取或记忆检索。
-v0.5 Memory、v0.6 Context / Compaction 的顺序见[后续路线](../plans/post-v0.2-learning-roadmap.md)。
+2026-10-21 已确认将 Memory、跨会话检索与 Context / Compaction 合并为 v0.5，见
+[需求规格](../requirements/v0.5-context-memory.md)与[后续路线](../plans/post-v0.2-learning-roadmap.md)；尚未实现。
 窗口裁剪不会保证当前长任务一定能继续，也不会自动保留已被裁剪历史中的每项业务约束。
 
 ## 代码与验证入口
