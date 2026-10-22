@@ -1,5 +1,6 @@
 """Prompt Toolkit terminal adapter for the interactive application seam."""
 
+import asyncio
 import json
 from asyncio import CancelledError
 from pathlib import Path
@@ -47,6 +48,8 @@ _COMMANDS = (
     "/permissions",
     "/knowledge",
     "/logs",
+    "/compact",
+    "/context-window",
     "/trace",
     "/exit",
 )
@@ -91,6 +94,11 @@ class PromptToolkitTerminal:
         history_file.parent.mkdir(parents=True, exist_ok=True)
         self._state = InteractionState.STARTING
         self._closed = False
+        self._actions: asyncio.Queue[UserAction | CommandError] = asyncio.Queue()
+        self._reader: asyncio.Task[None] | None = None
+        self._line: asyncio.Future[str] | None = None
+        self._line_prompt = "> "
+        self._draft = ""
         self._status = TerminalStatus(
             InteractionState.STARTING,
             "new",
@@ -108,33 +116,83 @@ class PromptToolkitTerminal:
 
     async def next_action(self, state: InteractionState) -> UserAction:
         self._state = state
-        while True:
+        self._ensure_reader()
+        action = await self._actions.get()
+        if isinstance(action, CommandError):
+            raise action
+        return action
+
+    def _ensure_reader(self) -> None:
+        if self._reader is None:
+            self._reader = asyncio.create_task(self._read_input())
+
+    async def _ask_line(self, prompt: str, *, multiline: bool = False) -> str:
+        del multiline
+        if self._line is not None:
+            raise RuntimeError("Only one approval prompt may be active")
+        future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+        buffer = self._session.default_buffer
+        if buffer.text:
+            self._draft = buffer.text
+            buffer.text = ""
+        self._line = future
+        self._line_prompt = prompt
+        self._ensure_reader()
+        self._session.app.invalidate()
+        try:
+            return await future
+        finally:
+            self._line = None
+            self._line_prompt = "> "
+            self._session.app.invalidate()
+
+    async def _read_input(self) -> None:
+        while not self._closed:
             try:
                 raw = await self._session.prompt_async(
-                    "> ",
+                    lambda: self._line_prompt,
                     multiline=True,
+                    default=self._draft if self._line is None else "",
                     bottom_toolbar=lambda: (
                         f" JDAgent | {self._status.session} | {self._status.model} | "
                         f"write={self._status.write_permission} | {self._status.state.value} "
                     ),
                 )
             except EOFError:
-                return ExitAction()
+                if self._line is not None and not self._line.done():
+                    self._line.set_exception(EOFError())
+                await self._actions.put(ExitAction())
+                return
             except KeyboardInterrupt:
-                return ExitAction(cancelled=True)
+                if self._line is not None and not self._line.done():
+                    self._line.set_exception(CancelledError())
+                await self._actions.put(ExitAction(cancelled=True))
+                await asyncio.sleep(0)
+                continue
+            if not raw.strip().startswith("/") and self._line is not None:
+                if not self._line.done():
+                    self._line.set_result(raw)
+                await asyncio.sleep(0)
+                continue
             try:
-                return parse_user_action(raw)
+                action = parse_user_action(raw)
             except CommandError as error:
                 if str(error) == "Input must not be empty":
                     continue
-                raise
+                await self._actions.put(error)
+            else:
+                if not raw.strip().startswith("/"):
+                    self._draft = raw if self._state is not InteractionState.IDLE else ""
+                await self._actions.put(action)
+            await asyncio.sleep(0)
 
     async def update_status(self, status: TerminalStatus) -> None:
         self._status = status
+        self._state = status.state
 
     async def request(self, request: ApprovalRequest) -> ApprovalChoice:
         try:
-            answer = await self._session.prompt_async(
+            answer = await self._ask_line(
                 f"{format_approval_request(request)}\n"
                 + (
                     "Allow [o]nce or session [c]ommand prefix? [N] "
@@ -142,10 +200,6 @@ class PromptToolkitTerminal:
                     else "Allow [o]nce, session [f]ile, session [d]irectory? [N] "
                 ),
                 multiline=False,
-                bottom_toolbar=lambda: (
-                    f" JDAgent | {self._status.session} | {self._status.model} | "
-                    f"write={self._status.write_permission} | {self._status.state.value} "
-                ),
             )
         except KeyboardInterrupt as error:
             raise CancelledError from error
@@ -159,13 +213,13 @@ class PromptToolkitTerminal:
             if not isinstance(args, list) or not args:
                 return ApprovalChoice(ApprovalDecision.REJECT)
             try:
-                raw_count = await self._session.prompt_async(
+                raw_count = await self._ask_line(
                     f"Fixed leading argument count (1..{len(args)}): ", multiline=False
                 )
                 count = int(raw_count)
                 if not 1 <= count <= len(args):
                     return ApprovalChoice(ApprovalDecision.REJECT)
-                confirm = await self._session.prompt_async(
+                confirm = await self._ask_line(
                     "Allow this fixed prefix with ANY variable trailing arguments/options: "
                     + json.dumps(args[:count], ensure_ascii=False)
                     + "? [y/N] ",
@@ -186,6 +240,11 @@ class PromptToolkitTerminal:
 
     async def close(self) -> None:
         self._closed = True
+        if self._line is not None:
+            self._line.cancel()
+        if self._reader is not None:
+            self._reader.cancel()
+            await asyncio.gather(self._reader, return_exceptions=True)
 
 
 class RichPresenter:

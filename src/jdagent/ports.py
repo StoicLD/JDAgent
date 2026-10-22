@@ -30,6 +30,18 @@ class SessionPort(Protocol):
 
     def read(self, session_id: str) -> AsyncIterator[RuntimeEvent]: ...
 
+    async def acquire(self, session_id: str) -> None: ...
+
+    async def release(self, session_id: str) -> None: ...
+
+
+class ContextObjects(Protocol):
+    """Persist and verify immutable content before publishing its hash in an event."""
+
+    async def put(self, content: bytes) -> str: ...
+
+    async def get(self, digest: str) -> bytes: ...
+
 
 class SessionDiscoveryPort(Protocol):
     """Lists identifiers without exposing storage layout to catalog use cases."""

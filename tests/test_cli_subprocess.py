@@ -52,6 +52,8 @@ def test_console_script_and_module_entrypoint_are_equivalent(tmp_path: Path) -> 
     for payload in (console_data, module_data):
         payload.pop("session_id")
         payload.pop("turn_id")
+        assert payload["maintenance"]["status_at_output"] == "pending"
+        payload["maintenance"].pop("job_id")
 
     assert console.returncode == module.returncode == 0
     assert console.stderr == module.stderr == ""

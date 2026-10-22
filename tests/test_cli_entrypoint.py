@@ -90,6 +90,7 @@ def test_headless_json_stdout_is_machine_parseable(
     assert captured.err == ""
     assert payload == {
         "schema_version": 2,
+        "maintenance": {"job_id": payload["maintenance"]["job_id"], "status_at_output": "pending"},
         "status": "success",
         "session_id": payload["session_id"],
         "turn_id": payload["turn_id"],
@@ -280,7 +281,7 @@ def test_cli_trace_explains_injected_context_limit(
             "--data-dir",
             str(tmp_path / "sessions"),
             "--max-context-tokens",
-            "1",
+            "6000",
             "--show-trace",
         ]
     )

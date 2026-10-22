@@ -22,6 +22,7 @@ from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
     PermissionDecision,
+    PermissionTargetKind,
     RiskLevel,
     ToolCall,
     ToolCapability,
@@ -32,6 +33,7 @@ from jdagent.domain.tools import (
     ToolResult,
     ToolResultStatus,
 )
+from jdagent.instructions import TurnInstructions
 from jdagent.ports import ApprovalPort, RuntimeEventRecorder
 from jdagent.tools.permissions import PermissionPolicy, SessionPermissionPolicy
 from jdagent.tools.workspace import WorkspacePathError
@@ -91,6 +93,7 @@ class ToolRuntime:
         timeout_seconds: float = 10.0,
         recorder: RuntimeEventRecorder | None = None,
         capability: ToolCapability = ToolCapability.EXECUTE,
+        instructions: TurnInstructions | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -100,6 +103,7 @@ class ToolRuntime:
         self._timeout_seconds = timeout_seconds
         self._recorder = recorder
         self._capability = capability
+        self._instructions = instructions
         self._executed: set[tuple[str, str]] = set()
         self._rejected: set[tuple[str, str, str]] = set()
 
@@ -146,6 +150,21 @@ class ToolRuntime:
             )
 
         prepared_call = ToolCall(call.call_id, call.name, prepared_arguments)
+        if self._instructions is not None:
+            try:
+                await self._instructions.discover_arguments(prepared_arguments)
+            except ValueError as error:
+                return self._error(call, ToolErrorCode.CONFLICT, str(error), started)
+            if (
+                definition.risk in {RiskLevel.WRITE, RiskLevel.EXECUTE}
+                and self._instructions.needs_replan
+            ):
+                return self._error(
+                    call,
+                    ToolErrorCode.INSTRUCTIONS_DISCOVERED,
+                    "New directory instructions must be read before replanning this batch",
+                    started,
+                )
         prepared_snapshot = json.dumps(prepared_arguments, sort_keys=True, ensure_ascii=False)
         approval_identity = (context.turn_id, call.name, prepared_snapshot)
         if approval_identity in self._rejected:
@@ -164,6 +183,12 @@ class ToolRuntime:
                 "Permission policy denied the tool call",
                 started,
             )
+        if (
+            decision is PermissionDecision.ASK
+            and definition.permission_target is PermissionTargetKind.MEMORY
+            and context.memory_intent is not None
+        ):
+            decision = PermissionDecision.ALLOW
         if decision is PermissionDecision.ASK:
             prepared_path = prepared_arguments.get("path")
             target: str | None = None

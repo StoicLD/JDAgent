@@ -11,7 +11,7 @@ from typing import cast
 from jdagent.application.headless import ExitStatus
 from jdagent.configuration import ConfigurationError
 from jdagent.domain.errors import SessionError
-from jdagent.host import CliStartup, run_cli
+from jdagent.host import CliStartup, run_cli, run_maintenance
 from jdagent.host import run_single_turn as run_single_turn
 from jdagent.knowledge.cli import run_knowledge_cli
 from jdagent.knowledge.errors import KnowledgeError
@@ -25,6 +25,8 @@ _VALUE_FLAGS = frozenset(
         "--model-timeout-seconds",
         "--tool-timeout-seconds",
         "--max-context-tokens",
+        "--model-context-window",
+        "--max-output-tokens",
         "--fake-delay-seconds",
         "--workspace",
         "--data-dir",
@@ -65,6 +67,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-timeout-seconds", type=float)
     parser.add_argument("--tool-timeout-seconds", type=float)
     parser.add_argument("--max-context-tokens", type=int)
+    parser.add_argument("--model-context-window", type=int)
+    parser.add_argument("--max-output-tokens", type=int)
     parser.add_argument("--tool-scope", choices=("analyze", "edit", "execute"))
     parser.add_argument("--command-permission", choices=("ask", "deny"))
     parser.add_argument(
@@ -108,6 +112,8 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
         output=cast(str | None, namespace.output),
         tool_scope=cast(str | None, namespace.tool_scope),
         command_permission=cast(str | None, namespace.command_permission),
+        model_context_window=cast(int | None, namespace.model_context_window),
+        max_output_tokens=cast(int | None, namespace.max_output_tokens),
     )
 
 
@@ -117,6 +123,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     knowledge_split = _split_knowledge_argv(raw)
     try:
+        if raw and raw[0] == "maintain":
+            if "--pending" not in raw:
+                raise ConfigurationError("maintain requires --pending")
+            arguments = [value for value in raw[1:] if value != "--pending"]
+            startup = _parse_arguments(arguments)
+            if startup.prompt is not None or startup.session_id is not None:
+                raise ConfigurationError("maintain only resumes existing jobs")
+            return asyncio.run(run_maintenance(startup))
         if knowledge_split is not None:
             global_argv, knowledge_argv = knowledge_split
             startup = _parse_arguments(global_argv)

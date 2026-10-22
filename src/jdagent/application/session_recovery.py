@@ -1,16 +1,19 @@
 """Classify physical and logical session recovery outcomes."""
 
 import json
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
-from jdagent.context import project_messages
+from jdagent.cancellation import complete_before_cancel
+from jdagent.context_archive import prefix_hash
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    CompactionCommittedPayload,
     RecoverySnapshotPayload,
     RuntimeEvent,
     RuntimeEventType,
@@ -19,7 +22,6 @@ from jdagent.domain.events import (
     ToolExecutionStartedPayload,
     TurnFailedPayload,
 )
-from jdagent.domain.model import MessageRole, ModelMessage
 from jdagent.domain.tools import RiskLevel, command_log_id
 from jdagent.eventing import EventJournal, close_pending_calls
 from jdagent.ports import SessionPort
@@ -54,6 +56,8 @@ class RecoveryStorePort(Protocol):
     """Validate and optionally repair only a storage-level final partial record."""
 
     async def recover_physical(self, session_id: str) -> PhysicalRecoveryResult: ...
+
+    def ownership(self, session_id: str) -> AbstractAsyncContextManager[None]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +132,10 @@ class SessionRecovery:
     def __init__(self, store: RecoveryStorePort) -> None:
         self._store = store
 
+    def ownership(self, session_id: str) -> AbstractAsyncContextManager[None]:
+        """Keep the physical prefix stable through logical recovery publication."""
+        return self._store.ownership(session_id)
+
     async def recover(self, session_id: str) -> RecoveryResult:
         physical = await self._store.recover_physical(session_id)
         logical = (
@@ -170,29 +178,44 @@ async def create_recovery_session(
         0,
     )
     safe_events = source_events[: safe_index + 1]
-    recovered_messages = project_messages(safe_events)
-    log_refs = [
-        event.payload.result.outcome.data.get("log_id")
+    completed = {
+        event.payload.result.call_id: event.payload.result
         for event in source_events
         if isinstance(event.payload, ToolExecutionCompletedPayload)
-        and event.payload.result.outcome is not None
-        and event.payload.result.outcome.data.get("log_id") is not None
-    ]
-    log_refs.extend(
-        command_log_id(event.payload.call_id)
-        for event in source_events
-        if isinstance(event.payload, ToolExecutionStartedPayload)
-        and event.payload.risk is RiskLevel.EXECUTE
+    }
+    unknown: list[str] = []
+    for event in source_events:
+        if not isinstance(event.payload, ToolExecutionStartedPayload):
+            continue
+        payload = event.payload
+        result = completed.get(payload.call_id)
+        if (result is None and payload.risk not in {RiskLevel.PURE, RiskLevel.READ}) or (
+            result is not None and result.outcome is not None and result.outcome.effect == "unknown"
+        ):
+            unknown.append(
+                json.dumps(
+                    {
+                        "call_id": payload.call_id,
+                        "tool": payload.tool_name,
+                        "effect": "unknown",
+                        "log_id": command_log_id(payload.call_id)
+                        if payload.risk is RiskLevel.EXECUTE
+                        else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+    checkpoint = next(
+        (
+            event.payload.object_hash
+            for event in reversed(source_events)
+            if isinstance(event.payload, CompactionCommittedPayload)
+            and event.payload.through_sequence <= safe_events[-1].sequence
+            and event.payload.prefix_hash
+            == prefix_hash(source_events, event.payload.through_sequence)
+        ),
+        None,
     )
-    if log_refs:
-        recovered_messages = (
-            *recovered_messages,
-            ModelMessage(
-                MessageRole.USER,
-                "Recovery: previous side effects are uncertain. Do not replay them. "
-                "Parent-session command logs are available read-only: " + json.dumps(log_refs),
-            ),
-        )
     actual_session_id = new_session_id or str(uuid4())
     journal = await EventJournal.open(session, actual_session_id)
     await journal.record(
@@ -209,8 +232,10 @@ async def create_recovery_session(
         RecoverySnapshotPayload(
             parent_session_id=source_events[0].session_id,
             through_sequence=safe_events[-1].sequence,
-            messages=recovered_messages,
-            protected_tail_messages=1 if log_refs else 0,
+            prefix_hash=prefix_hash(source_events, safe_events[-1].sequence),
+            checkpoint_hash=checkpoint,
+            unknown_operations=tuple(unknown),
+            gap_until=source_events[-1].sequence,
         ),
     )
     return actual_session_id
@@ -267,6 +292,27 @@ async def prepare_session_resume(
     allow_recovery_snapshot: bool,
 ) -> PreparedResume:
     """Repair safe tails, close safe interruptions, and isolate uncertain writes."""
+
+    async with recovery.ownership(session_id):
+        return await complete_before_cancel(
+            _prepare_owned_resume(
+                session=session,
+                recovery=recovery,
+                session_id=session_id,
+                workspace_identity=workspace_identity,
+                allow_recovery_snapshot=allow_recovery_snapshot,
+            )
+        )
+
+
+async def _prepare_owned_resume(
+    *,
+    session: SessionPort,
+    recovery: SessionRecovery,
+    session_id: str,
+    workspace_identity: str,
+    allow_recovery_snapshot: bool,
+) -> PreparedResume:
 
     result = await recovery.recover(session_id)
     if result.physical is PhysicalRecovery.UNRECOVERABLE:

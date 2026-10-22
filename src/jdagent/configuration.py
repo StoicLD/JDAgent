@@ -9,8 +9,25 @@ from pathlib import Path
 from typing import cast
 
 from jdagent.data_paths import DataPaths
+from jdagent.knowledge.types import EmbeddingProfile
 
-_USER_FIELDS = frozenset(
+_CONTEXT_FIELDS = frozenset(
+    {
+        "model_context_window",
+        "max_output_tokens",
+        "context_safety_tokens",
+        "provider_input_limit",
+        "compact_trigger_ratio",
+        "compact_target_ratio",
+        "global_instructions",
+        "instructions_max_tokens",
+        "max_model_calls",
+        "max_tool_calls",
+        "max_failure_recoveries",
+        "memory",
+    }
+)
+_USER_FIELDS = _CONTEXT_FIELDS | frozenset(
     {
         "provider",
         "model",
@@ -25,7 +42,7 @@ _USER_FIELDS = frozenset(
         "tool_scope",
     }
 )
-_PROJECT_FIELDS = frozenset(
+_PROJECT_FIELDS = _CONTEXT_FIELDS | frozenset(
     {
         "model",
         "model_timeout_seconds",
@@ -58,6 +75,8 @@ class CliOverrides:
     data_dir: Path | None = None
     command_permission: str | None = None
     tool_scope: str | None = None
+    model_context_window: int | None = None
+    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +98,25 @@ class ResolvedConfiguration:
     data_paths: DataPaths
     command_permission: str = "ask"
     tool_scope: str = "execute"
+    model_context_window: int | None = None
+    max_output_tokens: int = 4096
+    context_safety_tokens: int | None = None
+    provider_input_limit: int | None = None
+    compact_trigger_ratio: float = 0.9
+    compact_target_ratio: float = 0.4
+    global_instructions: Path | None = None
+    instructions_max_tokens: int | None = None
+    max_model_calls: int = 16
+    max_tool_calls: int = 32
+    max_failure_recoveries: int = 2
+    memory_auto_consolidation: bool = True
+    memory_headless_drain_seconds: float = 120
+    memory_input_token_limit: int = 10_000_000
+    memory_output_token_limit: int = 1_000_000
+    total_input_token_limit: int = 30_000_000
+    total_output_token_limit: int = 3_000_000
+    memory_embedding: EmbeddingProfile | None = None
+    cli_overrides: CliOverrides = field(default_factory=CliOverrides, repr=False)
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -117,6 +155,26 @@ def _positive_number(values: Mapping[str, object], name: str) -> float:
 
 
 def _validate(values: dict[str, object]) -> None:
+    for name in (
+        "model_context_window",
+        "max_output_tokens",
+        "provider_input_limit",
+        "context_safety_tokens",
+        "instructions_max_tokens",
+        "max_model_calls",
+        "max_tool_calls",
+        "max_failure_recoveries",
+    ):
+        value = values[name]
+        minimum = 0 if name == "context_safety_tokens" else 1
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < minimum
+        ):
+            raise ConfigurationError(f"{name} must be an integer >= {minimum}")
+    trigger = _positive_number(values, "compact_trigger_ratio")
+    target = _positive_number(values, "compact_target_ratio")
+    if not target < trigger < 1:
+        raise ConfigurationError("Context ratios must satisfy 0 < target < trigger < 1")
     provider = _non_empty_string(values, "provider")
     values["provider"] = provider
     if provider not in {"fake", "deepseek"}:
@@ -178,6 +236,18 @@ def resolve_configuration(
         "write_permission": "ask",
         "command_permission": "ask",
         "tool_scope": "execute",
+        "model_context_window": None,
+        "max_output_tokens": 4096,
+        "context_safety_tokens": None,
+        "provider_input_limit": None,
+        "compact_trigger_ratio": 0.9,
+        "compact_target_ratio": 0.4,
+        "global_instructions": None,
+        "instructions_max_tokens": None,
+        "max_model_calls": 16,
+        "max_tool_calls": 32,
+        "max_failure_recoveries": 2,
+        "memory": {},
     }
     user = _read_layer(paths.user_config_file, layer="user", allowed=_USER_FIELDS)
     project = _read_layer(paths.project_config_file, layer="project", allowed=_PROJECT_FIELDS)
@@ -218,6 +288,65 @@ def resolve_configuration(
             candidate if candidate.is_absolute() else paths.user_config_file.parent / candidate
         )
 
+    memory = values["memory"]
+    if not isinstance(memory, dict):
+        raise ConfigurationError("memory must be a TOML table")
+    memory_values = cast(dict[str, object], memory)
+    if set(memory_values) - {
+        "auto_consolidation",
+        "headless_drain_seconds",
+        "input_token_limit",
+        "output_token_limit",
+        "total_input_token_limit",
+        "total_output_token_limit",
+        "embedding",
+    }:
+        raise ConfigurationError("Unknown memory configuration field")
+    auto = memory_values.get("auto_consolidation", True)
+    drain = memory_values.get("headless_drain_seconds", 120)
+    input_limit = memory_values.get("input_token_limit", 10_000_000)
+    output_limit = memory_values.get("output_token_limit", 1_000_000)
+    total_input = memory_values.get("total_input_token_limit", 30_000_000)
+    total_output = memory_values.get("total_output_token_limit", 3_000_000)
+    if not isinstance(auto, bool):
+        raise ConfigurationError("memory.auto_consolidation must be boolean")
+    if (
+        isinstance(drain, bool)
+        or not isinstance(drain, (int, float))
+        or not math.isfinite(drain)
+        or drain < 0
+    ):
+        raise ConfigurationError("memory.headless_drain_seconds must be finite and nonnegative")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value <= 0
+        for value in (input_limit, output_limit, total_input, total_output)
+    ):
+        raise ConfigurationError("Memory token limits must be positive integers")
+    embedding: EmbeddingProfile | None = None
+    raw_embedding = memory_values.get("embedding")
+    if raw_embedding is not None:
+        if not isinstance(raw_embedding, dict):
+            raise ConfigurationError("memory.embedding must be a table")
+        raw_profile = cast(dict[str, object], raw_embedding)
+        if (
+            set(raw_profile) != {"base_url", "model", "dimension"}
+            or not isinstance(raw_profile.get("dimension"), int)
+            or isinstance(raw_profile["dimension"], bool)
+        ):
+            raise ConfigurationError(
+                "memory.embedding requires base_url, model and integer dimension"
+            )
+        dimension = cast(int, raw_profile["dimension"])
+        if dimension <= 0:
+            raise ConfigurationError("Embedding dimension must be positive")
+        embedding = EmbeddingProfile(
+            base_url=_non_empty_string(raw_profile, "base_url"),
+            model=_non_empty_string(raw_profile, "model"),
+            dimension=dimension,
+        )
+    global_value = values["global_instructions"]
+    if global_value is not None and (not isinstance(global_value, str) or not global_value.strip()):
+        raise ConfigurationError("global_instructions must be an explicit path")
     return ResolvedConfiguration(
         provider=cast(str, values["provider"]),
         model=cast(str, values["model"]),
@@ -234,4 +363,23 @@ def resolve_configuration(
         data_paths=paths,
         command_permission=cast(str, values["command_permission"]),
         tool_scope=cast(str, values["tool_scope"]),
+        model_context_window=cast(int | None, values["model_context_window"]),
+        max_output_tokens=cast(int, values["max_output_tokens"]),
+        context_safety_tokens=cast(int | None, values["context_safety_tokens"]),
+        provider_input_limit=cast(int | None, values["provider_input_limit"]),
+        compact_trigger_ratio=float(cast(float, values["compact_trigger_ratio"])),
+        compact_target_ratio=float(cast(float, values["compact_target_ratio"])),
+        global_instructions=Path(global_value).expanduser().resolve() if global_value else None,
+        instructions_max_tokens=cast(int | None, values["instructions_max_tokens"]),
+        max_model_calls=cast(int, values["max_model_calls"]),
+        max_tool_calls=cast(int, values["max_tool_calls"]),
+        max_failure_recoveries=cast(int, values["max_failure_recoveries"]),
+        memory_auto_consolidation=auto,
+        memory_headless_drain_seconds=float(drain),
+        memory_input_token_limit=cast(int, input_limit),
+        memory_output_token_limit=cast(int, output_limit),
+        total_input_token_limit=cast(int, total_input),
+        total_output_token_limit=cast(int, total_output),
+        memory_embedding=embedding,
+        cli_overrides=overrides,
     )

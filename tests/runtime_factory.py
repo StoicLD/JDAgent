@@ -2,6 +2,7 @@ from pathlib import Path
 
 from jdagent.application.coordinator import TurnCoordinator
 from jdagent.composition import ConfiguredLoopFactory
+from jdagent.context_budget import ContextBudget
 from jdagent.core.loop import LoopLimits
 from jdagent.domain.model import ModelSettings
 from jdagent.domain.tools import ToolDefinition
@@ -33,6 +34,7 @@ def create_test_coordinator(
         tool_timeout_seconds=10.0,
         provider_options={},
         model_event_observers=(),
+        context_budget=ContextBudget(64000, output_tokens=0),
     )
     return TurnCoordinator(
         session=session,

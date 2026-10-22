@@ -1,21 +1,30 @@
 """Coordinate one turn without embedding adapter details in the agent loop."""
 
-from dataclasses import dataclass
+import asyncio
+import json
+import re
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
 from jdagent.application.session_recovery import LogicalRecovery, classify_logical_recovery
+from jdagent.context_archive import encode_json
+from jdagent.context_runtime import ContextService, WindowSnapshot
 from jdagent.core.loop import AgentLoop, CancellationToken, TurnResult
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
+    AssistantMessageCompletedPayload,
+    ConstraintRevokedPayload,
     RecoverySnapshotPayload,
     RetrievalBaseRecord,
     RetrievalBudgetRecord,
     RetrievalEvidenceRecord,
     RuntimeEventType,
     SessionStartedPayload,
+    SideEffectResolutionPayload,
     TurnFailedPayload,
     TurnRetrievalRecordedPayload,
     UserMessagePayload,
@@ -32,6 +41,7 @@ from jdagent.knowledge.ptk import (
     RetrievalOutcome,
     empty_prepared_knowledge,
 )
+from jdagent.memory_service import MemoryService
 from jdagent.observability import TraceProjection
 from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 
@@ -40,6 +50,10 @@ class AgentLoopFactory(Protocol):
     """Create a configured loop for a per-session journal."""
 
     def create(self, journal: RuntimeJournal) -> AgentLoop: ...
+
+    def context_for(self, session_id: str) -> ContextService | None: ...
+
+    def prepare_turn(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +65,7 @@ class CoordinatedTurn:
     result: TurnResult
     trace: TraceProjection
     knowledge: PreparedTurnKnowledge
+    maintenance_job: str | None = None
 
 
 def retrieval_payload(ptk: PreparedTurnKnowledge) -> TurnRetrievalRecordedPayload:
@@ -117,6 +132,7 @@ class TurnCoordinator:
         knowledge_catalog: Path | None = None,
         knowledge_backups: Path | None = None,
         knowledge_index: Path | None = None,
+        memory: MemoryService | None = None,
     ) -> None:
         self._session = session
         self._workspace = workspace
@@ -126,8 +142,88 @@ class TurnCoordinator:
         self._knowledge_catalog = knowledge_catalog
         self._knowledge_backups = knowledge_backups
         self._knowledge_index = knowledge_index
+        self.memory = memory
+        self.after_output: Callable[[], None] = lambda: None
+        self._owned_sessions: set[str] = set()
+        self._running: set[str] = set()
+        self._compacting: set[str] = set()
+        self._pending_compactions: set[str] = set()
+
+    async def aclose(self) -> None:
+        for session_id in tuple(self._owned_sessions):
+            await self._session.release(session_id)
+            self._owned_sessions.discard(session_id)
+        if self.memory is not None:
+            self.memory.active_sessions.clear()
+            self.memory.views.clear()
+
+    async def context_window(self, session_id: str) -> WindowSnapshot:
+        service = self._loop_factory.context_for(session_id)
+        if service is None:
+            journal = await EventJournal.open(self._session, session_id, require_existing=True)
+            self._loop_factory.create(journal)
+            service = self._loop_factory.context_for(session_id)
+        assert service is not None
+        return await service.preview_window()
+
+    async def compact(self, session_id: str) -> str:
+        if session_id in self._running or session_id in self._compacting:
+            self._pending_compactions.add(session_id)
+            service = self._loop_factory.context_for(session_id)
+            if service is not None:
+                service.request_compaction()
+            return "compaction queued; waiting for the complete tool batch"
+        self._compacting.add(session_id)
+        try:
+            await self._session.acquire(session_id)
+            self._owned_sessions.add(session_id)
+            journal = await EventJournal.open(self._session, session_id, require_existing=True)
+            self._loop_factory.create(journal)
+            service = self._loop_factory.context_for(session_id)
+            assert service is not None
+            snapshot = await service.compact_now()
+            return (
+                f"compaction={snapshot.compaction_status}; input={snapshot.estimate.input_tokens}"
+            )
+        finally:
+            self._compacting.discard(session_id)
+            self._pending_compactions.discard(session_id)
+
+    async def release_session(self, session_id: str) -> None:
+        if session_id in self._running or session_id in self._compacting:
+            raise ValueError("Cannot release a running session")
+        await self._session.release(session_id)
+        self._owned_sessions.discard(session_id)
+        if self.memory is not None:
+            self.memory.active_sessions.discard(session_id)
+            self.memory.views.pop(session_id, None)
 
     async def send(
+        self,
+        user_text: str,
+        *,
+        session_id: str | None = None,
+        new_session_id: str | None = None,
+        cancellation: CancellationToken | None = None,
+    ) -> CoordinatedTurn:
+        if session_id is not None and new_session_id is not None:
+            raise ValueError("session_id and new_session_id are mutually exclusive")
+        identity = session_id or new_session_id or str(uuid4())
+        if identity in self._running or identity in self._compacting:
+            raise SessionError(SessionErrorCode.BUSY, "session_busy: operation already running")
+        self._running.add(identity)
+        try:
+            return await self._send_owned(
+                user_text,
+                session_id=session_id,
+                new_session_id=identity if session_id is None else None,
+                cancellation=cancellation,
+            )
+        finally:
+            self._running.discard(identity)
+            self._pending_compactions.discard(identity)
+
+    async def _send_owned(
         self,
         user_text: str,
         *,
@@ -139,9 +235,14 @@ class TurnCoordinator:
 
         if not user_text.strip():
             raise ValueError("user_text must not be empty")
+        await asyncio.to_thread(self._loop_factory.prepare_turn)
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
         actual_session_id = session_id or new_session_id or str(uuid4())
+        await self._session.acquire(actual_session_id)
+        self._owned_sessions.add(actual_session_id)
+        if self.memory is not None:
+            self.memory.active_sessions.add(actual_session_id)
         turn_id = str(uuid4())
         turn_token = turn_id.replace("-", "")[:8]
         trace = TraceProjection()
@@ -151,6 +252,8 @@ class TurnCoordinator:
             observers=(trace, *self._event_observers),
             require_existing=session_id is not None,
         )
+        if self.memory is not None:
+            self.memory.views[actual_session_id] = lambda: journal.events
         if (
             classify_logical_recovery(tuple(journal.events))
             is LogicalRecovery.UNCERTAIN_SIDE_EFFECT
@@ -168,11 +271,111 @@ class TurnCoordinator:
                     workspace_identity=self._workspace_identity,
                 ),
             )
-        await journal.record(
+        user_event = await journal.record(
             turn_id,
             RuntimeEventType.USER_MESSAGE,
             UserMessagePayload(user_text),
         )
+        memory_intent = None
+        resolution = re.fullmatch(
+            r"确认父会话 ([A-Za-z0-9._-]+) 操作 ([A-Za-z0-9._-]+) (已完成|未执行)，依据：(.+)",
+            user_text.strip(),
+        )
+        if resolution:
+            parent, call_id, conclusion, evidence = resolution.groups()
+            refs = [
+                event.payload
+                for event in journal.events
+                if isinstance(event.payload, RecoverySnapshotPayload)
+                and event.payload.parent_session_id == parent
+            ]
+            known = any(
+                json.loads(operation).get("call_id") == call_id
+                for ref in refs
+                for operation in ref.unknown_operations
+            )
+            if not known:
+                await journal.record(
+                    turn_id,
+                    RuntimeEventType.TURN_FAILED,
+                    TurnFailedPayload(
+                        StopReason.INTERNAL_ERROR,
+                        "invalid_resolution",
+                        "Unknown recovery operation",
+                        0,
+                        0,
+                    ),
+                )
+                raise ValueError(
+                    "Resolution must name an unknown operation of this recovery Session"
+                )
+            await journal.record(
+                turn_id,
+                RuntimeEventType.SIDE_EFFECT_RESOLVED,
+                SideEffectResolutionPayload(
+                    parent, call_id, user_event.event_id, conclusion, evidence
+                ),
+            )
+        revoke = re.fullmatch(r"撤销本会话约束 C([1-9][0-9]*)", user_text.strip())
+        if revoke:
+            sequence = int(revoke[1])
+            if not any(
+                event.sequence == sequence
+                and isinstance(event.payload, UserMessagePayload)
+                and event.sequence < user_event.sequence
+                for event in journal.events
+            ):
+                await journal.record(
+                    turn_id,
+                    RuntimeEventType.TURN_FAILED,
+                    TurnFailedPayload(
+                        StopReason.INTERNAL_ERROR,
+                        "invalid_constraint",
+                        "Unknown constraint ID",
+                        0,
+                        0,
+                    ),
+                )
+                raise ValueError("Unknown constraint ID")
+            await journal.record(
+                turn_id,
+                RuntimeEventType.CONSTRAINT_REVOKED,
+                ConstraintRevokedPayload(sequence, user_event.event_id),
+            )
+        if self.memory is not None:
+            citations = next(
+                (
+                    event.payload.citations
+                    for event in reversed(journal.events)
+                    if isinstance(event.payload, AssistantMessageCompletedPayload)
+                ),
+                (),
+            )
+            try:
+                memory_intent = await asyncio.to_thread(
+                    self.memory.store.accept_intent,
+                    user_text,
+                    workspace=self.memory.workspace,
+                    session=actual_session_id,
+                    turn=turn_id,
+                    event=user_event.event_id,
+                    dependencies=tuple(encode_json(asdict(item)).decode() for item in citations),
+                )
+            except ValueError:
+                await journal.record(
+                    turn_id,
+                    RuntimeEventType.TURN_FAILED,
+                    TurnFailedPayload(
+                        StopReason.INTERNAL_ERROR,
+                        "invalid_memory_intent",
+                        "Memory target, version or expiry is invalid",
+                        0,
+                        0,
+                    ),
+                )
+                raise
+            if memory_intent is not None:
+                self.memory.intents[turn_id] = memory_intent
 
         cancellation = cancellation or CancellationToken()
         if cancellation.cancelled:
@@ -199,6 +402,11 @@ class TurnCoordinator:
             return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
 
         loop = self._loop_factory.create(journal)
+        if actual_session_id in self._pending_compactions:
+            service = self._loop_factory.context_for(actual_session_id)
+            assert service is not None
+            service.request_compaction()
+            self._pending_compactions.discard(actual_session_id)
         result = await loop.run(
             turn_id,
             ToolExecutionContext(
@@ -210,11 +418,31 @@ class TurnCoordinator:
                     for event in journal.events
                     if isinstance(event.payload, RecoverySnapshotPayload)
                 ),
+                memory_intent=memory_intent,
             ),
             cancellation=cancellation,
             knowledge=knowledge,
         )
-        return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
+        maintenance_job = None
+        if self.memory is not None:
+            first = next(
+                (
+                    event
+                    for event in journal.events
+                    if event.event_type is RuntimeEventType.TURN_COMPLETED
+                ),
+                None,
+            )
+            if first is not None:
+                maintenance_job = await asyncio.to_thread(
+                    self.memory.store.schedule,
+                    self.memory.workspace,
+                    actual_session_id,
+                    first.sequence,
+                )
+        return CoordinatedTurn(
+            actual_session_id, turn_id, result, trace, knowledge, maintenance_job
+        )
 
     async def _fail_before_loop(
         self, journal: EventJournal, turn_id: str, error_category: str

@@ -23,6 +23,7 @@ class SessionErrorCode(StrEnum):
     UNSUPPORTED_SCHEMA = "unsupported_schema"
     APPEND_FAILED = "append_failed"
     READ_FAILED = "read_failed"
+    BUSY = "session_busy"
 
 
 class SessionError(RuntimeError):

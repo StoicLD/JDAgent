@@ -50,6 +50,8 @@ class CliStartup:
     output: str | None
     tool_scope: str | None = None
     command_permission: str | None = None
+    model_context_window: int | None = None
+    max_output_tokens: int | None = None
 
 
 async def run_single_turn(
@@ -133,6 +135,8 @@ async def run_cli(startup: CliStartup) -> int:
             data_dir=startup.data_dir,
             tool_scope=startup.tool_scope,
             command_permission=startup.command_permission,
+            model_context_window=startup.model_context_window,
+            max_output_tokens=startup.max_output_tokens,
         ),
     )
     if startup.data_dir is None or startup.prompt is None:
@@ -162,10 +166,15 @@ async def run_cli(startup: CliStartup) -> int:
         event_observers=event_observers,
     )
     try:
+        if composition.maintenance is not None:
+            await composition.maintenance.reconcile()
+            composition.maintenance.start()
         session_id = startup.session_id
         if startup.prompt is not None:
             if session_id is not None:
-                recovery = SessionRecovery(JsonlRecoveryStore(resolved.session_directory))
+                recovery = SessionRecovery(
+                    JsonlRecoveryStore(resolved.session_directory, composition.session)
+                )
                 prepared = await prepare_session_resume(
                     session=composition.session,
                     recovery=recovery,
@@ -187,18 +196,22 @@ async def run_cli(startup: CliStartup) -> int:
                 payload = result.json_data()
                 if startup.show_trace:
                     payload["trace"] = _trace_data(result.trace)
-                print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+                print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
             else:
                 if result.answer:
-                    print(result.answer)
+                    print(result.answer, flush=True)
                 if startup.show_trace:
                     _print_trace(result.trace)
+            if composition.maintenance is not None:
+                await composition.maintenance.drain(resolved.memory_headless_drain_seconds)
             return int(result.exit_status)
 
         assert presenter is not None
         assert terminal is not None
         assert interaction_observer is not None
-        recovery = SessionRecovery(JsonlRecoveryStore(resolved.session_directory))
+        recovery = SessionRecovery(
+            JsonlRecoveryStore(resolved.session_directory, composition.session)
+        )
         application = InteractiveApplication(
             terminal=terminal,
             presenter=presenter,
@@ -232,3 +245,26 @@ async def run_cli(startup: CliStartup) -> int:
         if presenter is not None:
             await presenter.close()
         await composition.aclose()
+
+
+async def run_maintenance(startup: CliStartup) -> int:
+    """Resume durable jobs without creating a Session or inventing a first-turn trigger."""
+    resolved = resolve_configuration(
+        startup.workspace,
+        CliOverrides(
+            provider=startup.provider,
+            model=startup.model,
+            base_url=startup.base_url,
+            data_dir=startup.data_dir,
+            model_context_window=startup.model_context_window,
+            max_output_tokens=startup.max_output_tokens,
+        ),
+    )
+    runtime = build_runtime(resolved, ScopedApproval(RejectingApprovalChoices()))
+    try:
+        if runtime.maintenance is not None:
+            await runtime.maintenance.reconcile()
+            await runtime.maintenance.drain(resolved.memory_headless_drain_seconds)
+        return 0
+    finally:
+        await runtime.aclose()

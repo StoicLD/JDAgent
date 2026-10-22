@@ -1,47 +1,63 @@
-# 上下文构造
+# 上下文、预算与压缩
 
-状态：`Implemented`（实现说明）
+状态：`Implemented`（实现说明；验收状态见实现记录）
 
-`ContextBuilder` 将会话事实转换成一次模型请求，并在调用前控制上下文大小。
-它不保存第二份聊天历史。实现基准见[Map](../map.md)。
+`ContextService` 在每次模型调用前，把追加保存的 Session 事实构造成请求。原始消息不因压缩
+而删除；摘要只改变模型下一次看见的内容。执行证据和限制见
+[实现与评审记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
 
 ## 从事件到请求
 
-`project_messages()` 将用户消息、完整 assistant 消息、工具执行结果和恢复快照投影为
-Provider 无关的 `ModelMessage`。工具调用 ID 保持配对；结构化 `ToolOutcome`
-序列化成工具消息内容，旧字符串结果路径仍用于兼容测试。
+`ContextBuilder` 负责消息和工具 Schema 的基本投影。生产组合根关闭旧滑窗，交给
+`ContextService` 加入本轮指令、恢复引用、有效记忆、原文保护和历史摘要。
+历史与记忆均标为背景证据，不能产生用户意图或扩大工具权限。
 
-`build()` 在投影上加入系统指令、当前可用工具的输入 Schema、模型设置和关联元数据。
-工具范围由组合根按本轮 `ToolCapability` 过滤，执行层仍再次校验。
-如果本轮已准备知识，Builder 将证据作为 `untrusted_evidence` 系统片段注入；
-本轮所有模型调用复用同一份知识，见[知识模块](knowledge.md)。
+配置文件在每个 Turn 开始时重读。`TurnInstructions` 固定本轮全局、项目与已访问目录的
+`AGENTS.md` 正文和 hash；首次访问子目录先查祖先链，首次写入发现新规则时返回控制结果，
+要求模型重新发起写入。下一 Turn 重新建立活跃目录集合。
 
-Citation repair 使用 `allow_tools=False`，并追加修复指令。它沿用上下文预算，
-不能通过修复调用绕过窗口限制。
+每个发送请求先持久保存 RequestManifest，再记录 `model_request_prepared`。本模块拥有的
+正文保存为 SHA-256 对象；KB 证据只保存版本、Locator 和 hash，按原 Catalog/Store 重建。
+知识删除后重建明确失败，不能通过 Context 对象存储重新取得已删除的证据。
 
-## 完整轮次滑动窗口
+## 预算
 
-正常组合根启用滑动窗口。配置默认请求窗口为 64,000，输出预留为 4,096。
-估算以 UTF-8 字节数、每条消息开销和输出预留计算，是保守估计，不是真实 tokenizer 计数。
-同时存在配置窗口与模型能力窗口时，取较小限制。
+有效窗口 `W=min(模型容量, 应用上限)`，输入预算 `B=min(W-R-S, Provider 输入上限)`。
+`R` 为输出预留，`S` 为安全余量；默认应用上限 64,000 不代表模型真实容量。
+未知模型或自定义端点需要显式配置 `model_context_window`。
 
-超限时依次移除最旧的完整历史 Turn。恢复快照中的历史也按 USER 轮次裁剪，
-`protected_tail_messages` 指定的恢复尾部保留。当前 Turn、系统指令、工具定义、
-本轮证据与输出预留不通过旧轮次裁剪移除；仍超限则报 `ContextLimitError`。
+`InputEstimator` 统计用户、assistant、工具结果、工具定义、系统指令、历史摘要、知识和记忆，
+另计协议开销。冷启动使用 UTF-8 保守估算；同 Provider/model 的真实 Usage 校准后，所有预算
+判断共用校准值。显示值仍为估算，实测 Usage 带请求 ID，不与另一请求的占用叠加。
 
-裁剪仅作用于请求投影，原始 Session 事件保持不变。
-省略标识随请求元数据返回，Loop 写入 `context_window_selected` 事件供追踪。
+普通调用、引用修复、压缩与后台记忆共用持久费用账本。维护输入/输出与总输入/输出分别限额，
+发送前预留，Usage 到达后幂等结算；取消或进程重启不会把未知费用清零。
 
-## 当前范围
+## 压缩与恢复
 
-目前已实现确定性投影、完整旧轮次裁剪和硬限制；没有摘要压缩、长期记忆提取或记忆检索。
-2026-10-21 已确认将 Memory、跨会话检索与 Context / Compaction 合并为 v0.5，见
-[需求规格](../requirements/v0.5-context-memory.md)与[后续路线](../plans/post-v0.2-learning-roadmap.md)；尚未实现。
-窗口裁剪不会保证当前长任务一定能继续，也不会自动保留已被裁剪历史中的每项业务约束。
+默认达到 B 的 90% 时压缩，目标降到 40% 以下；目标未达到但有改善且低于触发线时允许继续。
+`/compact` 可提前触发，`/context-window` 只读展示最近完整请求及分类。
+正常压缩等待已发出的工具批次闭合，不取消剩余调用；维护请求不能调用任务工具。
 
-## 代码与验证入口
+摘要保存目标、事实及来源序号、待办、决策和路径。完成状态必须引用成功工具结果。
+`recorded` 仅表示原文中有这条陈述，与 `completed` 执行完成分开。维护请求使用 Provider 的
+JSON 输出模式，片段和合并请求只列出自身相关的成功执行序号；不随着整个会话累积提示内容。
+超大正文按字节区间拆分；每次压缩最多 8 次模型调用、总计 600 秒，单次最多 120 秒。
+候选对象持久化后才提交 checkpoint。无改善、错误来源、失败或预算不足时保留旧投影。
+不可变原始分段另有关键词索引；每次最多选两段实际读取，并与上一份有界摘要、新段逐对组合。
+上一摘要漏掉的事实可以从原段恢复。成功与失败记录引用响应对象，失败保留具体错误；取消时
+可能只留下尚无提交引用的对象。
 
-- [ContextBuilder 与消息投影](../../src/jdagent/context.py)
-- [组合根的窗口设置](../../src/jdagent/composition.py)、[默认配置](../../src/jdagent/configuration.py)
-- [上下文测试](../../tests/test_context_builder.py)、[完整轮次与快照回归](../../tests/test_v04_contracts.py)
-- [v0.4 合同细化](../plans/v0.4-implementation.md)、[快照裁剪评审处置 P02](../reviews/v0.4-implementation-review.md)
+当前用户输入保留原文；被摘要覆盖的既有用户内容进入保护区，避免模型自行丢弃约束。
+保护区过大时显示最大的三个条目。整句 `撤销本会话约束 C12` 由宿主处理，撤销 C12 的活跃
+约束，不依赖主模型，也不删除档案。当前输入不会同时在消息和保护区重复计数。
+
+恢复子会话保存父安全截止点、前缀 hash、checkpoint 引用及未知操作清单，不复制完整父历史。
+缺失 checkpoint 回退安全原文；来源 hash 不符则停止。不会继承权限或自动重放未知副作用。
+父会话的 OS 锁覆盖整个恢复提交；取消需等待正在执行的本地磁盘事务结束后才释放锁。
+
+## 入口
+
+- [预算](../../src/jdagent/context_budget.py)、[协调服务](../../src/jdagent/context_runtime.py)、[请求归档](../../src/jdagent/context_archive.py)
+- [规则快照](../../src/jdagent/instructions.py)、[模型容量](../../src/jdagent/model_profiles.py)
+- [压缩回归](../../tests/test_v05_compaction.py)、[审查回归](../../tests/test_v05_review_regressions.py)、[KB 依赖](../../tests/test_v05_knowledge_dependencies.py)

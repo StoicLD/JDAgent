@@ -14,8 +14,6 @@ from jdagent.domain.events import (
     SessionStartedPayload,
 )
 from jdagent.domain.model import (
-    MessageRole,
-    ModelMessage,
     ResponseCompleted,
     TextDelta,
     ToolCallCompleted,
@@ -62,7 +60,7 @@ def test_jsonl_round_trip_preserves_recovery_and_permission_facts(tmp_path: Path
         snapshot = RecoverySnapshotPayload(
             "parent",
             7,
-            (ModelMessage(MessageRole.USER, "safe context"),),
+            "a" * 64,
         )
         rule = SessionPermissionRule(
             "rule-1",
@@ -91,7 +89,7 @@ def test_jsonl_round_trip_preserves_recovery_and_permission_facts(tmp_path: Path
     assert restored_snapshot == RecoverySnapshotPayload(
         "parent",
         7,
-        (ModelMessage(MessageRole.USER, "safe context"),),
+        "a" * 64,
     )
     assert isinstance(restored_grant, PermissionRuleGrantedPayload)
     assert restored_grant.rule.target == "note.txt"
@@ -159,6 +157,7 @@ def test_resume_rebuilds_context_from_events(tmp_path: Path) -> None:
             workspace=tmp_path,
         )
         first_turn = await first.send("first question")
+        await first.aclose()
 
         second_model = FakeModelPort(
             scripts=((TextDelta("second answer"), ResponseCompleted("stop")),)

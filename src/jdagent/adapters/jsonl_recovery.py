@@ -4,25 +4,28 @@ import asyncio
 import hashlib
 import json
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 from jdagent.adapters.jsonl_session import (
     JsonlSession,
-    event_from_data,
     session_file_lock,
 )
+from jdagent.adapters.session_lock import SessionLease
 from jdagent.application.session_recovery import (
     PhysicalRecovery,
     PhysicalRecoveryResult,
 )
+from jdagent.cancellation import complete_before_cancel
 from jdagent.domain.errors import SessionError, SessionErrorCode
 from jdagent.domain.events import RuntimeEvent
 from jdagent.domain.json import JsonObject, normalize_json
 
 
-def _parse_prefix(raw: bytes, session_id: str) -> tuple[RuntimeEvent, ...]:
+def _parse_prefix(raw: bytes, session_id: str, session: JsonlSession) -> tuple[RuntimeEvent, ...]:
     events: list[RuntimeEvent] = []
     offset = 0
     for line in raw.splitlines(keepends=True):
@@ -32,7 +35,7 @@ def _parse_prefix(raw: bytes, session_id: str) -> tuple[RuntimeEvent, ...]:
         data = normalize_json(loaded)
         if not isinstance(data, dict):
             raise ValueError("JSONL event must be an object")
-        event = event_from_data(cast(JsonObject, data))
+        event = session.decode_record(cast(JsonObject, data))
         expected = len(events) + 1
         if event.session_id != session_id or event.sequence != expected:
             raise ValueError(f"Invalid session or sequence at byte offset {offset}")
@@ -55,8 +58,12 @@ def _write_fsynced(path: Path, raw: bytes) -> None:
 def _repair_sync(directory: Path, session_id: str) -> PhysicalRecoveryResult:
     session = JsonlSession(directory)
     path = session.path_for(session_id)
-    with session_file_lock(path):
-        return _repair_locked(directory, session_id, path)
+    lease = SessionLease(path.with_suffix(".lock"))
+    try:
+        with session_file_lock(path):
+            return _repair_locked(directory, session_id, path)
+    finally:
+        lease.close()
 
 
 def _repair_locked(
@@ -73,7 +80,7 @@ def _repair_locked(
 
     if raw.endswith(b"\n"):
         try:
-            events = _parse_prefix(raw, session_id)
+            events = _parse_prefix(raw, session_id, JsonlSession(directory))
         except SessionError as error:
             if error.code is SessionErrorCode.UNSUPPORTED_SCHEMA:
                 raise
@@ -98,7 +105,7 @@ def _repair_locked(
     offset = raw.rfind(b"\n") + 1
     prefix = raw[:offset]
     try:
-        events = _parse_prefix(prefix, session_id)
+        events = _parse_prefix(prefix, session_id, JsonlSession(directory))
     except SessionError as error:
         if error.code is SessionErrorCode.UNSUPPORTED_SCHEMA:
             raise
@@ -143,8 +150,27 @@ def _repair_locked(
 class JsonlRecoveryStore:
     """Storage adapter for explicit, evidence-preserving JSONL repair."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, session: JsonlSession | None = None) -> None:
         self._directory = directory.resolve(strict=False)
+        self._session = session or JsonlSession(self._directory)
+
+    @asynccontextmanager
+    async def ownership(self, session_id: str) -> AsyncGenerator[None]:
+        already_owned = self._session.owns(session_id)
+        try:
+            await complete_before_cancel(self._session.acquire(session_id))
+            yield
+        finally:
+            if not already_owned:
+                await complete_before_cancel(self._session.release(session_id))
 
     async def recover_physical(self, session_id: str) -> PhysicalRecoveryResult:
+        if self._session.owns(session_id):
+            path = self._session.path_for(session_id)
+
+            def repair_owned() -> PhysicalRecoveryResult:
+                with session_file_lock(path):
+                    return _repair_locked(self._directory, session_id, path)
+
+            return await asyncio.to_thread(repair_owned)
         return await asyncio.to_thread(_repair_sync, self._directory, session_id)

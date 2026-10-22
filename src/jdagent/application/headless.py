@@ -1,5 +1,6 @@
 """One-shot application seam shared by text and JSON presenters."""
 
+import asyncio
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -41,6 +42,8 @@ class HeadlessResult:
     )
     citations: tuple[CitationRecord, ...] = ()
     model_supplement: str = ""
+    maintenance_job: str | None = None
+    maintenance_status: str | None = None
 
     @property
     def exit_status(self) -> ExitStatus:
@@ -64,6 +67,12 @@ class HeadlessResult:
         recorded = retrieval_payload(self.knowledge)
         return {
             "schema_version": 2,
+            "maintenance": {
+                "job_id": self.maintenance_job,
+                "status_at_output": self.maintenance_status,
+            }
+            if self.maintenance_job
+            else None,
             "status": "success" if self.exit_status is ExitStatus.SUCCESS else "error",
             "session_id": self.session_id,
             "turn_id": self.turn_id,
@@ -126,6 +135,12 @@ async def run_headless(
     summary = turn.trace.summary
     return HeadlessResult(
         session_id=turn.session_id,
+        maintenance_job=turn.maintenance_job,
+        maintenance_status=await asyncio.to_thread(
+            coordinator.memory.store.job_status, turn.maintenance_job
+        )
+        if coordinator.memory is not None and turn.maintenance_job
+        else None,
         turn_id=turn.turn_id,
         stop_reason=turn.result.stop_reason,
         answer=turn.result.assistant_text,

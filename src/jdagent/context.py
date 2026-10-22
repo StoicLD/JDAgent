@@ -6,7 +6,6 @@ from dataclasses import replace
 
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
-    RecoverySnapshotPayload,
     RuntimeEvent,
     RuntimeEventType,
     ToolExecutionCompletedPayload,
@@ -47,12 +46,7 @@ def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]
 
     messages: list[ModelMessage] = []
     for event in events:
-        if event.event_type is RuntimeEventType.RECOVERY_SNAPSHOT:
-            payload = event.payload
-            if not isinstance(payload, RecoverySnapshotPayload):
-                raise TypeError("recovery_snapshot event has the wrong payload")
-            messages.extend(payload.messages)
-        elif event.event_type is RuntimeEventType.USER_MESSAGE:
+        if event.event_type is RuntimeEventType.USER_MESSAGE:
             payload = event.payload
             if not isinstance(payload, UserMessagePayload):
                 raise TypeError("user_message event has the wrong payload")
@@ -124,6 +118,7 @@ class ContextBuilder:
         *,
         allow_tools: bool = True,
         repair_message: str | None = None,
+        enforce_budget: bool = True,
     ) -> ModelRequest:
         """Build and validate one deterministic provider-independent request."""
 
@@ -166,30 +161,13 @@ class ContextBuilder:
             for limit in (self._max_context_tokens, capabilities.context_window)
             if limit is not None
         ]
-        if limits:
+        if limits and enforce_budget:
             hard_limit = min(limits)
             if self._sliding_window:
                 omitted: list[str] = []
                 retained = list(events)
                 while estimated_tokens > hard_limit:
                     snapshot_removed = False
-                    for index, event in enumerate(retained):
-                        if not isinstance(event.payload, RecoverySnapshotPayload):
-                            continue
-                        history = event.payload.messages
-                        removable = len(history) - event.payload.protected_tail_messages
-                        if removable == 0:
-                            continue
-                        boundary = next(
-                            (i for i in range(1, removable) if history[i].role is MessageRole.USER),
-                            removable,
-                        )
-                        retained[index] = replace(
-                            event, payload=replace(event.payload, messages=history[boundary:])
-                        )
-                        omitted.append(f"snapshot:{event.sequence}:{len(omitted)}")
-                        snapshot_removed = True
-                        break
                     current_turn = next(
                         (
                             event.turn_id

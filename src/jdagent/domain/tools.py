@@ -56,6 +56,7 @@ class PermissionTargetKind(StrEnum):
     FILE = "file"
     DIRECTORY = "directory"
     COMMAND = "command"
+    MEMORY = "memory"
 
 
 class ApprovalDecision(StrEnum):
@@ -111,6 +112,7 @@ class ToolErrorCode(StrEnum):
     EXECUTION_FAILED = "execution_failed"
     CONFLICT = "conflict"
     NOT_EXECUTED = "not_executed"
+    INSTRUCTIONS_DISCOVERED = "instructions_discovered"
     CANCELLED = "cancelled"
     UNCERTAIN = "uncertain"
     CAPACITY = "capacity"
@@ -169,6 +171,7 @@ class ToolExecutionContext:
     workspace: Path
     readable_log_sessions: tuple[str, ...] = ()
     call_id: str = ""
+    memory_intent: str | None = None
 
 
 ToolHandler = Callable[[JsonObject, ToolExecutionContext], Awaitable[str | ToolOutcome]]
@@ -187,6 +190,7 @@ class ToolDefinition:
     preflight: ToolPreflight | None = None
     result_schema: JsonObject | None = None
     manages_timeout: bool = False
+    permission_target: PermissionTargetKind | None = None
 
 
 @dataclass(frozen=True, slots=True)

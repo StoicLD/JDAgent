@@ -1,0 +1,40 @@
+{
+  "request_id": "0703c15011ed411ea7a130f1389ffcef",
+  "manifest": "eeb80605de2da1733ded44f10d234f33cbdf1de593f1a80ee909eac329c5ecfb",
+  "estimate": 20652,
+  "original_capture_sha256": "ce6069c5bcea7eb9f91006f07b158e02a3c276f8d7397217e47fa9ec3f935753",
+  "response_sha256": "87a8a10befbbf84e0eaf7efb2ab9bf1d359ea0114be3ea68e1c97c101d10ea36",
+  "usage": {
+    "input_tokens": 4486,
+    "output_tokens": 217,
+    "cached_tokens": 4352,
+    "reasoning_tokens": 0
+  },
+  "fact_provenance": [
+    {
+      "status": "completed",
+      "sources": [
+        2
+      ]
+    },
+    {
+      "status": "completed",
+      "sources": [
+        2
+      ]
+    },
+    {
+      "status": "completed",
+      "sources": [
+        3
+      ]
+    },
+    {
+      "status": "completed",
+      "sources": [
+        4
+      ]
+    }
+  ],
+  "finding": "This separate diagnostic reproduced completed facts citing user sequence 2 and assistant sequence 3. Only successful tool-result sequence 4 can establish completed execution. It is not the original response of any run-1 attempt."
+}

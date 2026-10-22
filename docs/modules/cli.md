@@ -13,7 +13,8 @@ CLI 提供持久交互与单次 Headless 两种入口，共用 TurnCoordinator �
 
 提供 Prompt 时运行一轮并返回 text 或 JSON。Headless 不阻塞等待交互审批。
 JSON 输出当前为 schema v2，包含回答、停止原因、用量、知识状态、引用和模型补充；
-Session 事件 schema v3 是不同合同。
+Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID 和输出时状态。
+回答先输出并 flush，之后可有界等待维护；具体行为见[记忆模块](memory.md)。
 
 退出码：成功 `0`，内部错误 `1`，用法／配置错误 `2`，会话错误 `3`，
 运行错误 `4`，取消 `130`。退出 0 代表 Runtime 正常结束，不代表任务的独立验收通过。
@@ -32,9 +33,13 @@ Session 事件 schema v3 是不同合同。
 | `/trace` | 查看结构化执行轨迹 |
 | `/knowledge` | 查看 workspace 知识绑定和本轮知识状态 |
 | `/logs` | 查看／清理当前 Session 的命令日志 |
+| `/compact` | 提前压缩，运行中排队并合并重复请求 |
+| `/context-window` | 显示窗口、输入预算、最近完整占用与分类 |
 | `/exit` | 退出交互 |
 
-当前枚举为 11 条；早期 v0.2 的“九条命令”是历史范围。
+当前枚举为 13 条；没有 `/context` 或 `/memory`。终端只有一个输入读取者，运行中命令不会
+成为审批答案，普通输入也不会暗中启动另一 Turn。
+`jdagent maintain --pending --workspace <路径>` 续做已登记的后台整理。
 知识管理还提供 `jdagent knowledge ...` 独立命令树，负责连接、知识库、来源和 Binding 等操作；
 它的真实 RAG 配置限制见[知识模块](knowledge.md)。
 
@@ -44,6 +49,10 @@ Session 事件 schema v3 是不同合同。
 不能用更高优先级配置放宽用户／项目拒绝。
 默认 Provider 为 DeepSeek，工具范围 execute，写与命令权限 ask。
 模型／工具超时和上下文窗口由配置提供，完整参数以 `jdagent --help` 为准。
+配置在 Turn 边界重读；本轮模型设置和指令正文固定。默认任务限额为 16 次模型、32 次工具、
+2 次失败恢复，可在配置中调整。Provider 或端点变化需要重启；未知模型需要显式窗口容量。
+`--model-context-window`、`--max-output-tokens` 和 `--max-context-tokens` 分别控制模型容量、
+输出预留和应用上限。后台与总费用配置见[记忆模块](memory.md)。
 
 DeepSeek Key 优先读取 `DEEPSEEK_API_KEY`，其次使用用户配置 `api_key_file`，
 最后回退到开发期 `../tmp/keys/deepseek-api-key.txt`。

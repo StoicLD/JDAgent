@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from jdagent.context import ContextBuilder, ContextLimitError
+from jdagent.context_runtime import CompactionError, ContextService
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -20,6 +21,7 @@ from jdagent.domain.events import (
 from jdagent.domain.model import (
     ModelErrorCategory,
     ModelEvent,
+    ModelRequest,
     ResponseCompleted,
     TextDelta,
     ToolCallCompleted,
@@ -28,6 +30,7 @@ from jdagent.domain.model import (
 )
 from jdagent.domain.tools import (
     ToolCall,
+    ToolErrorCode,
     ToolExecutionContext,
 )
 from jdagent.eventing import close_pending_calls
@@ -96,9 +99,11 @@ class AgentLoop:
         provider_name: str = "unknown",
         model_name: str = "unknown",
         model_event_observers: tuple[ModelEventObserver, ...] = (),
+        context_service: ContextService | None = None,
     ) -> None:
         self._model = model
         self._context_builder = context_builder
+        self._context_service = context_service
         self._tools = tools
         self._journal = journal
         self._limits = limits or LoopLimits()
@@ -134,6 +139,7 @@ class AgentLoop:
         }
         repaired = False
         observed_failures = 0
+        context_retried = False
 
         while True:
             if cancellation.cancelled:
@@ -158,12 +164,8 @@ class AgentLoop:
                 )
 
             try:
-                request = self._context_builder.build(
-                    self._journal.events,
-                    self._model.capabilities,
-                    self._knowledge,
-                )
-            except ContextLimitError as error:
+                request = await self._prepare_context()
+            except (ContextLimitError, CompactionError) as error:
                 return await self._fail(
                     turn_id,
                     StopReason.CONTEXT_LIMIT,
@@ -187,6 +189,7 @@ class AgentLoop:
             completed = False
             finish_reason: str | None = None
             unfinished_tool_delta = False
+            retry_context = False
             try:
                 async with asyncio.timeout(request.settings.timeout_seconds):
                     async for event in self._model.stream(request):
@@ -200,6 +203,8 @@ class AgentLoop:
                             unfinished_tool_delta = False
                             response_calls.append(event.call)
                         elif isinstance(event, UsageReported):
+                            if self._context_service is not None:
+                                await self._context_service.observe_usage(request, event.usage)
                             await self._journal.record(
                                 turn_id,
                                 RuntimeEventType.MODEL_USAGE_RECORDED,
@@ -207,6 +212,8 @@ class AgentLoop:
                                     self._provider_name,
                                     request.model,
                                     event.usage,
+                                    request.metadata.get("request_id"),
+                                    request.metadata.get("call_kind", "task"),
                                 ),
                             )
                         elif isinstance(event, ResponseCompleted):
@@ -221,6 +228,17 @@ class AgentLoop:
                             completed = True
                             finish_reason = event.finish_reason
                         else:
+                            if (
+                                event.category is ModelErrorCategory.CONTEXT_LENGTH
+                                and self._context_service is not None
+                                and not context_retried
+                                and not response_calls
+                                and not response_text
+                            ):
+                                self._context_service.reject_window(request)
+                                context_retried = True
+                                retry_context = True
+                                break
                             return await self._fail(
                                 turn_id,
                                 StopReason.MODEL_ERROR,
@@ -262,6 +280,8 @@ class AgentLoop:
                     text_parts,
                 )
 
+            if retry_context:
+                continue
             if not completed or unfinished_tool_delta:
                 return await self._model_protocol_failure(
                     turn_id,
@@ -336,14 +356,11 @@ class AgentLoop:
                             text_parts,
                         )
                     try:
-                        repair_request = self._context_builder.build(
-                            self._journal.events,
-                            self._model.capabilities,
-                            self._knowledge,
+                        repair_request = await self._prepare_context(
                             allow_tools=False,
                             repair_message=repair_message(self._knowledge),
                         )
-                    except ContextLimitError as error:
+                    except (ContextLimitError, CompactionError) as error:
                         return await self._fail(
                             turn_id,
                             StopReason.CONTEXT_LIMIT,
@@ -374,11 +391,19 @@ class AgentLoop:
                                         text_parts,
                                     )
                                 elif isinstance(event, UsageReported):
+                                    if self._context_service is not None:
+                                        await self._context_service.observe_usage(
+                                            repair_request, event.usage
+                                        )
                                     await self._journal.record(
                                         turn_id,
                                         RuntimeEventType.MODEL_USAGE_RECORDED,
                                         ModelUsageRecordedPayload(
-                                            self._provider_name, repair_request.model, event.usage
+                                            self._provider_name,
+                                            repair_request.model,
+                                            event.usage,
+                                            repair_request.metadata.get("request_id"),
+                                            "citation_repair",
                                         ),
                                     )
                                 else:
@@ -488,7 +513,7 @@ class AgentLoop:
                     model_supplement=self._model_supplement,
                 )
 
-            for call in response_calls:
+            for call_index, call in enumerate(response_calls):
                 if cancellation.cancelled:
                     return await self._fail(
                         turn_id,
@@ -534,6 +559,14 @@ class AgentLoop:
                     RuntimeEventType.TOOL_EXECUTION_COMPLETED,
                     ToolExecutionCompletedPayload(result),
                 )
+                if result.error_code is ToolErrorCode.INSTRUCTIONS_DISCOVERED:
+                    tool_calls += len(response_calls) - call_index - 1
+                    await close_pending_calls(
+                        self._journal,
+                        turn_id,
+                        reason="New directory rules require replanning the batch",
+                    )
+                    break
                 if result.stop_turn:
                     cancelled = result.outcome is not None and result.outcome.cancelled
                     return await self._fail(
@@ -557,6 +590,21 @@ class AgentLoop:
                             tool_calls,
                             text_parts,
                         )
+
+    async def _prepare_context(
+        self, *, allow_tools: bool = True, repair_message: str | None = None
+    ) -> ModelRequest:
+        if self._context_service is not None:
+            return await self._context_service.prepare_request(
+                self._knowledge, allow_tools=allow_tools, repair_message=repair_message
+            )
+        return self._context_builder.build(
+            self._journal.events,
+            self._model.capabilities,
+            self._knowledge,
+            allow_tools=allow_tools,
+            repair_message=repair_message,
+        )
 
     async def _model_protocol_failure(
         self,

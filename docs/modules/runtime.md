@@ -11,7 +11,8 @@
 Coordinator 打开 Session、检查恢复状态、记录用户输入、准备本轮知识，随后创建 `AgentLoop`。
 一个 Session 包含多个 Turn，一个 Turn 可以调用模型和工具多次。
 
-`AgentLoop` 决定调用顺序和停止条件；`ContextBuilder` 构造请求；
+`AgentLoop` 决定调用顺序和停止条件；`ContextService` 在请求前执行预算、归档与压缩，
+内部使用 `ContextBuilder` 构造基本消息；
 `ModelPort` 接模型；`ToolRuntimePort` 执行工具；`RuntimeJournal` 保存事实。
 具体依赖由 `composition.py` 组装。Loop 不直接拼 DeepSeek HTTP 请求或读写 JSONL。
 

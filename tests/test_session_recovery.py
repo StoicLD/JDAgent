@@ -226,7 +226,7 @@ def test_recovery_session_starts_at_last_safe_turn_and_preserves_original() -> N
     original_count, messages, recovered_id = asyncio.run(scenario())
 
     assert original_count == 6
-    assert messages == ("safe question", "safe answer")
+    assert messages == ()  # v0.5 resolves the parent reference in ContextService.
     assert recovered_id != "original"
 
 

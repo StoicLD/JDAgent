@@ -1,4 +1,4 @@
-"""Canonical runtime event schema version 3."""
+"""Canonical runtime event schema version 4."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -7,7 +7,7 @@ from typing import TypeAlias
 from uuid import uuid4
 
 from jdagent.domain.errors import StopReason
-from jdagent.domain.model import ModelMessage, Usage
+from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
@@ -27,6 +27,11 @@ class RuntimeEventType(StrEnum):
     RECOVERY_SNAPSHOT = "recovery_snapshot"
     USER_MESSAGE = "user_message"
     CONTEXT_WINDOW_SELECTED = "context_window_selected"
+    MODEL_REQUEST_PREPARED = "model_request_prepared"
+    COMPACTION_COMMITTED = "compaction_committed"
+    COMPACTION_FAILED = "compaction_failed"
+    CONSTRAINT_REVOKED = "constraint_revoked"
+    SIDE_EFFECT_RESOLVED = "side_effect_resolved"
     TURN_RETRIEVAL_RECORDED = "turn_retrieval_recorded"
     ASSISTANT_MESSAGE_COMPLETED = "assistant_message_completed"
     TOOL_CALL_REQUESTED = "tool_call_requested"
@@ -58,16 +63,14 @@ class SessionRenamedPayload:
 
 @dataclass(frozen=True, slots=True)
 class RecoverySnapshotPayload:
-    """Standalone context copied from a source session through a safe terminal event."""
+    """Immutable parent reference; recovery never copies messages or permissions."""
 
     parent_session_id: str
     through_sequence: int
-    messages: tuple[ModelMessage, ...]
-    protected_tail_messages: int = 0
-
-    def __post_init__(self) -> None:
-        if not 0 <= self.protected_tail_messages <= len(self.messages):
-            raise ValueError("Invalid recovery snapshot protected tail")
+    prefix_hash: str
+    checkpoint_hash: str | None = None
+    unknown_operations: tuple[str, ...] = ()
+    gap_until: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +85,51 @@ class ContextWindowSelectedPayload:
     """History omitted from a model request, without deleting session facts."""
 
     omitted_turn_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelRequestPreparedPayload:
+    """A durable request manifest, committed before calling the provider."""
+
+    request_id: str
+    object_hash: str
+    call_kind: str
+    input_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionCommittedPayload:
+    """The only authority for installing a replacement context projection."""
+
+    through_sequence: int
+    prefix_hash: str
+    object_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionFailedPayload:
+    """Suppress automatic retries against the same unchanged source prefix."""
+
+    through_sequence: int
+    prefix_hash: str
+    reason: str
+    response_hashes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ConstraintRevokedPayload:
+    constraint_sequence: int
+    user_event_id: str
+    expected_version: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class SideEffectResolutionPayload:
+    parent_session_id: str
+    call_id: str
+    user_event_id: str
+    conclusion: str
+    evidence: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +271,8 @@ class ModelUsageRecordedPayload:
     provider: str
     model: str
     usage: Usage
+    request_id: str | None = None
+    call_kind: str = "task"
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +305,11 @@ RuntimePayload: TypeAlias = (
     | RecoverySnapshotPayload
     | UserMessagePayload
     | ContextWindowSelectedPayload
+    | ModelRequestPreparedPayload
+    | CompactionCommittedPayload
+    | CompactionFailedPayload
+    | ConstraintRevokedPayload
+    | SideEffectResolutionPayload
     | TurnRetrievalRecordedPayload
     | AssistantMessageCompletedPayload
     | ToolCallRequestedPayload
@@ -293,10 +348,10 @@ class RuntimeEvent:
         event_type: RuntimeEventType,
         payload: RuntimePayload,
     ) -> "RuntimeEvent":
-        """Create a schema-v3 event with a unique ID and UTC timestamp."""
+        """Create a schema-v4 event with a unique ID and UTC timestamp."""
 
         return cls(
-            schema_version=3,
+            schema_version=4,
             event_id=str(uuid4()),
             session_id=session_id,
             turn_id=turn_id,

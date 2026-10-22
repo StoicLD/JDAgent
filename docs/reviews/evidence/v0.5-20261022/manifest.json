@@ -1,0 +1,632 @@
+{
+  "base": "1729161b062cdffbdd4b30c6cff0ca4baeaec877",
+  "snapshots": {
+    "a": {
+      "patch_sha256": "c821bc2c2ca99788a08b86e1342d3d675d5efd47fb3c3e970a4b883f2479698f",
+      "files": 225,
+      "file_hashes_recorded_at": "evidence_archive"
+    },
+    "b": {
+      "patch_sha256": "6cafb401b1a3862c7dbb471d7b7c9974071693bd56f2fefaa9634280b6adc667",
+      "files": 230,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "c": {
+      "patch_sha256": "75d69f1224ed29a06de6b16626566ed6cf3f593be1c71e052cfb81e9b2397237",
+      "files": 233,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "e": {
+      "patch_sha256": "b59c77c77257b83d6b8d34b650c0d664c5af773d73428be9ff1e585aa377d92e",
+      "files": 233,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "f": {
+      "patch_sha256": "41e8b6c1396dd29a30cd74631b5deee4a86d3144153fa89f74f93af9b107b803",
+      "files": 234,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "g": {
+      "patch_sha256": "430e529df4031a7b814532650ba9d4a3c79b18214ec4ce9ce30ce2268b58e953",
+      "files": 235,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "h": {
+      "patch_sha256": "5ba2ec5a7302e29b19fc68990bd99f4df0aafe8d2946557f4692c949edfac2f7",
+      "files": 235,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "i": {
+      "patch_sha256": "1f8449cc00c16bd95e96cfe6f5a00b3aa3cff49f574c0c55be1a042a7d9c0366",
+      "files": 235,
+      "file_hashes_recorded_at": "snapshot_creation"
+    },
+    "j": {
+      "patch_sha256": "afcd9fabb25742f0c87ee9e815046c52eaa1a5511754c24640a97cb60e2d0e48",
+      "files": 235,
+      "file_hashes_recorded_at": "snapshot_creation"
+    }
+  },
+  "test_runs": {
+    "v05-full.xml": [
+      {
+        "tests": "270",
+        "failures": "1",
+        "errors": "0",
+        "skipped": "8",
+        "time": "15.903"
+      }
+    ],
+    "v05-final-targeted.xml": [
+      {
+        "tests": "68",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "6",
+        "time": "4.361"
+      }
+    ],
+    "v05-final-full.xml": [
+      {
+        "tests": "282",
+        "failures": "1",
+        "errors": "0",
+        "skipped": "14",
+        "time": "16.175"
+      }
+    ],
+    "v05-cancel-green.xml": [
+      {
+        "tests": "29",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0",
+        "time": "1.430"
+      }
+    ],
+    "v05-live-run1.xml": [
+      {
+        "tests": "3",
+        "failures": "3",
+        "errors": "0",
+        "skipped": "0",
+        "time": "26.093"
+      }
+    ],
+    "v05-live-run2.xml": [
+      {
+        "tests": "3",
+        "failures": "2",
+        "errors": "0",
+        "skipped": "0",
+        "time": "26.414"
+      }
+    ],
+    "v05-delivery-full.xml": [
+      {
+        "tests": "288",
+        "failures": "1",
+        "errors": "0",
+        "skipped": "14",
+        "time": "10.710"
+      }
+    ],
+    "v05-source-index.xml": [
+      {
+        "tests": "10",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0",
+        "time": "0.427"
+      }
+    ]
+  },
+  "storage": [
+    {
+      "events": 1000,
+      "append_seconds": 0.9402030999772251,
+      "append_p50_ms": 0.9084499324671924,
+      "append_p95_ms": 1.0844999924302101,
+      "reopen_seconds": [
+        0.03240150003693998,
+        0.006644199951551855,
+        0.006593500031158328
+      ],
+      "bytes": 242893
+    },
+    {
+      "events": 10000,
+      "append_seconds": 28.308690599980764,
+      "append_p50_ms": 1.7901500104926527,
+      "append_p95_ms": 8.139800047501922,
+      "reopen_seconds": [
+        0.1416509998962283,
+        0.13674300001002848,
+        0.13214850006625056
+      ],
+      "bytes": 2438894
+    },
+    {
+      "events": 100000,
+      "append_seconds": 285.43694489996415,
+      "append_p50_ms": 1.8748000147752464,
+      "append_p95_ms": 7.796299993060529,
+      "reopen_seconds": [
+        1.3109214999713004,
+        1.3473474000347778,
+        1.3671272000065073
+      ],
+      "bytes": 24488895
+    }
+  ],
+  "live": [
+    {
+      "attempt": 1,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 0,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 40156,
+      "output_tokens": 737,
+      "run": 1,
+      "protected_files_unchanged": true,
+      "archive": "live-run1-attempt1.tar.gz"
+    },
+    {
+      "attempt": 2,
+      "stop_reason": "completed",
+      "model_calls": 6,
+      "compactions": 0,
+      "tools": [
+        "find_files",
+        "find_files",
+        "search_text",
+        "read_file",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 47909,
+      "output_tokens": 815,
+      "run": 1,
+      "protected_files_unchanged": true,
+      "archive": "live-run1-attempt2.tar.gz"
+    },
+    {
+      "attempt": 3,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 0,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 41132,
+      "output_tokens": 874,
+      "run": 1,
+      "protected_files_unchanged": true,
+      "archive": "live-run1-attempt3.tar.gz"
+    },
+    {
+      "attempt": 1,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 0,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 40878,
+      "output_tokens": 819,
+      "run": 2,
+      "protected_files_unchanged": true,
+      "archive": "live-run2-attempt1.tar.gz"
+    },
+    {
+      "attempt": 2,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 0,
+      "tools": [
+        "find_files",
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 40331,
+      "output_tokens": 741,
+      "run": 2,
+      "protected_files_unchanged": true,
+      "archive": "live-run2-attempt2.tar.gz"
+    },
+    {
+      "attempt": 3,
+      "stop_reason": "completed",
+      "model_calls": 6,
+      "compactions": 1,
+      "tools": [
+        "find_files",
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 25976,
+      "output_tokens": 1667,
+      "run": 2,
+      "protected_files_unchanged": true,
+      "archive": "live-run2-attempt3.tar.gz"
+    }
+  ],
+  "v05-live-budget.json": {
+    "requests": [
+      {
+        "request_id": "2a2eb1c7fb4d44cc84faea95b8dd448c",
+        "input": 4486,
+        "output": 227,
+        "actual": true
+      },
+      {
+        "request_id": "75742758baa746ab8dea6ee3b33156f5",
+        "input": 6446,
+        "output": 91,
+        "actual": true
+      },
+      {
+        "request_id": "456e0c75b8204c84bed8714f08884bbc",
+        "input": 6897,
+        "output": 39,
+        "actual": true
+      },
+      {
+        "request_id": "c896295a00d0496e8e1395ac7c45b528",
+        "input": 7096,
+        "output": 157,
+        "actual": true
+      },
+      {
+        "request_id": "e700f34aebc44c5aa725c04450d075ee",
+        "input": 7408,
+        "output": 99,
+        "actual": true
+      },
+      {
+        "request_id": "966944e3a93c45398a5c01ab63d77439",
+        "input": 7823,
+        "output": 124,
+        "actual": true
+      },
+      {
+        "request_id": "7e1b0ba8dd984ec881e45d2b44fdcb8f",
+        "input": 4488,
+        "output": 204,
+        "actual": true
+      },
+      {
+        "request_id": "2717071f5bf34271835dd9f9298434b6",
+        "input": 6446,
+        "output": 74,
+        "actual": true
+      },
+      {
+        "request_id": "8c68c8aa56e54d28b1ce8296cb8416d7",
+        "input": 6705,
+        "output": 39,
+        "actual": true
+      },
+      {
+        "request_id": "294aa9631f7b400bb35c97299e3b05fd",
+        "input": 7011,
+        "output": 68,
+        "actual": true
+      },
+      {
+        "request_id": "ae2d54a501284f808a1b8db69cf46d51",
+        "input": 7419,
+        "output": 149,
+        "actual": true
+      },
+      {
+        "request_id": "abb5272877d34a2dbf919bc3a89c1ee6",
+        "input": 7722,
+        "output": 83,
+        "actual": true
+      },
+      {
+        "request_id": "5a01c0a1b99f48598816a71b2220e48a",
+        "input": 8118,
+        "output": 198,
+        "actual": true
+      },
+      {
+        "request_id": "38276cce35ee424599529ae5fd6f5737",
+        "input": 4496,
+        "output": 212,
+        "actual": true
+      },
+      {
+        "request_id": "f7be20c8044d404c8c58ab8cfc101cd8",
+        "input": 6446,
+        "output": 115,
+        "actual": true
+      },
+      {
+        "request_id": "215a7ad9542044c7810b88418ffdd72a",
+        "input": 7131,
+        "output": 62,
+        "actual": true
+      },
+      {
+        "request_id": "68b569c1eb2e488c9b6fe915e20f2d45",
+        "input": 7353,
+        "output": 134,
+        "actual": true
+      },
+      {
+        "request_id": "aae7623136e04d4ea7eaa51203386f96",
+        "input": 7648,
+        "output": 99,
+        "actual": true
+      },
+      {
+        "request_id": "c04caa56fff3449a9660c41ce1c9d5a7",
+        "input": 8058,
+        "output": 252,
+        "actual": true
+      },
+      {
+        "request_id": "0703c15011ed411ea7a130f1389ffcef",
+        "input": 4486,
+        "output": 217,
+        "actual": true
+      },
+      {
+        "request_id": "b49fe365660d425d992c40e5bf69835a",
+        "input": 4505,
+        "output": 196,
+        "actual": true
+      },
+      {
+        "request_id": "d1d6a51c9c954d13b97a98acbd806506",
+        "input": 6446,
+        "output": 113,
+        "actual": true
+      },
+      {
+        "request_id": "34734a73dda34b3d91ed0ac519127fd8",
+        "input": 6919,
+        "output": 68,
+        "actual": true
+      },
+      {
+        "request_id": "83479fd8494b4d5182e6886ad6e9cc5a",
+        "input": 7331,
+        "output": 147,
+        "actual": true
+      },
+      {
+        "request_id": "1c88fa470f934378b0f6ffc65671218d",
+        "input": 7633,
+        "output": 99,
+        "actual": true
+      },
+      {
+        "request_id": "3cc66e7e5e81426ab841a2aa9fcaee4c",
+        "input": 8044,
+        "output": 196,
+        "actual": true
+      },
+      {
+        "request_id": "24fcd01b7e4949298a749cb39d72ab4e",
+        "input": 4501,
+        "output": 174,
+        "actual": true
+      },
+      {
+        "request_id": "94840567f52f46ce9a9860caf698f67e",
+        "input": 6446,
+        "output": 74,
+        "actual": true
+      },
+      {
+        "request_id": "51e5962ea5f4495f8a37dd12f14b3f75",
+        "input": 6705,
+        "output": 85,
+        "actual": true
+      },
+      {
+        "request_id": "db9d69af210446acb6878628166fa8f4",
+        "input": 7215,
+        "output": 154,
+        "actual": true
+      },
+      {
+        "request_id": "445eb9816d6e46888cefb7bbe54f9165",
+        "input": 7532,
+        "output": 83,
+        "actual": true
+      },
+      {
+        "request_id": "b29531109af645e9b06ff18baafb5069",
+        "input": 7932,
+        "output": 171,
+        "actual": true
+      },
+      {
+        "request_id": "56ecf7e1b9cf4ae299837c9d08a79fb1",
+        "input": 4496,
+        "output": 241,
+        "actual": true
+      },
+      {
+        "request_id": "b430622c2e754fb9a257b69cfc897de4",
+        "input": 1397,
+        "output": 303,
+        "actual": true
+      },
+      {
+        "request_id": "1969f5f7ee514c09a43006e24d5da71f",
+        "input": 684,
+        "output": 455,
+        "actual": true
+      },
+      {
+        "request_id": "976f4e9ce0b444d68366bc27b3eacc92",
+        "input": 2351,
+        "output": 105,
+        "actual": true
+      },
+      {
+        "request_id": "4f2c7f8605f84312b3a6627e30dda7f3",
+        "input": 2643,
+        "output": 71,
+        "actual": true
+      },
+      {
+        "request_id": "1a3ae9a3ae674fbb997418fd9c3c4d21",
+        "input": 3182,
+        "output": 66,
+        "actual": true
+      },
+      {
+        "request_id": "2f534fd6d05f43ac8427bad5df931ad1",
+        "input": 3410,
+        "output": 136,
+        "actual": true
+      },
+      {
+        "request_id": "5f3bceab23d94e96ab7bfe17d35236c3",
+        "input": 3700,
+        "output": 99,
+        "actual": true
+      },
+      {
+        "request_id": "eff4fdbfe7a146b68321a15d42ea539e",
+        "input": 4113,
+        "output": 191,
+        "actual": true
+      }
+    ]
+  },
+  "v05-live-diagnostic-summary.json": {
+    "request_id": "0703c15011ed411ea7a130f1389ffcef",
+    "manifest": "eeb80605de2da1733ded44f10d234f33cbdf1de593f1a80ee909eac329c5ecfb",
+    "estimate": 20652,
+    "original_capture_sha256": "ce6069c5bcea7eb9f91006f07b158e02a3c276f8d7397217e47fa9ec3f935753",
+    "response_sha256": "87a8a10befbbf84e0eaf7efb2ab9bf1d359ea0114be3ea68e1c97c101d10ea36",
+    "usage": {
+      "input_tokens": 4486,
+      "output_tokens": 217,
+      "cached_tokens": 4352,
+      "reasoning_tokens": 0
+    },
+    "fact_provenance": [
+      {
+        "status": "completed",
+        "sources": [
+          2
+        ]
+      },
+      {
+        "status": "completed",
+        "sources": [
+          2
+        ]
+      },
+      {
+        "status": "completed",
+        "sources": [
+          3
+        ]
+      },
+      {
+        "status": "completed",
+        "sources": [
+          4
+        ]
+      }
+    ],
+    "finding": "This separate diagnostic reproduced completed facts citing user sequence 2 and assistant sequence 3. Only successful tool-result sequence 4 can establish completed execution. It is not the original response of any run-1 attempt."
+  },
+  "snapshot_reconstruction": {
+    "method": "git archive base + git apply each patch; compare every frozen file with CRLF normalized to LF",
+    "result": "all_matched",
+    "snapshots": [
+      "a",
+      "b",
+      "c",
+      "e",
+      "f",
+      "g",
+      "h",
+      "i",
+      "j"
+    ]
+  },
+  "artifact_sha256": {
+    ".gitattributes": "35fdefbc65c458b532cd72beea45dc923e5be6ad3c042e716a4aa47b884f5b8c",
+    "a.files.sha256.json": "ae97c6a3188e1890ac524b87bc85b8d6b1ca59e2a32b32423983a81cf49997d8",
+    "a.patch.gz": "182ade20fa0712d22a592ff68c5594355e0967305ca275f5c9a25ecd56cf2502",
+    "a.snapshot.txt": "dadffa60500068dcec311811d9c3a0478b40983c62ebd411e8e1af34e3f08f39",
+    "b.files.sha256.json": "7ebdaf3d6e5759c45597efa37039d85fe88dfba85ba0a65e71152900c4be122c",
+    "b.patch.gz": "41b462b578735de766dade8f7a04ca3c41ab9f5650816f9d6b4c0d52f9caae70",
+    "b.snapshot.txt": "56b72b1a0c85e83ec2729972f014710eeea41de6c020efa8c671b02108639ded",
+    "c.files.sha256.json": "18c749a56e05774f1c81708129b15319b9d5a904d5ab0535a777218c173f2419",
+    "c.patch.gz": "57fa5bbafe6ff1561c525ea99b8d59d1b452a77c35ebd637582e232569ccecab",
+    "c.snapshot.txt": "20ee3fdd4ea0a656c09cb1eadb7bd2fbcedd2201d1d191ed61dcadd0b10a6306",
+    "e.files.sha256.json": "b2041d5987eb8be0aa27bb830b8e4379e976463725b12ef5f26d1432f691754c",
+    "e.patch.gz": "d3a807efef5814615e57daeb1ce62583b9cd5033ea0ad81bb96ce66f202c5147",
+    "e.snapshot.txt": "6de0b1fbb2f0fa9696f2fb2298b7a52a10cf88d7968d10ee0fea8e216cccf276",
+    "f.files.sha256.json": "b8415286357cf4a373311cef1bb6f368143746bcf8d6c6fa5190f86b6a6b4d66",
+    "f.patch.gz": "9ee2cb95ec0febb0bbe65b4caa32c894c2fe2d25e3653397805f065e602fd30d",
+    "f.snapshot.txt": "3cc764f1822ebd459d1f6adc0f1ffa0e16687724c782db1ab25ddb9bfb9d6ad5",
+    "g.files.sha256.json": "b094b0393b1801d7969ad337fdd1a447085b43e6b7217a3c58f9f8f9a49673d9",
+    "g.patch.gz": "a77681136ada2e1df2dd6a69603017cd626fd4a1db8de52e054aec2ef7f74f69",
+    "g.snapshot.txt": "fa4e83e1b745a29af72967a9a4632a20c1e4d2b24d9c8ffd080a7b52a739f58e",
+    "h.files.sha256.json": "98226c50b8ffc61432af672cc660e6130cc48252f5a527d0a633fae68005dbe2",
+    "h.patch.gz": "2ec498fba19e565b8d5dc4c4bd1b4e6c7382d18577771423c5c34d9289de4a91",
+    "h.snapshot.txt": "9d5c50921831b90684a4a47eb09e9ae81d8064197474c3cabf34b7695b8bf19d",
+    "i.files.sha256.json": "4d88d583000df66fd4e3d03caf95d43300dde486b61fa881de6ec20f91750750",
+    "i.patch.gz": "ea207365f01c57ee755beef2939fd37f8645646fc12424190f8193ec9c329272",
+    "i.snapshot.txt": "6b1c53d66ffa1a436f5bd4817522810218753ea9cc42bcd7b2fe9ba63f11d695",
+    "j.files.sha256.json": "26c04b38c669d482fb39b861423811ea175059f17ffa0534e627f483f227239f",
+    "j.patch.gz": "bfd06c76e83afe8a1a7ed56ba99e44b1fd096aae75cdc094eeb248ea1c762914",
+    "j.snapshot.txt": "12956e79c318e04a9c78ba5c7098d0e9a68839d088986b16e16ce8b0b64066de",
+    "live-run1-attempt1.tar.gz": "f6001d6255bee8c30365d3737993dfa471198e4c2079337f78d58317c53b7406",
+    "live-run1-attempt2.tar.gz": "754274d866d20d0fd4716744e2d7283e1dc046f6d9c423d29005a214b818894b",
+    "live-run1-attempt3.tar.gz": "a700f1d7ceb4d1e2f4dba32bbaa33e033b411504a0e69b24bf16e0f5195d1419",
+    "live-run2-attempt1.tar.gz": "3844f50d0e31690aedc9db3a2b730fbd534e828b3d1c45b6b79c01f243eba040",
+    "live-run2-attempt2.tar.gz": "e7974af195ec83aa9178614bb938547f77f771670177c19a8204089226758077",
+    "live-run2-attempt3.tar.gz": "72127d24485547dfab2d880fba981aba8f218fe2c9871dc20b2e3793bb72397d",
+    "README.md": "c8b7612777a5d56d45d559d99810133a52f49e8eacc8290f9e660cc1d79153a4",
+    "storage-1000.json": "fd990327a7fedbd20516d2a59ef4307f400816bd495525744382d86b52489561",
+    "storage-10000.json": "79a19bc12b7827ddf1f7b4c6e56c5b84c6d164b2ecb437fb08196c9ce7836003",
+    "storage-100000.json": "b98935a65ec83f15b396b6154d5f91041f9a50d90901a1d31f0731d90a50dbc0",
+    "v05-cancel-green.xml.gz": "54aa1cb7a48da5a1116cc9af3b3a7f9d107f8109719ac6c07566f4643f05b388",
+    "v05-delivery-full.xml.gz": "494f1ec8136f1e0754b4be88762004a2321cf883e37501957d3ffb846d46767e",
+    "v05-final-full.xml.gz": "cbf7ef4c38f82cf77e6cf7142532d0dee58cd3402d4f85c049ebac2cd7c4b530",
+    "v05-final-targeted.xml.gz": "a0c98e20476cbe9c1da59e7ff9fce90b06000d9e84fe0c4b94db1d7f5769d097",
+    "v05-full.xml.gz": "c08057784fc650a25108a087f1966ca7cf61b77bf0c99c2b80448ea96a256030",
+    "v05-live-budget.json": "cbf8db9d24d4a336f6ded87a64eda5ca8978ad9913035edc7597799369717886",
+    "v05-live-diagnostic-summary.json": "0cc02757987531472ab34b7e8e15b5b689fe8fbd384fa22f097a85eecf90e319",
+    "v05-live-run1.xml.gz": "21711d1dcd7f1487212d0a6b51a7f88ac5495c4860ebc8503c456d8282b4d66b",
+    "v05-live-run2.xml.gz": "608fc8dea421b1623476d80d644b2f0b870c125311b4b6294d39b3635eeef5b9",
+    "v05-source-index.xml.gz": "5b57bad08aa4687d7d9b8bc35bad5315168ae2b99025091c680d838f54f2f7a5"
+  }
+}

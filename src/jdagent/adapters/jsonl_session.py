@@ -10,11 +10,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from jdagent.adapters.context_objects import FileContextObjects
+from jdagent.adapters.session_lock import SessionLease
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     CitationRecord,
+    CompactionCommittedPayload,
+    CompactionFailedPayload,
+    ConstraintRevokedPayload,
     ContextWindowSelectedPayload,
+    ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
     PermissionResolvedPayload,
@@ -29,6 +35,7 @@ from jdagent.domain.events import (
     RuntimePayload,
     SessionRenamedPayload,
     SessionStartedPayload,
+    SideEffectResolutionPayload,
     ToolCallRequestedPayload,
     ToolExecutionCompletedPayload,
     ToolExecutionStartedPayload,
@@ -46,7 +53,7 @@ from jdagent.domain.json import (
     require_object,
     require_string,
 )
-from jdagent.domain.model import MessageRole, ModelMessage, Usage
+from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
@@ -63,15 +70,15 @@ from jdagent.domain.tools import (
 
 _SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _LOCKS_GUARD = threading.Lock()
-_PATH_LOCKS: dict[Path, threading.Lock] = {}
+_PATH_LOCKS: dict[Path, threading.RLock] = {}
 
 
-def session_file_lock(path: Path) -> threading.Lock:
+def session_file_lock(path: Path) -> threading.RLock:
     """Return the process-local lock shared by session storage adapters."""
 
     normalized = path.resolve(strict=False)
     with _LOCKS_GUARD:
-        return _PATH_LOCKS.setdefault(normalized, threading.Lock())
+        return _PATH_LOCKS.setdefault(normalized, threading.RLock())
 
 
 def _tool_call_to_data(call: ToolCall) -> JsonObject:
@@ -138,17 +145,41 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
     }
 
 
-def _model_message_to_data(message: ModelMessage) -> JsonObject:
-    return {
-        "role": message.role.value,
-        "content": message.content,
-        "tool_calls": [_tool_call_to_data(call) for call in message.tool_calls],
-        "tool_call_id": message.tool_call_id,
-        "name": message.name,
-    }
-
-
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, SideEffectResolutionPayload):
+        return {
+            "parent_session_id": payload.parent_session_id,
+            "call_id": payload.call_id,
+            "user_event_id": payload.user_event_id,
+            "conclusion": payload.conclusion,
+            "evidence": payload.evidence,
+        }
+    if isinstance(payload, ConstraintRevokedPayload):
+        return {
+            "constraint_sequence": payload.constraint_sequence,
+            "user_event_id": payload.user_event_id,
+            "expected_version": payload.expected_version,
+        }
+    if isinstance(payload, ModelRequestPreparedPayload):
+        return {
+            "request_id": payload.request_id,
+            "object_hash": payload.object_hash,
+            "call_kind": payload.call_kind,
+            "input_tokens": payload.input_tokens,
+        }
+    if isinstance(payload, CompactionCommittedPayload):
+        return {
+            "through_sequence": payload.through_sequence,
+            "prefix_hash": payload.prefix_hash,
+            "object_hash": payload.object_hash,
+        }
+    if isinstance(payload, CompactionFailedPayload):
+        return {
+            "through_sequence": payload.through_sequence,
+            "prefix_hash": payload.prefix_hash,
+            "reason": payload.reason,
+            "response_hashes": list(payload.response_hashes),
+        }
     if isinstance(payload, SessionStartedPayload):
         return {
             "name": payload.name,
@@ -160,8 +191,10 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
         return {
             "parent_session_id": payload.parent_session_id,
             "through_sequence": payload.through_sequence,
-            "messages": [_model_message_to_data(message) for message in payload.messages],
-            "protected_tail_messages": payload.protected_tail_messages,
+            "prefix_hash": payload.prefix_hash,
+            "checkpoint_hash": payload.checkpoint_hash,
+            "unknown_operations": list(payload.unknown_operations),
+            "gap_until": payload.gap_until,
         }
     if isinstance(payload, UserMessagePayload):
         return {"content": payload.content}
@@ -238,6 +271,8 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
         return {"result": _tool_result_to_data(payload.result)}
     if isinstance(payload, ModelUsageRecordedPayload):
         return {
+            "request_id": payload.request_id,
+            "call_kind": payload.call_kind,
             "provider": payload.provider,
             "model": payload.model,
             "usage": {
@@ -368,20 +403,44 @@ def _tool_result(data: JsonObject) -> ToolResult:
     )
 
 
-def _model_message(data: JsonObject) -> ModelMessage:
-    raw_calls = data.get("tool_calls")
-    if not isinstance(raw_calls, list):
-        raise ValueError("tool_calls must be an array")
-    return ModelMessage(
-        role=MessageRole(require_string(data, "role")),
-        content=require_string(data, "content"),
-        tool_calls=tuple(_tool_call(require_object(item, "tool_call")) for item in raw_calls),
-        tool_call_id=optional_string(data, "tool_call_id"),
-        name=optional_string(data, "name"),
-    )
-
-
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.SIDE_EFFECT_RESOLVED:
+        return SideEffectResolutionPayload(
+            require_string(data, "parent_session_id"),
+            require_string(data, "call_id"),
+            require_string(data, "user_event_id"),
+            require_string(data, "conclusion"),
+            require_string(data, "evidence"),
+        )
+    if event_type is RuntimeEventType.CONSTRAINT_REVOKED:
+        return ConstraintRevokedPayload(
+            require_integer(data, "constraint_sequence"),
+            require_string(data, "user_event_id"),
+            require_integer(data, "expected_version"),
+        )
+    if event_type is RuntimeEventType.MODEL_REQUEST_PREPARED:
+        return ModelRequestPreparedPayload(
+            require_string(data, "request_id"),
+            require_string(data, "object_hash"),
+            require_string(data, "call_kind"),
+            require_integer(data, "input_tokens"),
+        )
+    if event_type is RuntimeEventType.COMPACTION_COMMITTED:
+        return CompactionCommittedPayload(
+            require_integer(data, "through_sequence"),
+            require_string(data, "prefix_hash"),
+            require_string(data, "object_hash"),
+        )
+    if event_type is RuntimeEventType.COMPACTION_FAILED:
+        raw_responses = require_array(data.get("response_hashes", []), "response_hashes")
+        if not all(isinstance(item, str) for item in raw_responses):
+            raise ValueError("Compaction response hashes must be strings")
+        return CompactionFailedPayload(
+            require_integer(data, "through_sequence"),
+            require_string(data, "prefix_hash"),
+            require_string(data, "reason"),
+            tuple(str(item) for item in raw_responses),
+        )
     if event_type is RuntimeEventType.SESSION_STARTED:
         return SessionStartedPayload(
             optional_string(data, "name"),
@@ -390,16 +449,16 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
     if event_type is RuntimeEventType.SESSION_RENAMED:
         return SessionRenamedPayload(require_string(data, "name"))
     if event_type is RuntimeEventType.RECOVERY_SNAPSHOT:
-        raw_messages = data.get("messages")
-        if not isinstance(raw_messages, list):
-            raise ValueError("messages must be an array")
+        raw_operations = require_array(data.get("unknown_operations"), "unknown_operations")
+        if not all(isinstance(item, str) for item in raw_operations):
+            raise ValueError("Invalid unknown operations")
         return RecoverySnapshotPayload(
-            parent_session_id=require_string(data, "parent_session_id"),
-            through_sequence=require_integer(data, "through_sequence"),
-            messages=tuple(
-                _model_message(require_object(item, "message")) for item in raw_messages
-            ),
-            protected_tail_messages=require_integer(data, "protected_tail_messages", 0),
+            require_string(data, "parent_session_id"),
+            require_integer(data, "through_sequence"),
+            require_string(data, "prefix_hash"),
+            optional_string(data, "checkpoint_hash"),
+            tuple(str(item) for item in raw_operations),
+            require_integer(data, "gap_until"),
         )
     if event_type is RuntimeEventType.USER_MESSAGE:
         return UserMessagePayload(require_string(data, "content"))
@@ -521,6 +580,8 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
                 require_integer(usage, "cached_tokens"),
                 require_integer(usage, "reasoning_tokens"),
             ),
+            optional_string(data, "request_id"),
+            require_string(data, "call_kind"),
         )
     if event_type is RuntimeEventType.TURN_COMPLETED:
         return TurnCompletedPayload(
@@ -547,7 +608,7 @@ def event_from_data(data: JsonObject) -> RuntimeEvent:
     """Validate and reconstruct one schema-v2 canonical event."""
 
     schema_version = require_integer(data, "schema_version")
-    if schema_version != 3:
+    if schema_version != 4:
         raise SessionError(
             SessionErrorCode.UNSUPPORTED_SCHEMA,
             f"Unsupported schema version: {schema_version}",
@@ -588,6 +649,43 @@ class JsonlSession:
     def __init__(self, directory: Path) -> None:
         self._directory = directory.resolve(strict=False)
         self._directory.mkdir(parents=True, exist_ok=True)
+        self._leases: dict[str, SessionLease] = {}
+        self._lease_guard = threading.RLock()
+        self._tails: dict[str, tuple[int, int, int, int]] = {}
+        self._objects = FileContextObjects(self._directory / "objects")
+
+    def decode_record(self, data: JsonObject) -> RuntimeEvent:
+        """Hydrate only the envelope's owned payload, never user-controlled nested keys."""
+        if "owned_payload_hash" in data:
+            raw = self._objects.get_sync(require_string(data, "owned_payload_hash"))
+            if len(raw) != require_integer(data, "payload_bytes"):
+                raise ValueError("Session payload size mismatch")
+            data = {**data, "payload": _decode_json_object(raw, 0)}
+        return event_from_data(data)
+
+    async def acquire(self, session_id: str) -> None:
+        await asyncio.to_thread(self._acquire_sync, session_id)
+
+    def owns(self, session_id: str) -> bool:
+        with self._lease_guard:
+            return session_id in self._leases
+
+    def _acquire_sync(self, session_id: str) -> None:
+        with self._lease_guard:
+            path = self.path_for(session_id)
+            if session_id not in self._leases:
+                self._leases[session_id] = SessionLease(path.with_suffix(".lock"))
+                self._tails.pop(session_id, None)
+
+    async def release(self, session_id: str) -> None:
+        await asyncio.to_thread(self._release_sync, session_id)
+
+    def _release_sync(self, session_id: str) -> None:
+        with self._lease_guard:
+            lease = self._leases.pop(session_id, None)
+            self._tails.pop(session_id, None)
+            if lease is not None:
+                lease.close()
 
     async def append(self, event: RuntimeEvent) -> None:
         path = self.path_for(event.session_id)
@@ -624,9 +722,27 @@ class JsonlSession:
         return self._directory / f"{session_id}.jsonl"
 
     def _append_sync(self, path: Path, event: RuntimeEvent) -> None:
+        with session_file_lock(path), self._lease_guard:
+            temporary = event.session_id not in self._leases
+            self._acquire_sync(event.session_id)
+            try:
+                self._append_owned(path, event)
+            finally:
+                if temporary:
+                    self._release_sync(event.session_id)
+
+    def _append_owned(self, path: Path, event: RuntimeEvent) -> None:
+        data = event_to_data(event)
+        payload = json.dumps(
+            data["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        if len(payload) > 16384:
+            data.pop("payload")
+            data["owned_payload_hash"] = self._objects.put_sync(payload)
+            data["payload_bytes"] = len(payload)
         line = (
             json.dumps(
-                event_to_data(event),
+                data,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
@@ -635,8 +751,14 @@ class JsonlSession:
         )
         with session_file_lock(path):
             if path.exists():
-                existing = self._read_sync(path, event.session_id)
-                expected = len(existing) + 1
+                stat = path.stat()
+                identity = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+                cached = self._tails.get(event.session_id)
+                if cached is not None and cached[:3] == identity:
+                    expected = cached[3] + 1
+                else:
+                    existing = self._read_sync(path, event.session_id)
+                    expected = len(existing) + 1
             else:
                 expected = 1
             if event.sequence != expected:
@@ -650,6 +772,13 @@ class JsonlSession:
                     raise SessionError(SessionErrorCode.APPEND_FAILED, "Incomplete event append")
                 stream.flush()
                 os.fsync(stream.fileno())
+            stat = path.stat()
+            self._tails[event.session_id] = (
+                stat.st_ino,
+                stat.st_size,
+                stat.st_mtime_ns,
+                event.sequence,
+            )
 
     def _read_sync(self, path: Path, session_id: str) -> list[RuntimeEvent]:
         if not path.exists():
@@ -674,7 +803,7 @@ class JsonlSession:
         for line in raw.splitlines(keepends=True):
             data = _decode_json_object(line[:-1], offset)
             try:
-                event = event_from_data(data)
+                event = self.decode_record(data)
             except SessionError:
                 raise
             except (ValueError, TypeError) as error:

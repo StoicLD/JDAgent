@@ -33,7 +33,7 @@ def test_data_paths_partition_sessions_outside_workspace(tmp_path: Path) -> None
 
     assert paths.user_config_file == config_root / "jdagent" / "config.toml"
     assert paths.project_directory.parent == data_root / "jdagent" / "projects"
-    assert paths.sessions_directory == paths.project_directory / "sessions-v4"
+    assert paths.sessions_directory == paths.project_directory / "sessions-v5"
     assert paths.catalog_index == paths.project_directory / "catalog-index.json"
     assert paths.input_history == paths.project_directory / "input-history"
     assert paths.knowledge_catalog == data_root / "jdagent" / "knowledge" / "catalog.sqlite"

@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, TypeAlias
+from typing import Protocol, TypeAlias, TypeVar
 from uuid import uuid4
 
 from jdagent.application.coordinator import CoordinatedTurn, TurnCoordinator
@@ -31,6 +31,8 @@ from jdagent.ports import SessionPort
 from jdagent.tools.command_output import CommandLogs
 from jdagent.tools.permissions import active_session_rules
 
+_OperationResult = TypeVar("_OperationResult")
+
 
 class CommandName(StrEnum):
     """The complete built-in command set."""
@@ -45,6 +47,8 @@ class CommandName(StrEnum):
     TRACE = "trace"
     KNOWLEDGE = "knowledge"
     LOGS = "logs"
+    COMPACT = "compact"
+    CONTEXT_WINDOW = "context-window"
     EXIT = "exit"
 
 
@@ -83,6 +87,7 @@ class InteractionState(StrEnum):
     WAITING_APPROVAL = "waiting_approval"
     RUNNING_TOOL = "running_tool"
     CANCELLING = "cancelling"
+    COMPACTING = "compacting"
     EXITING = "exiting"
 
 
@@ -175,6 +180,7 @@ _HELP = (
     "/help /status /new /sessions /resume <name|id> /rename <name> "
     "/permissions [revoke <rule-id>] /knowledge status|bindings|sources /trace /exit\n"
     "/logs clear (clear current session command output)\n"
+    "/compact /context-window\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
@@ -211,6 +217,7 @@ class InteractiveApplication:
         self._session_name = initial_session_id[:8] if initial_session_id else "new"
         self._active_turn_task: asyncio.Task[CoordinatedTurn] | None = None
         self._active_cancellation: CancellationToken | None = None
+        self._exit_requested = False
 
     @property
     def turn_running(self) -> bool:
@@ -282,12 +289,14 @@ class InteractiveApplication:
                     return int(ExitStatus.CANCELLED)
                 if isinstance(action, CommandAction):
                     should_exit = await self._handle_command(action)
-                    if should_exit:
+                    if should_exit or self._exit_requested:
                         await self._set_state(InteractionState.EXITING)
                         return int(ExitStatus.SUCCESS)
                     await self._set_state(InteractionState.IDLE)
                     continue
                 await self._run_prompt(action)
+                if self._exit_requested:
+                    return int(ExitStatus.SUCCESS)
         finally:
             await self._terminal.close()
 
@@ -312,7 +321,7 @@ class InteractiveApplication:
         self._active_cancellation = cancellation
         self._active_turn_task = turn_task
         try:
-            turn = await turn_task
+            turn = await self._wait_with_controls(turn_task)
             self._session_id = turn.session_id
             self._last_trace = turn.trace
             if turn.result.assistant_text:
@@ -326,6 +335,7 @@ class InteractiveApplication:
                         f"turn stopped: {turn.result.stop_reason.value}",
                     )
                 )
+            self._coordinator.after_output()
         except CancelledError:
             await self._set_state(InteractionState.CANCELLING)
             await self._presenter.publish(
@@ -341,12 +351,111 @@ class InteractiveApplication:
             self._active_cancellation = None
             await self._set_state(InteractionState.IDLE)
 
+    async def _wait_with_controls(
+        self, operation: asyncio.Task[_OperationResult]
+    ) -> _OperationResult:
+        while not operation.done():
+            control = asyncio.create_task(self._terminal.next_action(self._state))
+            try:
+                done, _ = await asyncio.wait(
+                    (operation, control), return_when=asyncio.FIRST_COMPLETED
+                )
+                if control in done:
+                    try:
+                        action = control.result()
+                    except CommandError as error:
+                        await self._presenter.publish(UiEvent(UiEventKind.ERROR, str(error)))
+                        continue
+                    if isinstance(action, (CancelAction, ExitAction)):
+                        self._exit_requested = (
+                            isinstance(action, ExitAction) and not action.cancelled
+                        )
+                        operation.cancel()
+                    elif isinstance(action, CommandAction) and action.name in {
+                        CommandName.COMPACT,
+                        CommandName.CONTEXT_WINDOW,
+                    }:
+                        await self._handle_command(action)
+                    else:
+                        await self._presenter.publish(
+                            UiEvent(
+                                UiEventKind.INFO,
+                                "Turn is busy; use /compact, /context-window, or Ctrl+C",
+                            )
+                        )
+            finally:
+                if not control.done():
+                    control.cancel()
+                await asyncio.gather(control, return_exceptions=True)
+        return await operation
+
     async def _handle_command(self, action: CommandAction) -> bool:
         try:
             if action.name is CommandName.EXIT:
                 self._require_arity(action.arguments, 0, "/exit")
                 return True
-            if action.name is CommandName.HELP:
+            if action.name is CommandName.COMPACT:
+                self._require_arity(action.arguments, 0, "/compact")
+                if self._session_id is None:
+                    await self._presenter.publish(
+                        UiEvent(UiEventKind.INFO, "No history to compact")
+                    )
+                elif self.turn_running or self._state is InteractionState.COMPACTING:
+                    message = await self._coordinator.compact(self._session_id)
+                    await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
+                else:
+                    await self._set_state(InteractionState.COMPACTING)
+                    operation = asyncio.create_task(self._coordinator.compact(self._session_id))
+                    try:
+                        message = await self._wait_with_controls(operation)
+                        await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
+                    except CancelledError:
+                        await self._presenter.publish(
+                            UiEvent(
+                                UiEventKind.INFO, "Compaction cancelled; original history preserved"
+                            )
+                        )
+                    finally:
+                        await self._set_state(InteractionState.IDLE)
+            elif action.name is CommandName.CONTEXT_WINDOW:
+                self._require_arity(action.arguments, 0, "/context-window")
+                if self._session_id is None:
+                    await self._presenter.publish(
+                        UiEvent(UiEventKind.INFO, "No context snapshot yet")
+                    )
+                else:
+                    snapshot = await self._coordinator.context_window(self._session_id)
+                    budget = snapshot.budget
+                    labels = {
+                        "instructions": "系统指令",
+                        "tools": "工具定义",
+                        "user": "用户内容",
+                        "assistant_tools": "助手与工具消息",
+                        "summaries": "历史会话摘要",
+                        "memory": "长期记忆",
+                        "knowledge": "知识证据",
+                        "protocol": "协议开销",
+                    }
+                    categories = ", ".join(
+                        f"{labels[name]}={value}" for name, value in snapshot.estimate.categories
+                    )
+                    usage = snapshot.provider_usage
+                    await self._presenter.publish(
+                        UiEvent(
+                            UiEventKind.INFO,
+                            f"model_window={budget.model_window} "
+                            f"app_limit={budget.application_window} "
+                            f"output_reserved={budget.output_tokens} safety={budget.safety} "
+                            f"input_budget={budget.input_limit} "
+                            f"input={snapshot.estimate.input_tokens} "
+                            f"occupancy={snapshot.estimate.input_tokens / budget.input_limit:.1%} "
+                            f"method={snapshot.estimate.method} snapshot={snapshot.measured_at} "
+                            f"request={snapshot.request_id}\n{categories}\n"
+                            f"provider_input={usage.input_tokens if usage else 'unavailable'} "
+                            f"provider_request={snapshot.provider_request_id or 'unavailable'}",
+                        )
+                    )
+            elif action.name is CommandName.HELP:
                 self._require_arity(action.arguments, 0, "/help")
                 await self._presenter.publish(UiEvent(UiEventKind.INFO, _HELP))
             elif action.name is CommandName.STATUS:
@@ -373,6 +482,8 @@ class InteractiveApplication:
                 )
             elif action.name is CommandName.NEW:
                 self._require_arity(action.arguments, 0, "/new")
+                if self._session_id is not None:
+                    await self._coordinator.release_session(self._session_id)
                 self._session_id = None
                 self._session_name = "new"
                 self._last_trace = None
@@ -392,7 +503,10 @@ class InteractiveApplication:
             elif action.name is CommandName.RESUME:
                 self._require_arity(action.arguments, 1, "/resume <name|id>")
                 selected = await self._catalog.resolve(action.arguments[0])
+                previous_session = self._session_id
                 self._session_id = await self._prepare_resume(selected.session_id)
+                if previous_session is not None and previous_session != self._session_id:
+                    await self._coordinator.release_session(previous_session)
                 self._last_trace = await self._trace_for_session(self._session_id)
                 display_name = (
                     selected.name

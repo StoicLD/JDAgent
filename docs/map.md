@@ -2,9 +2,8 @@
 
 状态：`Implemented`（文档整理）
 
-实现核对日期：2026-10-20；设计导航更新：2026-10-22。
-实现基准：`12196d6895f97fdc140c6f46aee34ce90aabe4c8`。
-下表描述该基准的现有代码；v0.5 设计单独列出，验收结论按原始证据记录。
+实现核对日期：2026-10-22。v0.5 从 `1729161b062cdffbdd4b30c6cff0ca4baeaec877` 开始实现；
+固定评审快照、测试结果和剩余门禁见[实施记录](reviews/REV-20261022-001-v0.5-implementation.md)。
 
 ## 从哪里开始
 
@@ -19,7 +18,8 @@
 | --- | --- |
 | [运行时与主循环](modules/runtime.md) | 一轮任务怎么开始、调用模型和工具、结束；采用什么设计模式 |
 | [模型接入](modules/models.md) | ModelPort 如何隔离 Provider，流式文本和工具调用如何转换 |
-| [上下文构造](modules/context.md) | 事件如何变成消息，知识如何注入，窗口如何裁剪 |
+| [上下文构造](modules/context.md) | 事件如何变成请求，预算和压缩如何工作，原文如何保留 |
+| [跨会话与记忆](modules/memory.md) | 历史检索、记忆意图与版本、后台作业和费用如何管理 |
 | [工具与权限](modules/tools.md) | 八工具、审批、精确编辑、Windows 命令和输出日志如何工作 |
 | [会话与事件](modules/sessions.md) | 什么是持久事实，如何保存、恢复和处理未知副作用 |
 | [CLI 与配置](modules/cli.md) | 交互／Headless 入口、命令、配置优先级和数据位置 |
@@ -43,7 +43,8 @@
 | v0.4 实施授权与合同细化 | [实现与验证记录](plans/v0.4-implementation.md) |
 | v0.5 已确认产品行为 | [上下文、跨会话与记忆规格](requirements/v0.5-context-memory.md)、[访谈与术语](context/v0.5-context-memory-design-discussion.md) |
 | v0.5 工程细化提案 | [架构](architecture/v0.5-context-memory.md)、[四阶段计划](plans/v0.5-context-memory-implementation.md)、[验收与 Eval](development/v0.5-context-memory-validation.md) |
-| v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)；R1 工程细化仍为 Proposed，待复审 |
+| v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)，原始结论保持 |
+| v0.5 实现与审查 | [代码快照、逐项修复与验收](reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 

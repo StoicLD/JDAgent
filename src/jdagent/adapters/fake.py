@@ -30,7 +30,7 @@ class FakeModelPort:
         if delay_seconds < 0:
             raise ValueError("FakeModelPort delay_seconds cannot be negative")
         self._scripts = scripts
-        self._capabilities = capabilities or ModelCapabilities()
+        self._capabilities = capabilities or ModelCapabilities(context_window=64000)
         self._repeat_last = repeat_last
         self._delay_seconds = delay_seconds
         self._next_script = 0

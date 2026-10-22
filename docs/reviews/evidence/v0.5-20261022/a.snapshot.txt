@@ -1,0 +1,5 @@
+base=1729161b062cdffbdd4b30c6cff0ca4baeaec877
+patch_raw_sha256=c821bc2c2ca99788a08b86e1342d3d675d5efd47fb3c3e970a4b883f2479698f
+patch_lf_sha256=232fa21df53c7c21f366d51dc3f6377955218afe53f202b0c8822598a9afc0f1
+comparison=git diff 1729161b062cdffbdd4b30c6cff0ca4baeaec877 -- src tests docs (includes untracked additions)
+commits since base: none; immutable work-in-progress snapshot

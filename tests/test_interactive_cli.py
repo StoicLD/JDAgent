@@ -1,5 +1,6 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,10 @@ class CancelOnceFakeModel(FakeModelPort):
 class MemoryRecoveryStore:
     def __init__(self, session: InMemorySession) -> None:
         self._session = session
+
+    @asynccontextmanager
+    async def ownership(self, session_id: str) -> AsyncGenerator[None]:
+        yield
 
     async def recover_physical(self, session_id: str) -> PhysicalRecoveryResult:
         events = tuple([event async for event in self._session.read(session_id)])

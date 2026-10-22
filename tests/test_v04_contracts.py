@@ -29,7 +29,6 @@ from jdagent.domain.json import JsonObject
 from jdagent.domain.model import (
     MessageRole,
     ModelCapabilities,
-    ModelMessage,
     ResponseCompleted,
     ToolCallCompleted,
 )
@@ -126,72 +125,24 @@ def test_safe_process_recovery_closes_pending_tool_messages(tmp_path: Path) -> N
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("failed_without_answer", [False, True])
-def test_snapshot_history_is_trimmed_by_whole_turn_without_mutating_facts(
-    failed_without_answer: bool,
-) -> None:
-    history = (
-        ModelMessage(MessageRole.USER, "old" * 1000),
-        *(
-            (ModelMessage(MessageRole.ASSISTANT, "old answer"),)
-            if not failed_without_answer
-            else ()
-        ),
-        ModelMessage(MessageRole.USER, "recent"),
-        ModelMessage(MessageRole.ASSISTANT, "recent answer"),
+def test_recovery_reference_does_not_forge_a_user_message() -> None:
+    snapshot = RecoverySnapshotPayload(
+        "parent",
+        3,
+        "a" * 64,
+        unknown_operations=("call-1: effect unknown; do not replay",),
+        gap_until=5,
     )
-    events = [
-        RuntimeEvent.create(
-            session_id="s",
-            turn_id=None,
-            sequence=1,
-            event_type=RuntimeEventType.RECOVERY_SNAPSHOT,
-            payload=RecoverySnapshotPayload("parent", 10, history),
-        ),
-        RuntimeEvent.create(
-            session_id="s",
-            turn_id="now",
-            sequence=2,
-            event_type=RuntimeEventType.USER_MESSAGE,
-            payload=UserMessagePayload("current"),
-        ),
-    ]
-    request = ContextBuilder(model="fake", max_context_tokens=150, sliding_window=True).build(
-        events, ModelCapabilities()
-    )
-    assert [message.content for message in request.messages] == [
-        "recent",
-        "recent answer",
-        "current",
-    ]
-    assert isinstance(events[0].payload, RecoverySnapshotPayload)
-    assert events[0].payload.messages == history
-    assert "snapshot:" in request.metadata["omitted_turn_ids"]
-
-
-def test_snapshot_notice_uses_explicit_protection_and_survives_codec() -> None:
-    notice = ModelMessage(MessageRole.USER, "Recovery: inspect uncertain output")
     event = RuntimeEvent.create(
         session_id="s",
         turn_id=None,
         sequence=1,
         event_type=RuntimeEventType.RECOVERY_SNAPSHOT,
-        payload=RecoverySnapshotPayload(
-            "parent", 3, (ModelMessage(MessageRole.USER, "failed task" * 500), notice), 1
-        ),
+        payload=snapshot,
     )
-    event = event_from_data(event_to_data(event))
-    current = RuntimeEvent.create(
-        session_id="s",
-        turn_id="now",
-        sequence=2,
-        event_type=RuntimeEventType.USER_MESSAGE,
-        payload=UserMessagePayload("current"),
-    )
-    request = ContextBuilder(model="fake", max_context_tokens=120, sliding_window=True).build(
-        [event, current], ModelCapabilities()
-    )
-    assert request.messages == (notice, ModelMessage(MessageRole.USER, "current"))
+    restored = event_from_data(event_to_data(event))
+    assert restored.payload == snapshot
+    assert project_messages((restored,)) == ()
 
 
 def test_repeated_cancellation_keeps_cleanup_owned(tmp_path: Path) -> None:

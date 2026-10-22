@@ -92,7 +92,12 @@ class EventJournal:
             await observer.observe(event)
 
 
-async def close_pending_calls(journal: RuntimeJournal, turn_id: str) -> None:
+async def close_pending_calls(
+    journal: RuntimeJournal,
+    turn_id: str,
+    *,
+    reason: str = "Turn ended before a result was available",
+) -> None:
     """Record explicit non-execution for unstarted calls before ending a batch."""
     events = [event for event in journal.events if event.turn_id == turn_id]
     completed = {
@@ -117,7 +122,7 @@ async def close_pending_calls(journal: RuntimeJournal, turn_id: str) -> None:
                 completed=False,
                 effect="unknown" if unknown else "none",
                 error_code=ToolErrorCode.UNCERTAIN if unknown else ToolErrorCode.NOT_EXECUTED,
-                message="Turn ended before a result was available",
+                message=reason,
             )
             await journal.record(
                 turn_id,

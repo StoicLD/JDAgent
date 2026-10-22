@@ -99,7 +99,7 @@ def _request_data(request: ModelRequest) -> JsonObject:
     provider_options = request.provider_options.get("deepseek")
     if provider_options is not None:
         options = require_object(provider_options, "provider_options.deepseek")
-        allowed = {"tool_choice", "top_p", "reasoning_effort"}
+        allowed = {"tool_choice", "top_p", "reasoning_effort", "response_format"}
         for name in allowed:
             if name in options:
                 data[name] = options[name]

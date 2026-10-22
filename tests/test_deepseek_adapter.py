@@ -55,6 +55,7 @@ def test_deepseek_stream_maps_text_usage_and_completion() -> None:
     request = ModelRequest(
         model="deepseek-v4-flash",
         messages=(ModelMessage(MessageRole.USER, "Hi"),),
+        provider_options={"deepseek": {"response_format": {"type": "json_object"}}},
     )
 
     events = asyncio.run(_events(port, request))
@@ -73,6 +74,7 @@ def test_deepseek_stream_maps_text_usage_and_completion() -> None:
     assert captured[0].url.path == "/chat/completions"
     payload = json.loads(captured[0].content)
     assert payload["stream_options"] == {"include_usage": True}
+    assert payload["response_format"] == {"type": "json_object"}
 
 
 def test_deepseek_stream_accepts_usage_without_optional_token_details() -> None:
