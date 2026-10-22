@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-22",
+  "timezone": "Asia/Singapore",
+  "authorization": "User approved up to 48 additional calls, 600000 additional input and 60000 additional output tokens for three DeepSeek re-verification attempts.",
+  "starting_usage": {
+    "calls": 41,
+    "input_tokens": 240868,
+    "output_tokens": 5870
+  },
+  "aggregate_limits": {
+    "calls": 89,
+    "input_tokens": 840868,
+    "output_tokens": 65870
+  },
+  "unused_original_allowance_reused": false,
+  "product_revision": "94d90aa204ddad439d2515ed546e599084cb297a",
+  "fixture_sha256": "44f6eb385718cc9c1c9c4d89136482b5351711e1ab76fa34da4b6d03ef2d7a1c",
+  "prior_ledger_sha256": "cbf8db9d24d4a336f6ded87a64eda5ca8978ad9913035edc7597799369717886"
+}

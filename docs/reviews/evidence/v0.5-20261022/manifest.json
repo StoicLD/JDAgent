@@ -119,6 +119,15 @@
         "skipped": "0",
         "time": "0.427"
       }
+    ],
+    "v05-live-run3.xml": [
+      {
+        "tests": "3",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0",
+        "time": "39.901"
+      }
     ]
   },
   "storage": [
@@ -272,6 +281,64 @@
       "run": 2,
       "protected_files_unchanged": true,
       "archive": "live-run2-attempt3.tar.gz"
+    },
+    {
+      "attempt": 1,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 1,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 21741,
+      "output_tokens": 1504,
+      "run": 3,
+      "model_requests": 8,
+      "protected_files_unchanged": true,
+      "archive": "live-run3-attempt1.tar.gz"
+    },
+    {
+      "attempt": 2,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 1,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 23471,
+      "output_tokens": 1898,
+      "run": 3,
+      "model_requests": 8,
+      "protected_files_unchanged": true,
+      "archive": "live-run3-attempt2.tar.gz"
+    },
+    {
+      "attempt": 3,
+      "stop_reason": "completed",
+      "model_calls": 5,
+      "compactions": 1,
+      "tools": [
+        "find_files",
+        "search_text",
+        "read_file",
+        "edit_file",
+        "run_command"
+      ],
+      "input_tokens": 22038,
+      "output_tokens": 1680,
+      "run": 3,
+      "model_requests": 8,
+      "protected_files_unchanged": true,
+      "archive": "live-run3-attempt3.tar.gz"
     }
   ],
   "v05-live-budget.json": {
@@ -614,7 +681,11 @@
     "live-run2-attempt1.tar.gz": "3844f50d0e31690aedc9db3a2b730fbd534e828b3d1c45b6b79c01f243eba040",
     "live-run2-attempt2.tar.gz": "e7974af195ec83aa9178614bb938547f77f771670177c19a8204089226758077",
     "live-run2-attempt3.tar.gz": "72127d24485547dfab2d880fba981aba8f218fe2c9871dc20b2e3793bb72397d",
-    "README.md": "c8b7612777a5d56d45d559d99810133a52f49e8eacc8290f9e660cc1d79153a4",
+    "live-run3-attempt1.tar.gz": "e2a1bc71febc9186cb4a02fa854cd06e16bd09e99371a712024bf94427dd5d11",
+    "live-run3-attempt2.tar.gz": "25781a8421a67dca32fb5aaa2defed21b70498222359baf6aaf2b6172f81cdc7",
+    "live-run3-attempt3.tar.gz": "7fa1375b122c76d1f0654004e8d8dcf785a3f9c5b1fcf554de0d48829edb4cc8",
+    "README.md": "b0057472fd8cea847da68581d568a22e3039d2dd23d9f7f728f1bc0930f0e2e1",
+    "run3-fixture.patch.gz": "b6341cf8647f10f905e07b50c87fa8340d8ba13dd7bfd21c66a8da9ab24bcd83",
     "storage-1000.json": "fd990327a7fedbd20516d2a59ef4307f400816bd495525744382d86b52489561",
     "storage-10000.json": "79a19bc12b7827ddf1f7b4c6e56c5b84c6d164b2ecb437fb08196c9ce7836003",
     "storage-100000.json": "b98935a65ec83f15b396b6154d5f91041f9a50d90901a1d31f0731d90a50dbc0",
@@ -623,10 +694,52 @@
     "v05-final-full.xml.gz": "cbf7ef4c38f82cf77e6cf7142532d0dee58cd3402d4f85c049ebac2cd7c4b530",
     "v05-final-targeted.xml.gz": "a0c98e20476cbe9c1da59e7ff9fce90b06000d9e84fe0c4b94db1d7f5769d097",
     "v05-full.xml.gz": "c08057784fc650a25108a087f1966ca7cf61b77bf0c99c2b80448ea96a256030",
+    "v05-live-budget-after-run3.json": "b990ef4c7ceac753b1d56d1cb4e7ef1f8c1b11390783d13087c05ac3b7f0909c",
     "v05-live-budget.json": "cbf8db9d24d4a336f6ded87a64eda5ca8978ad9913035edc7597799369717886",
     "v05-live-diagnostic-summary.json": "0cc02757987531472ab34b7e8e15b5b689fe8fbd384fa22f097a85eecf90e319",
     "v05-live-run1.xml.gz": "21711d1dcd7f1487212d0a6b51a7f88ac5495c4860ebc8503c456d8282b4d66b",
     "v05-live-run2.xml.gz": "608fc8dea421b1623476d80d644b2f0b870c125311b4b6294d39b3635eeef5b9",
+    "v05-live-run3-authorization.json": "59f296acabfa5314d0d11d2549370f1b9d7ded9a2eb1b954dc589c28f00b82f2",
+    "v05-live-run3.xml.gz": "1d90f553eef797fd136e5140ac2b8c297425e57a546ee1c1c4ccee419be12d0e",
     "v05-source-index.xml.gz": "5b57bad08aa4687d7d9b8bc35bad5315168ae2b99025091c680d838f54f2f7a5"
+  },
+  "run3": {
+    "product_revision": "94d90aa204ddad439d2515ed546e599084cb297a",
+    "authorization": {
+      "date": "2026-10-22",
+      "timezone": "Asia/Singapore",
+      "authorization": "User approved up to 48 additional calls, 600000 additional input and 60000 additional output tokens for three DeepSeek re-verification attempts.",
+      "starting_usage": {
+        "calls": 41,
+        "input_tokens": 240868,
+        "output_tokens": 5870
+      },
+      "aggregate_limits": {
+        "calls": 89,
+        "input_tokens": 840868,
+        "output_tokens": 65870
+      },
+      "unused_original_allowance_reused": false,
+      "product_revision": "94d90aa204ddad439d2515ed546e599084cb297a",
+      "fixture_sha256": "44f6eb385718cc9c1c9c4d89136482b5351711e1ab76fa34da4b6d03ef2d7a1c",
+      "prior_ledger_sha256": "cbf8db9d24d4a336f6ded87a64eda5ca8978ad9913035edc7597799369717886"
+    },
+    "fixture_patch_sha256": "af46ce90d6b1af759e3e8d79805ff28377ccb50b0f39156986443112456867f3",
+    "pytest_summary": "3 passed in 39.92s",
+    "usage": {
+      "calls": 24,
+      "input_tokens": 67250,
+      "output_tokens": 5082
+    },
+    "request_models": [
+      "deepseek-v4-flash"
+    ]
+  },
+  "latest_live_ledger": "v05-live-budget-after-run3.json",
+  "latest_live_usage": {
+    "calls": 65,
+    "input_tokens": 308118,
+    "output_tokens": 10952,
+    "all_actual": true
   }
 }

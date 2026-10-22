@@ -43,6 +43,10 @@ def test_live_compaction_preserves_constraints_and_required_steps(
     ledger_path = Path(
         os.environ.get("JDAGENT_V05_LIVE_LEDGER", str(tmp_path.parent / "live-budget.json"))
     )
+    call_limit = int(os.environ.get("JDAGENT_V05_LIVE_CALL_LIMIT", "48"))
+    input_limit = int(os.environ.get("JDAGENT_V05_LIVE_INPUT_LIMIT", "600000"))
+    output_limit_total = int(os.environ.get("JDAGENT_V05_LIVE_OUTPUT_LIMIT", "60000"))
+    assert min(call_limit, input_limit, output_limit_total) > 0
     if not ledger_path.exists():
         ledger_path.write_text('{"requests":[]}', encoding="utf-8")
     original_stream = DeepSeekModelPort.stream
@@ -53,9 +57,11 @@ def test_live_compaction_preserves_constraints_and_required_steps(
         ledger = json.loads(await asyncio.to_thread(ledger_path.read_text, encoding="utf-8"))
         estimate = InputEstimator().measure(request).input_tokens
         output_limit = request.settings.max_output_tokens or 0
-        assert len(ledger["requests"]) < 48, "Authorized live call budget exhausted"
-        assert sum(item["input"] for item in ledger["requests"]) + estimate <= 600000
-        assert sum(item["output"] for item in ledger["requests"]) + output_limit <= 60000
+        assert len(ledger["requests"]) < call_limit, "Authorized live call budget exhausted"
+        assert sum(item["input"] for item in ledger["requests"]) + estimate <= input_limit
+        assert (
+            sum(item["output"] for item in ledger["requests"]) + output_limit <= output_limit_total
+        )
         entry = {
             "request_id": request.metadata["request_id"],
             "input": estimate,

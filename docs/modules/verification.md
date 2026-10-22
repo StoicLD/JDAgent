@@ -15,7 +15,7 @@
 | v0.4，2026-09-23 完整离线 | 236 passed、1 failed、8 skipped；Ruff、Pyright、安装通过 | 离线链及 Windows 文件／进程机制；[实施记录](../plans/v0.4-implementation.md) |
 | v0.4，2026-09-23 真实 DeepSeek | 1 failed、2 passed，基准 `7e18a1a` | 三次固定工具任务；[完整 Live 记录](../reviews/v0.4-live-verification.md) |
 | v0.5，2026-10-22 完整离线 | 273 passed、1 既有 RAG 失败、14 skipped | I 快照完整套件；后续定向修复及规模实验见[实施记录](../reviews/REV-20261022-001-v0.5-implementation.md) |
-| v0.5，2026-10-22 真实 DeepSeek | 第一轮 0/3、第二轮 1/3 通过 | 六次任务均完成，五次未成功压缩；全部尝试与诊断计费保留，不能计作整版通过 |
+| v0.5，2026-10-22 真实 DeepSeek | 第一轮 0/3、第二轮 1/3、修复后第三轮 3/3 通过 | 第三轮基于 `94d90aa`，三次均成功压缩并完成必需工具链；全部失败与诊断计费保留，固定夹具通过不等于整版通过 |
 
 v0.4 实现的 Standards／Spec 独立评审在修复后定向复核通过，见[处置记录](../reviews/v0.4-implementation-review.md)。
 该报告前部“Live 未执行”是当时事实，末尾已追加后续结果，最新结论以三次 Live 记录为准。

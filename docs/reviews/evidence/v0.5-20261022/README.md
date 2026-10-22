@@ -11,7 +11,10 @@
 - `storage-*.json`：1,000、10,000、100,000 条事件的逐条持久化与重开测量。
 - `live-run*-attempt*.tar.gz`：固定测试项目、Session、Context 对象与费用账本。
   不含凭据、临时锁、编译缓存或独立响应正文日志。产品原文对象保留在其正式所有者目录中。
-- `v05-live-budget.json`：全部真实请求的累计 Usage；诊断请求也计费，不因换轮而清零。
+- `v05-live-budget.json`：第二轮及诊断结束时的 41 条累计 Usage；保持原文件不变。
+- `v05-live-budget-after-run3.json`：第三轮完成后的 65 条累计 Usage；原账目为不变前缀。
+- `v05-live-run3-authorization.json`、`run3-fixture.patch.gz`：第三轮的追加预算、固定产品 revision、
+  验收脚本指纹及预算入口差异；产品源码未变。
 - `v05-live-diagnostic-summary.json`：单次追加诊断的来源序号、Usage 与 hash，
   该响应不是第一轮任何一次原响应。
 
@@ -23,4 +26,5 @@
 JUnit 的 `tests` 包含失败与跳过，成功数量应减去 `failures`、`errors` 和 `skipped`。
 JUnit suite 耗时与 pytest 控制台总耗时的统计边界不同，不能把小幅差值当作结果冲突。
 
-归档不意味着 v0.5 全部验收通过；最新固定修复的真实三次复验仍待新增预算。
+最新固定修复的第三轮真实复验为 3/3 通过，先前失败全部保留。
+这不等于 v0.5 全部验收通过；完整故障矩阵、语义 Eval 等剩余门禁见实现记录。
