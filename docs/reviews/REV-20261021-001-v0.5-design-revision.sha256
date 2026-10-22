@@ -1,0 +1,13 @@
+# R1 document snapshot, 2026-10-22
+# Base: f5d0ba7c82f4257e865e3440a451d4178df3c2bb
+# Paths relative to repository root; raw file bytes; manifest excludes itself.
+a77c0838ed1ae3216f230f59c5d21092d0bda4dff005af011534d375fc688b08  docs/architecture/v0.5-context-memory.md
+0e99fac73c7eb3b4256480bc37a7c41fdd4eaac011fc4201359252ad075423df  docs/context/current.md
+529b92403c6e40cc3156a8bfdb9c5299b6bea889b819f4887cc5cfc8c1c01990  docs/context/v0.5-context-memory-design-discussion.md
+0b628ca30119fb8902ac00de1ca6c5a421e2f3fb01387f75c7db3d3eac11098d  docs/decisions/ADR-0007-context-projection-memory.md
+9a6c8bb38e8ca611285a0c36373b83e24ea427a00dcff4ed8578d0612d952c7d  docs/development/v0.5-context-memory-validation.md
+d644acb6cd74e8ef3c53b777a6a092babbd2ca63c717d53f582f559950908f8c  docs/learning/v0.5-context-memory-learning-checklist.md
+da6b125459def7da315ed60ec47bc4fb310c8c885e20054e761687adddfd56ab  docs/map.md
+2669fc1edbfed59a52f0cee68b3cbfe4f71de014c0970aaa94d14fbde0dcd1eb  docs/plans/v0.5-context-memory-implementation.md
+d03774940d56e85892f6f9de5cfbc59e7a2cbc431eea142e87fc161e492bc0e9  docs/requirements/v0.5-context-memory.md
+82198e7024f73d02fa213dcb35bfc6485d9aa915a09d23b683980511d7369027  docs/reviews/REV-20261021-001-v0.5-context-memory-design-review.md

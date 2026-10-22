@@ -2,7 +2,7 @@
 
 状态：`Implemented`（文档整理）
 
-实现核对日期：2026-10-20；设计导航更新：2026-10-21。
+实现核对日期：2026-10-20；设计导航更新：2026-10-22。
 实现基准：`12196d6895f97fdc140c6f46aee34ce90aabe4c8`。
 下表描述该基准的现有代码；v0.5 设计单独列出，验收结论按原始证据记录。
 
@@ -43,6 +43,7 @@
 | v0.4 实施授权与合同细化 | [实现与验证记录](plans/v0.4-implementation.md) |
 | v0.5 已确认产品行为 | [上下文、跨会话与记忆规格](requirements/v0.5-context-memory.md)、[访谈与术语](context/v0.5-context-memory-design-discussion.md) |
 | v0.5 工程细化提案 | [架构](architecture/v0.5-context-memory.md)、[四阶段计划](plans/v0.5-context-memory-implementation.md)、[验收与 Eval](development/v0.5-context-memory-validation.md) |
+| v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)；R1 工程细化仍为 Proposed，待复审 |
 | v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
@@ -81,6 +82,7 @@
 | v0.2 | [计划评审处置](reviews/REV-20260820-001-v0.2-cli-plan-disposition.md)、[实现审查](reviews/v0.2-implementation-review.md) |
 | v0.3 | [高层设计评审处置](reviews/REV-20260829-001-v0.3-rag-design-disposition.md)、[P1 实现评审处置](reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)、[2026-09-05 实现审查与修复](reviews/REV-20260905-001-v0.3-implementation-audit.md) |
 | v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
+| v0.5 | [设计初审与 R1 逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)、[R1 文件指纹](reviews/REV-20261021-001-v0.5-design-revision.sha256) |
 | Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
 
 ## 实现参考
