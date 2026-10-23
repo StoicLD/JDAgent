@@ -5,6 +5,7 @@
 知识模块已有摄取、索引、按 Turn 检索和引用处理链路，但真实配置与数据生命周期仍有缺口。
 基准见[Map](../map.md)；概念定义见[词汇表](../context/v0.3-rag-glossary.md)，
 入门示例见[休假政策图解](../context/v0.3-rag-illustrated-guide.md)。
+当前 CLI 的创建、摄取、绑定与维护步骤见[知识库操作教程](../guides/knowledge.md)。
 
 ## 状态和内容归属
 

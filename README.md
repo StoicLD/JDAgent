@@ -1,63 +1,80 @@
-# JDAgentProject
+# JDAgent
 
-状态：`Implemented`（项目说明）
+状态：`Implemented`（使用说明），更新：2026-10-23，当前版本：`0.5.0`。
 
-JDAgent 是一个以实践学习 Agent 核心机制的 Python 项目，先建设通用 Runtime，
-后续再通过独立领域包增加求职能力。当前已有模型／工具循环、持久 CLI、RAG P1 和
-八工具执行层，以及 v0.5 上下文压缩、跨会话检索和记忆；工程与学习门禁分别记录。
+JDAgent 是用于实践 Agent 核心机制的 Python 命令行项目。目前支持 DeepSeek 对话、持久会话、
+项目文件读写、命令执行、上下文压缩、历史检索和长期记忆。知识库已有管理与摄取入口，
+但真实 RAG 配置链仍有缺口。当前主要运行和验证环境为 Windows。
 
-从[文档 Map](docs/map.md)按模块了解当前实现；
-[当前状态](docs/context/current.md)记录待办与门禁，
-[验证与验收](docs/modules/verification.md)提供原始证据入口。
-包版本为 `0.5.0`，不兼容旧 Session；本版本不会再次删除历史目录。
+**完整操作步骤见[安装与使用教程](docs/guides/usage.md)。**
 
-## 快速开始
+## 安装与离线启动
 
-需要 Python 3.11+ 和 uv，在产品仓库根目录执行：
+在 PowerShell 中进入产品仓库，执行：
 
 ```powershell
-uv sync
-uv run jdagent
-```
-
-无 Prompt 时进入交互模式，`/help` 查看命令，`/sessions` 查看会话，
-`/resume <名称或ID>` 恢复，`/exit` 退出并保留会话。
-默认使用 DeepSeek；离线体验显式选择 Fake：
-
-```powershell
-uv run jdagent --provider fake
+Set-Location 'E:\Projects\Codex_Projects_Overall\JDAgent\JDAgentProject'
+uv sync --locked
+uv run jdagent --version
 uv run jdagent --provider fake --output json "离线测试"
 ```
 
-单次请求、JSON 输出和工作区工具范围示例：
+需要 Python 3.11+ 和 uv，仓库指定 Python 3.11.15。尚未安装环境或首次克隆时，按
+[安装教程](docs/guides/usage.md#安装与更新)操作。预期版本为 `jdagent 0.5.0`。
+Fake 重放固定脚本，用于检查运行链路，不能代替真实模型分析文件或验证记忆、压缩质量。
+
+## 使用 DeepSeek
+
+在当前 PowerShell 输入 Key，再启动交互模式：
 
 ```powershell
-uv run jdagent "解释 ModelPort"
-uv run jdagent --output json --show-trace "解释 ModelPort"
-uv run jdagent --session-id <SESSION_ID> "继续"
-uv run jdagent --workspace E:\Projects\Example --tool-scope analyze
-uv run jdagent --workspace E:\Projects\Example --tool-scope edit
-uv run jdagent --workspace E:\Projects\Example --tool-scope execute --command-permission ask
+$env:DEEPSEEK_API_KEY = [System.Net.NetworkCredential]::new('', (Read-Host 'DeepSeek API Key' -AsSecureString)).Password
+uv run jdagent --provider deepseek --tool-scope analyze
 ```
 
-DeepSeek Key 优先取 `DEEPSEEK_API_KEY`，其次取用户配置的 `api_key_file`，
-最后回退开发文件 `../tmp/keys/deepseek-api-key.txt`。完整配置、13 条交互命令和
-数据位置见[CLI 与配置](docs/modules/cli.md)。
+默认模型标识为 `deepseek-v4-flash`。直接输入问题，`/help` 查看命令，`/exit` 退出。
+`analyze` 适合先阅读代码；真实问答、压缩与后台记忆整理会使用模型服务。
 
-Windows 八工具支持文件发现、读取、搜索、创建、精确编辑及命令执行。
-默认工具范围为 execute，文件写入与命令默认需要审批；命令在受信任宿主上运行，
-不提供代码沙箱。文件 revision、审批范围、进程清理和日志机制见[工具模块](docs/modules/tools.md)。
+## 常用操作
 
-## 开发与学习
+以下命令在产品仓库根目录的 PowerShell 执行，工作区替换为已有项目目录：
 
-常规检查和真实服务测试入口见[验证与验收](docs/modules/verification.md)。
-最近保留的完整离线结果仍有一项 RAG Recall 失败；v0.4 真实三次主线仅 2/3 通过。
+| 目的 | 命令 |
+| --- | --- |
+| 阅读与搜索项目 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope analyze` |
+| 允许创建、编辑文件 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope edit` |
+| 允许编辑并执行命令 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope execute --command-permission ask` |
+| 单次问答后退出 | `uv run jdagent --tool-scope analyze "解释 ModelPort"` |
+| 单次 JSON 输出 | `uv run jdagent --output json --show-trace "解释 ModelPort"` |
+| 续做后台记忆作业 | `uv run jdagent maintain --pending --workspace 'E:\Projects\Example'` |
 
-后续实质性模块遵循[模块交付与学习工作流](docs/development/module-delivery-workflow.md)，
-工程验收和学习出口分别判断。v0.5 可用 `/compact` 提前压缩、`/context-window` 查看占用，
-通过自然语言检索历史、记住或停用内容；参见[上下文](docs/modules/context.md)与
-[记忆](docs/modules/memory.md)。后台作业可用 `jdagent maintain --pending` 续做。
-本轮实现、测试、独立审查及未完成验收见[实现记录](docs/reviews/REV-20261022-001-v0.5-implementation.md)。
+不传 `--workspace` 时使用当前目录。默认范围为 execute，文件写入与命令默认需要审批；
+单次运行不会等待交互审批。命令在本机运行，不提供不可信代码沙箱。
 
-Agent 开始工作按 [AGENTS.md](AGENTS.md) 进入 Map、当前状态和协作规则。
-旧版设计及已完成计划见[归档索引](docs/archive/README.md)。
+下面输入到 **JDAgent 交互提示符**，不是 PowerShell：
+
+```text
+/status
+/rename 上下文实验
+/sessions
+/context-window
+/compact
+/trace
+/exit
+```
+
+`/resume <名称或ID>` 恢复会话，`/new` 开始新会话。`/compact` 提前压缩，原始历史仍保留。
+自然语言 `记住：项目使用 pytest` 保存项目记忆；查询、更正和停用示例见
+[历史与记忆操作](docs/guides/usage.md#历史检索与长期记忆)。没有 `/memory` 或 `/context` 命令。
+
+## 文档与当前限制
+
+- [安装与使用教程](docs/guides/usage.md)：安装、会话、审批、上下文、记忆、配置、数据和排错。
+- [知识库操作教程](docs/guides/knowledge.md)：管理命令、文件摄取及当前 RAG 限制。
+- [文档 Map](docs/map.md)：按模块理解实现；[当前状态](docs/context/current.md)记录剩余工作。
+- [验证与验收](docs/modules/verification.md)：测试入口和原始证据。v0.5 修复后的三次固定
+  DeepSeek 验收通过，完整故障矩阵、语义 Eval 等尚未完成，既有 RAG Recall 失败仍保留。
+
+v0.5 使用新 Session 格式，不兼容旧会话，也不会自动清理旧目录。
+Agent 开发入口为 [AGENTS.md](AGENTS.md)；工程与学习验收分别遵循
+[模块交付与学习工作流](docs/development/module-delivery-workflow.md)。

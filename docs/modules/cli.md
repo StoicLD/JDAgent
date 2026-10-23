@@ -4,6 +4,8 @@
 
 CLI 提供持久交互与单次 Headless 两种入口，共用 TurnCoordinator 和 Runtime。
 实现基准见[Map](../map.md)，最短启动步骤见[README](../../README.md)。
+安装、密钥、完整交互命令和排错见[使用教程](../guides/usage.md)；知识管理命令见
+[知识库教程](../guides/knowledge.md)。操作教程按 2026-10-23 实现核对。
 
 ## 两种入口
 
@@ -27,12 +29,12 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 | `/status` | 查看当前状态 |
 | `/new` | 新建 Session |
 | `/sessions` | 发现当前 workspace 的 Session |
-| `/resume` | 选择并恢复 Session |
+| `/resume <name\|id>` | 恢复指定 Session，参数不可省略 |
 | `/rename` | 命名 Session |
 | `/permissions` | 查看与撤销 Session 允许规则 |
 | `/trace` | 查看结构化执行轨迹 |
-| `/knowledge` | 查看 workspace 知识绑定和本轮知识状态 |
-| `/logs` | 查看／清理当前 Session 的命令日志 |
+| `/knowledge status\|bindings\|sources` | 查看绑定数量、绑定或来源列表 |
+| `/logs clear` | 清理当前 Session 的命令日志；读取日志通过 read_command_output 工具 |
 | `/compact` | 提前压缩，运行中排队并合并重复请求 |
 | `/context-window` | 显示窗口、输入预算、最近完整占用与分类 |
 | `/exit` | 退出交互 |

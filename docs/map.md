@@ -8,6 +8,7 @@
 ## 从哪里开始
 
 - 了解产品与启动方式：[README](../README.md)。
+- 按步骤操作：[安装与使用教程](guides/usage.md)、[知识库操作教程](guides/knowledge.md)。
 - 恢复工作：[当前状态](context/current.md) → [协作规则](development/agent-collaboration.md) → 本次相关模块。
 - 理解现有实现：按下表进入模块；每篇列出职责、执行过程、限制和代码／测试入口。
 - 查设计理由或历史承诺：先看有效 ADR，再看模块关联的设计与[归档索引](archive/README.md)。
