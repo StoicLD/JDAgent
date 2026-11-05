@@ -37,6 +37,7 @@ from jdagent.domain.tools import (
 from jdagent.eventing import close_pending_calls
 from jdagent.knowledge.citation import finalize_answer, repair_message
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
+from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
 
 
@@ -147,62 +148,63 @@ class AgentLoop:
             retry_context = False
             try:
                 async with asyncio.timeout(request.settings.timeout_seconds):
-                    async for event in self._model.stream(request):
-                        for observer in self._model_event_observers:
-                            await observer.observe(event)
-                        if isinstance(event, TextDelta):
-                            response_text.append(event.text)
-                        elif isinstance(event, ToolCallDelta):
-                            unfinished_tool_delta = True
-                        elif isinstance(event, ToolCallCompleted):
-                            unfinished_tool_delta = False
-                            response_calls.append(event.call)
-                        elif isinstance(event, UsageReported):
-                            if self._context_service is not None:
-                                await self._context_service.observe_usage(request, event.usage)
-                            await self._journal.record(
-                                turn_id,
-                                RuntimeEventType.MODEL_USAGE_RECORDED,
-                                ModelUsageRecordedPayload(
-                                    self._provider_name,
-                                    request.model,
-                                    event.usage,
-                                    request.metadata.get("request_id"),
-                                    request.metadata.get("call_kind", "task"),
-                                ),
-                            )
-                        elif isinstance(event, ResponseCompleted):
-                            if completed:
-                                return await self._model_protocol_failure(
+                    async with closing_model_stream(self._model.stream(request)) as events:
+                        async for event in events:
+                            for observer in self._model_event_observers:
+                                await observer.observe(event)
+                            if isinstance(event, TextDelta):
+                                response_text.append(event.text)
+                            elif isinstance(event, ToolCallDelta):
+                                unfinished_tool_delta = True
+                            elif isinstance(event, ToolCallCompleted):
+                                unfinished_tool_delta = False
+                                response_calls.append(event.call)
+                            elif isinstance(event, UsageReported):
+                                if self._context_service is not None:
+                                    await self._context_service.observe_usage(request, event.usage)
+                                await self._journal.record(
                                     turn_id,
-                                    "Model emitted more than one completion event",
+                                    RuntimeEventType.MODEL_USAGE_RECORDED,
+                                    ModelUsageRecordedPayload(
+                                        self._provider_name,
+                                        request.model,
+                                        event.usage,
+                                        request.metadata.get("request_id"),
+                                        request.metadata.get("call_kind", "task"),
+                                    ),
+                                )
+                            elif isinstance(event, ResponseCompleted):
+                                if completed:
+                                    return await self._model_protocol_failure(
+                                        turn_id,
+                                        "Model emitted more than one completion event",
+                                        model_calls,
+                                        tool_calls,
+                                        text_parts,
+                                    )
+                                completed = True
+                                finish_reason = event.finish_reason
+                            else:
+                                if (
+                                    event.category is ModelErrorCategory.CONTEXT_LENGTH
+                                    and self._context_service is not None
+                                    and not context_retried
+                                    and not response_calls
+                                    and not response_text
+                                ):
+                                    self._context_service.reject_window(request)
+                                    context_retried = True
+                                    retry_context = True
+                                    break
+                                return await self._fail(
+                                    turn_id,
+                                    StopReason.MODEL_ERROR,
+                                    event.category.value,
+                                    event.message,
                                     model_calls,
                                     tool_calls,
                                     text_parts,
                                 )
-                            completed = True
-                            finish_reason = event.finish_reason
-                        else:
-                            if (
-                                event.category is ModelErrorCategory.CONTEXT_LENGTH
-                                and self._context_service is not None
-                                and not context_retried
-                                and not response_calls
-                                and not response_text
-                            ):
-                                self._context_service.reject_window(request)
-                                context_retried = True
-                                retry_context = True
-                                break
-                            return await self._fail(
-                                turn_id,
-                                StopReason.MODEL_ERROR,
-                                event.category.value,
-                                event.message,
-                                model_calls,
-                                tool_calls,
-                                text_parts,
-                            )
             except TimeoutError:
                 return await self._fail(
                     turn_id,
@@ -330,47 +332,50 @@ class AgentLoop:
                     repair_completed = False
                     try:
                         async with asyncio.timeout(repair_request.settings.timeout_seconds):
-                            async for event in self._model.stream(repair_request):
-                                if cancellation.cancelled:
-                                    raise asyncio.CancelledError
-                                if isinstance(event, TextDelta):
-                                    repair_text.append(event.text)
-                                elif isinstance(event, ResponseCompleted):
-                                    repair_completed = event.finish_reason == "stop"
-                                elif isinstance(event, (ToolCallCompleted, ToolCallDelta)):
-                                    return await self._model_protocol_failure(
-                                        turn_id,
-                                        "Citation repair cannot request tools",
-                                        model_calls,
-                                        tool_calls,
-                                        text_parts,
-                                    )
-                                elif isinstance(event, UsageReported):
-                                    if self._context_service is not None:
-                                        await self._context_service.observe_usage(
-                                            repair_request, event.usage
+                            async with closing_model_stream(
+                                self._model.stream(repair_request)
+                            ) as events:
+                                async for event in events:
+                                    if cancellation.cancelled:
+                                        raise asyncio.CancelledError
+                                    if isinstance(event, TextDelta):
+                                        repair_text.append(event.text)
+                                    elif isinstance(event, ResponseCompleted):
+                                        repair_completed = event.finish_reason == "stop"
+                                    elif isinstance(event, (ToolCallCompleted, ToolCallDelta)):
+                                        return await self._model_protocol_failure(
+                                            turn_id,
+                                            "Citation repair cannot request tools",
+                                            model_calls,
+                                            tool_calls,
+                                            text_parts,
                                         )
-                                    await self._journal.record(
-                                        turn_id,
-                                        RuntimeEventType.MODEL_USAGE_RECORDED,
-                                        ModelUsageRecordedPayload(
-                                            self._provider_name,
-                                            repair_request.model,
-                                            event.usage,
-                                            repair_request.metadata.get("request_id"),
-                                            "citation_repair",
-                                        ),
-                                    )
-                                else:
-                                    return await self._fail(
-                                        turn_id,
-                                        StopReason.MODEL_ERROR,
-                                        event.category.value,
-                                        event.message,
-                                        model_calls,
-                                        tool_calls,
-                                        text_parts,
-                                    )
+                                    elif isinstance(event, UsageReported):
+                                        if self._context_service is not None:
+                                            await self._context_service.observe_usage(
+                                                repair_request, event.usage
+                                            )
+                                        await self._journal.record(
+                                            turn_id,
+                                            RuntimeEventType.MODEL_USAGE_RECORDED,
+                                            ModelUsageRecordedPayload(
+                                                self._provider_name,
+                                                repair_request.model,
+                                                event.usage,
+                                                repair_request.metadata.get("request_id"),
+                                                "citation_repair",
+                                            ),
+                                        )
+                                    else:
+                                        return await self._fail(
+                                            turn_id,
+                                            StopReason.MODEL_ERROR,
+                                            event.category.value,
+                                            event.message,
+                                            model_calls,
+                                            tool_calls,
+                                            text_parts,
+                                        )
                     except TimeoutError:
                         return await self._fail(
                             turn_id,

@@ -40,6 +40,7 @@ from jdagent.instructions import TurnInstructions
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.memory_service import MemoryService, terms
 from jdagent.model_profiles import maintenance_options
+from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ContextObjects, ModelPort, RuntimeJournal, SessionPort
 
 _SUMMARY_INSTRUCTION = (
@@ -769,30 +770,31 @@ class ContextService:
         finished = False
         try:
             async with asyncio.timeout(min(120, request.settings.timeout_seconds)):
-                async for event in self._model.stream(request):
-                    if isinstance(event, TextDelta):
-                        parts.append(event.text)
-                    elif isinstance(event, UsageReported):
-                        await self.observe_usage(request, event.usage)
-                        await self._journal.record(
-                            request.metadata.get("turn_id"),
-                            RuntimeEventType.MODEL_USAGE_RECORDED,
-                            ModelUsageRecordedPayload(
-                                self._provider,
-                                request.model,
-                                event.usage,
-                                request.metadata.get("request_id"),
-                                "compaction",
-                            ),
-                        )
-                    elif isinstance(event, ResponseCompleted):
-                        if finished or event.finish_reason != "stop":
-                            raise CompactionError("Maintenance response was incomplete")
-                        finished = True
-                    else:
-                        raise CompactionError(
-                            "Maintenance cannot execute tools or accept provider failures"
-                        )
+                async with closing_model_stream(self._model.stream(request)) as events:
+                    async for event in events:
+                        if isinstance(event, TextDelta):
+                            parts.append(event.text)
+                        elif isinstance(event, UsageReported):
+                            await self.observe_usage(request, event.usage)
+                            await self._journal.record(
+                                request.metadata.get("turn_id"),
+                                RuntimeEventType.MODEL_USAGE_RECORDED,
+                                ModelUsageRecordedPayload(
+                                    self._provider,
+                                    request.model,
+                                    event.usage,
+                                    request.metadata.get("request_id"),
+                                    "compaction",
+                                ),
+                            )
+                        elif isinstance(event, ResponseCompleted):
+                            if finished or event.finish_reason != "stop":
+                                raise CompactionError("Maintenance response was incomplete")
+                            finished = True
+                        else:
+                            raise CompactionError(
+                                "Maintenance cannot execute tools or accept provider failures"
+                            )
         finally:
             self._response_hashes.append(
                 await self._objects.put(

@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from uuid import uuid4
 
@@ -34,6 +34,7 @@ from jdagent.domain.tools import ToolResultStatus
 from jdagent.memory_service import MemoryService
 from jdagent.memory_store import JobLease
 from jdagent.model_profiles import maintenance_options
+from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ContextObjects, ModelPort
 
 
@@ -50,7 +51,7 @@ class PrioritizedModel:
     def capabilities(self) -> ModelCapabilities:
         return self.model.capabilities
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def stream(self, request: ModelRequest) -> AsyncGenerator[ModelEvent]:
         foreground = request.metadata.get("call_kind") != "memory"
         async with self._condition:
             self._foreground += int(foreground)
@@ -63,8 +64,9 @@ class PrioritizedModel:
                 self._foreground -= int(foreground)
                 self._condition.notify_all()
         try:
-            async for event in self.model.stream(request):
-                yield event
+            async with closing_model_stream(self.model.stream(request)) as events:
+                async for event in events:
+                    yield event
         finally:
             async with self._condition:
                 self._busy = False
@@ -225,20 +227,21 @@ class MemoryMaintenance:
         parts: list[str] = []
         completed = False
         async with asyncio.timeout(120):
-            async for event in self.model.stream(request):
-                if isinstance(event, TextDelta):
-                    parts.append(event.text)
-                elif isinstance(event, UsageReported):
-                    await asyncio.to_thread(
-                        self.memory.store.settle,
-                        request_id,
-                        event.usage.input_tokens,
-                        event.usage.output_tokens,
-                    )
-                elif isinstance(event, ResponseCompleted) and event.finish_reason == "stop":
-                    completed = True
-                else:
-                    raise ValueError("Memory response incomplete or requested a tool")
+            async with closing_model_stream(self.model.stream(request)) as events:
+                async for event in events:
+                    if isinstance(event, TextDelta):
+                        parts.append(event.text)
+                    elif isinstance(event, UsageReported):
+                        await asyncio.to_thread(
+                            self.memory.store.settle,
+                            request_id,
+                            event.usage.input_tokens,
+                            event.usage.output_tokens,
+                        )
+                    elif isinstance(event, ResponseCompleted) and event.finish_reason == "stop":
+                        completed = True
+                    else:
+                        raise ValueError("Memory response incomplete or requested a tool")
         if not completed:
             raise ValueError("Memory response did not terminate")
         return decode_object("".join(parts).encode())

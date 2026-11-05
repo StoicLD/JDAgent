@@ -1,10 +1,9 @@
 """Sequential StateGraph execution; the journal remains the only durable history."""
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypedDict, runtime_checkable
+from typing import Literal, Protocol, TypedDict
 
 from langgraph.constants import END, START
 from langgraph.errors import GraphRecursionError
@@ -28,7 +27,6 @@ from jdagent.domain.events import (
 )
 from jdagent.domain.model import (
     ModelErrorCategory,
-    ModelEvent,
     ModelRequest,
     ResponseCompleted,
     TextDelta,
@@ -40,6 +38,7 @@ from jdagent.domain.tools import ToolCall, ToolErrorCode, ToolExecutionContext
 from jdagent.eventing import close_pending_calls
 from jdagent.knowledge.citation import finalize_answer, repair_message
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
+from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
 
 
@@ -87,23 +86,6 @@ class _Dependencies:
 
 class _Node(Protocol):
     def __call__(self, state: _TurnState) -> Awaitable[_TurnState]: ...
-
-
-@runtime_checkable
-class _ClosableStream(Protocol):
-    async def aclose(self) -> None: ...
-
-
-@asynccontextmanager
-async def _closing_stream(
-    events: AsyncIterator[ModelEvent],
-) -> AsyncGenerator[AsyncIterator[ModelEvent]]:
-    try:
-        yield events
-    finally:
-        # ModelPort permits plain iterators as well as async generators.
-        if isinstance(events, _ClosableStream):
-            await events.aclose()
 
 
 def _step_limit(limits: LoopLimits) -> int:
@@ -345,7 +327,7 @@ class _Execution:
         finish: str | None = None
         try:
             async with asyncio.timeout(request.settings.timeout_seconds):
-                async with _closing_stream(self.d.model.stream(request)) as stream:
+                async with closing_model_stream(self.d.model.stream(request)) as stream:
                     async for event in stream:
                         if repair:
                             if self.cancellation.cancelled:

@@ -43,6 +43,8 @@ RAG 的 Embedding 是独立接口与配置，不能用生成模型接入成功�
 
 Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter。
 `RuntimeComposition.aclose()` 负责关闭真实模型客户端。
+各消费者和 PrioritizedModel 通过 `closing_model_stream` 显式等待迭代器关闭，再释放共享模型槽；
+提前返回、协议错误和取消不依赖垃圾回收完成连接清理。
 两个适配器使用每份 ModelRequest 的 model、timeout 和输出上限；复用传输不固化启动时参数。
 后端切换需要重启，逐轮模型参数重载和请求归档保持一致。完整验证及当前限制见
 [v0.6 实施记录](../plans/v0.6-implementation.md)。
@@ -50,6 +52,7 @@ Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter
 ## 代码与验证入口
 
 - [模型类型](../../src/jdagent/domain/model.py)、[ModelPort](../../src/jdagent/ports.py)
+- [流生命周期](../../src/jdagent/model_stream.py)、[模型槽关闭回归](../../tests/test_model_stream_lifecycle.py)
 - [DeepSeek Adapter](../../src/jdagent/adapters/deepseek.py)、[Fake Adapter](../../src/jdagent/adapters/fake.py)
 - [LangChain Adapter](../../src/jdagent/adapters/langchain_model.py)、[假 HTTP 协议验证](../../tests/test_langchain_model.py)、
   [四组合接线与配置重载](../../tests/test_v06_composition.py)
