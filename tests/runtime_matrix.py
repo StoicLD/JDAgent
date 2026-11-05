@@ -18,6 +18,7 @@ from jdagent.configuration import CliOverrides, resolve_configuration
 from jdagent.data_paths import DataPaths
 from jdagent.domain.json import JsonObject
 from jdagent.domain.tools import ApprovalDecision, ToolCall
+from jdagent.ports import EventObserver
 
 COMBINATIONS = (
     ("native", "native"),
@@ -75,6 +76,7 @@ class RuntimeCase:
         approval: FakeApproval | None = None,
         options: RuntimeOptions | None = None,
         combination: tuple[str, str] | None = None,
+        observers: tuple[EventObserver, ...] = (),
     ) -> AsyncGenerator[RuntimeComposition]:
         self.workspace.mkdir(exist_ok=True)
         engine, adapter_name = combination or self.combination
@@ -101,7 +103,10 @@ class RuntimeCase:
 
             self.monkeypatch.setattr(composition_module, adapter_type.__name__, adapter)
             runtime = build_runtime(
-                config, approval or FakeApproval(ApprovalDecision.APPROVE), runtime_options=options
+                config,
+                approval or FakeApproval(ApprovalDecision.APPROVE),
+                runtime_options=options,
+                event_observers=observers,
             )
             assert isinstance(runtime.model, adapter_type)
             try:
