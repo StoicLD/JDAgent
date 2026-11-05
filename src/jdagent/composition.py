@@ -290,8 +290,13 @@ def build_runtime(
     runtime_options: RuntimeOptions | None = None,
     model_event_observers: tuple[ModelEventObserver, ...] = (),
     event_observers: tuple[EventObserver, ...] = (),
+    model_wrapper: Callable[[ModelPort], ModelPort] | None = None,
 ) -> RuntimeComposition:
-    """Select concrete adapters and wire them into the application seam."""
+    """Wire adapters, optionally wrapping all model traffic for bounded experiments.
+
+    The wrapper borrows the selected adapter. Composition retains client ownership;
+    foreground, compaction, repair, and maintenance share the same wrapped model.
+    """
 
     options = runtime_options or RuntimeOptions()
     if configuration.runtime_engine not in {"native", "langgraph"}:
@@ -395,7 +400,7 @@ def build_runtime(
         if options.include_tools
         else ()
     )
-    scheduled_model = PrioritizedModel(model)
+    scheduled_model = PrioritizedModel(model_wrapper(model) if model_wrapper is not None else model)
     objects = FileContextObjects(configuration.session_directory / "objects")
     maintenance = MemoryMaintenance(
         memory,

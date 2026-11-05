@@ -49,6 +49,9 @@ Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter
 后端切换需要重启，逐轮模型参数重载和请求归档保持一致。完整验证及当前限制见
 [v0.6 实施记录](../plans/v0.6-implementation.md)。
 
+受控实验可通过组合根的 `model_wrapper` 在选定适配器外侧注入总预算。任务、压缩、引用修复和记忆
+维护共用它；实验账本属于验证设施，不替代产品费用账本。普通 CLI 不自动启用实验预算。
+
 ## 代码与验证入口
 
 - [模型类型](../../src/jdagent/domain/model.py)、[ModelPort](../../src/jdagent/ports.py)
@@ -56,6 +59,8 @@ Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter
 - [DeepSeek Adapter](../../src/jdagent/adapters/deepseek.py)、[Fake Adapter](../../src/jdagent/adapters/fake.py)
 - [LangChain Adapter](../../src/jdagent/adapters/langchain_model.py)、[假 HTTP 协议验证](../../tests/test_langchain_model.py)、
   [四组合接线与配置重载](../../tests/test_v06_composition.py)
+- [持久实验预算](../../tests/experiment_budget.py)、[预算阻断与恢复](../../tests/test_v06_experiment_budget.py)、
+  [四组合内部调用接线](../../tests/test_v06_budget_wiring.py)
 - [协议测试](../../tests/test_deepseek_adapter.py)、[端口替身测试](../../tests/test_contract_adapters.py)、
   [真实模型测试](../../tests/integration/test_deepseek_live.py)
 - [ModelPort 设计](../architecture/model-port.md)、[ADR-0002](../decisions/ADR-0002-model-port.md)

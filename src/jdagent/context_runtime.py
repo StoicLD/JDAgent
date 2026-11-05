@@ -492,7 +492,11 @@ class ContextService:
                 messages=(*request.messages, ModelMessage(MessageRole.USER, repair_message)),
             )
         estimate = self._estimator.measure(request)
-        request = replace(request, metadata={**request.metadata, "request_id": uuid4().hex})
+        call_kind = "citation_repair" if repair_message else "task"
+        request = replace(
+            request,
+            metadata={**request.metadata, "request_id": uuid4().hex, "call_kind": call_kind},
+        )
         self._snapshot = WindowSnapshot(
             self._budget, estimate, request.metadata["request_id"], datetime.now(UTC).isoformat()
         )
@@ -520,7 +524,7 @@ class ContextService:
                 "Explicit control: 撤销本会话约束 C<number>"
             )
         if record_request:
-            await self._archive(request, knowledge, "citation_repair" if repair_message else "task")
+            await self._archive(request, knowledge, call_kind)
         if self._instructions is not None and record_request:
             self._instructions.acknowledge()
         return request
