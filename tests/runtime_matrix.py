@@ -17,6 +17,7 @@ from jdagent.composition import RuntimeComposition, RuntimeOptions, build_runtim
 from jdagent.configuration import CliOverrides, resolve_configuration
 from jdagent.data_paths import DataPaths
 from jdagent.domain.json import JsonObject
+from jdagent.domain.model import Usage
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 from jdagent.ports import EventObserver
 
@@ -28,7 +29,9 @@ COMBINATIONS = (
 )
 
 
-def model_response(text: str = "done", calls: tuple[ToolCall, ...] = ()) -> httpx.Response:
+def model_response(
+    text: str = "done", calls: tuple[ToolCall, ...] = (), *, usage: Usage | None = None
+) -> httpx.Response:
     delta: JsonObject = {"role": "assistant", "content": text}
     if calls:
         delta["tool_calls"] = [
@@ -49,7 +52,19 @@ def model_response(text: str = "done", calls: tuple[ToolCall, ...] = ()) -> http
             {"index": 0, "delta": delta, "finish_reason": "tool_calls" if calls else "stop"}
         ],
     }
-    return httpx.Response(200, content=f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+    content = f"data: {json.dumps(chunk)}\n\n"
+    if usage is not None:
+        tail = {
+            **chunk,
+            "choices": [],
+            "usage": {
+                "prompt_tokens": usage.input_tokens,
+                "completion_tokens": usage.output_tokens,
+                "total_tokens": usage.input_tokens + usage.output_tokens,
+            },
+        }
+        content += f"data: {json.dumps(tail)}\n\n"
+    return httpx.Response(200, content=(content + "data: [DONE]\n\n").encode())
 
 
 @dataclass
