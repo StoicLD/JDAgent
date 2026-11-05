@@ -1,7 +1,8 @@
 """Composition root for selecting adapters and wiring runtime dependencies."""
 
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from jdagent.adapters.context_objects import FileContextObjects
 from jdagent.adapters.deepseek import DeepSeekModelPort
 from jdagent.adapters.fake import FakeModelPort
 from jdagent.adapters.jsonl_session import JsonlSession
+from jdagent.adapters.langchain_model import LangChainModelPort
 from jdagent.adapters.memory import InMemoryContextObjects
 from jdagent.application.coordinator import TurnCoordinator
 from jdagent.configuration import ResolvedConfiguration, resolve_configuration
@@ -107,6 +109,7 @@ class RuntimeComposition:
     model: ModelPort
     session: JsonlSession
     maintenance: MemoryMaintenance | None = None
+    close_resources: tuple[Callable[[], Awaitable[None]], ...] = ()
 
     async def reconstruct_request(self, digest: str) -> ModelRequest:
         if self.maintenance is None or self.maintenance.memory.knowledge_references is None:
@@ -118,11 +121,12 @@ class RuntimeComposition:
         )
 
     async def aclose(self) -> None:
-        if self.maintenance is not None:
-            await self.maintenance.close()
-        await self.coordinator.aclose()
-        if isinstance(self.model, DeepSeekModelPort):
-            await self.model.aclose()
+        async with AsyncExitStack() as cleanup:
+            for close in reversed(self.close_resources):
+                cleanup.push_async_callback(close)
+            cleanup.push_async_callback(self.coordinator.aclose)
+            if self.maintenance is not None:
+                await self.maintenance.close()
 
 
 @dataclass(slots=True)
@@ -157,11 +161,14 @@ class ConfiguredLoopFactory:
     initial_base_url: str | None = None
     runtime_limits: LoopLimits | None = None
     maintenance: MemoryMaintenance | None = None
+    model_adapter: str = "native"
 
     def prepare_turn(self) -> None:
         if self.reload_configuration is None:
             return
         config = self.reload_configuration()
+        if config.model_adapter != self.model_adapter:
+            raise ValueError("Model adapter changed; restart before beginning the next Turn")
         if config.provider != self.provider_name:
             raise ValueError("Provider changed; restart before beginning the next Turn")
         if self.initial_base_url is not None and config.base_url != self.initial_base_url:
@@ -281,6 +288,9 @@ def build_runtime(
     """Select concrete adapters and wire them into the application seam."""
 
     options = runtime_options or RuntimeOptions()
+    if configuration.model_adapter not in {"native", "langchain"}:
+        raise ValueError("Unsupported model adapter")
+    close_resources: list[Callable[[], Awaitable[None]]] = []
     workspace = configuration.workspace.resolve(strict=True)
     context_budget = ContextBudget(
         model_window(
@@ -316,10 +326,15 @@ def build_runtime(
             raise ValueError(
                 "DEEPSEEK_API_KEY or the development key file is required for provider=deepseek"
             )
-        model = DeepSeekModelPort(
+        adapter_type = (
+            LangChainModelPort if configuration.model_adapter == "langchain" else DeepSeekModelPort
+        )
+        adapter = adapter_type(
             api_key,
             base_url=configuration.base_url,
         )
+        model = adapter
+        close_resources.append(adapter.aclose)
     else:
         raise ValueError(f"Unsupported provider: {configuration.provider}")
 
@@ -416,6 +431,7 @@ def build_runtime(
         reload_configuration=reload_configuration,
         initial_base_url=configuration.base_url,
         maintenance=maintenance,
+        model_adapter=configuration.model_adapter,
         runtime_limits=LoopLimits(options.max_model_calls, options.max_tool_calls)
         if runtime_options is not None
         else None,
@@ -436,4 +452,4 @@ def build_runtime(
         memory=memory,
     )
     coordinator.after_output = maintenance.start
-    return RuntimeComposition(coordinator, model, session, maintenance)
+    return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

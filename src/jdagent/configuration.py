@@ -30,6 +30,7 @@ _CONTEXT_FIELDS = frozenset(
 _USER_FIELDS = _CONTEXT_FIELDS | frozenset(
     {
         "provider",
+        "model_adapter",
         "model",
         "base_url",
         "api_key_file",
@@ -77,6 +78,7 @@ class CliOverrides:
     tool_scope: str | None = None
     model_context_window: int | None = None
     max_output_tokens: int | None = None
+    model_adapter: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +119,7 @@ class ResolvedConfiguration:
     total_output_token_limit: int = 3_000_000
     memory_embedding: EmbeddingProfile | None = None
     cli_overrides: CliOverrides = field(default_factory=CliOverrides, repr=False)
+    model_adapter: str = "native"
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -179,6 +182,9 @@ def _validate(values: dict[str, object]) -> None:
     values["provider"] = provider
     if provider not in {"fake", "deepseek"}:
         raise ConfigurationError("Configuration field provider must be fake or deepseek")
+    values["model_adapter"] = _non_empty_string(values, "model_adapter")
+    if values["model_adapter"] not in {"native", "langchain"}:
+        raise ConfigurationError("model_adapter must be native or langchain")
     values["model"] = _non_empty_string(values, "model")
     values["base_url"] = _non_empty_string(values, "base_url")
     _positive_number(values, "model_timeout_seconds")
@@ -227,6 +233,7 @@ def resolve_configuration(
     paths = data_paths or DataPaths.for_workspace(workspace, environment=environment)
     values: dict[str, object] = {
         "provider": "deepseek",
+        "model_adapter": "native",
         "model": "deepseek-v4-flash",
         "base_url": "https://api.deepseek.com",
         "model_timeout_seconds": 30.0,
@@ -349,6 +356,7 @@ def resolve_configuration(
         raise ConfigurationError("global_instructions must be an explicit path")
     return ResolvedConfiguration(
         provider=cast(str, values["provider"]),
+        model_adapter=cast(str, values["model_adapter"]),
         model=cast(str, values["model"]),
         base_url=cast(str, values["base_url"]),
         model_timeout_seconds=float(cast(float, values["model_timeout_seconds"])),

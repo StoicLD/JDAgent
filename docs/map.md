@@ -47,7 +47,7 @@
 | v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)，原始结论保持 |
 | v0.5 实现与审查 | [代码快照、逐项修复与验收](reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
-| v0.6 框架重构提案 | [LangChain 与 LangGraph 设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[官方资料核对](research/v0.6-langchain-langgraph.md)（`Proposed`） |
+| v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
 | v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
@@ -70,9 +70,9 @@
 - [ADR-0004 CLI 应用层](decisions/ADR-0004-cli-application-layer.md)
 - [ADR-0005 产品仓库作为唯一启动事实源](decisions/ADR-0005-agent-context-free-startup.md)
 - [ADR-0006 Milvus Standalone](decisions/ADR-0006-milvus-standalone-knowledge-index.md)
+- [ADR-0008 LangChain 与 LangGraph 的接入边界](decisions/ADR-0008-langchain-langgraph-boundaries.md)
 
-待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)、
-[ADR-0008 LangChain 与 LangGraph 的接入边界](decisions/ADR-0008-langchain-langgraph-boundaries.md)（均为 `Proposed`）。
+待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)（`Proposed`）。
 
 ## 工程规范
 

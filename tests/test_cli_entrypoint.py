@@ -1,4 +1,5 @@
 import json
+from importlib.metadata import version
 from pathlib import Path
 from typing import cast
 
@@ -195,7 +196,7 @@ def test_version_comes_from_installed_package_metadata(
         main(["--version"])
 
     assert exit_info.value.code == 0
-    assert capsys.readouterr().out == "jdagent 0.3.0\n"
+    assert capsys.readouterr().out == f"jdagent {version('jdagent')}\n"
 
 
 def test_unclassified_internal_error_is_safely_mapped_to_exit_1(

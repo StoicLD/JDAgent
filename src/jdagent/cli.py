@@ -21,6 +21,7 @@ _VALUE_FLAGS = frozenset(
         "--session-id",
         "--provider",
         "--model",
+        "--model-adapter",
         "--base-url",
         "--model-timeout-seconds",
         "--tool-timeout-seconds",
@@ -63,6 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id", help="Resume an existing session")
     parser.add_argument("--provider", choices=("fake", "deepseek"))
     parser.add_argument("--model")
+    parser.add_argument("--model-adapter", choices=("native", "langchain"))
     parser.add_argument("--base-url")
     parser.add_argument("--model-timeout-seconds", type=float)
     parser.add_argument("--tool-timeout-seconds", type=float)
@@ -101,6 +103,7 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
         session_id=cast(str | None, namespace.session_id),
         provider=cast(str, namespace.provider),
         model=cast(str, namespace.model),
+        model_adapter=cast(str | None, namespace.model_adapter),
         base_url=cast(str, namespace.base_url),
         model_timeout_seconds=cast(float, namespace.model_timeout_seconds),
         tool_timeout_seconds=cast(float, namespace.tool_timeout_seconds),

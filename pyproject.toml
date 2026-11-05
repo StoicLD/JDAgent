@@ -11,8 +11,14 @@ requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28,<1",
     "jsonschema>=4.23,<5",
+    "langchain-core>=1,<2",
+    "langchain-deepseek>=1,<2",
+    "langgraph>=1,<2",
+    "langsmith>=0.14,<1",
+    "openai>=2.45,<3",
     "pathspec>=0.12,<1",
     "prompt-toolkit>=3.0.52,<4",
+    "pydantic>=2,<3",
     "rich>=14.1,<15",
 ]
 

@@ -19,3 +19,5 @@ build/
 *.log
 node_modules/
 coverage/
+tmp/v06-implementation/
+tmp/uv-cache/
