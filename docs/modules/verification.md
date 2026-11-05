@@ -38,7 +38,8 @@ Q23 按实际依赖处理跨版本阻塞：相关权限、Session、工具与基
 
 v0.6 仍在实施：已有真实适配器加假 HTTP 的四组合证据，Windows／Python 3.11 独立安装检查通过
 （[安装证据](../reviews/evidence/v0.6-20261105/implementation-install/README.md)），默认未切换；
-验收映射及本阶段完整回归已记录；六次实验入口／离线演练、独立评审、固定 Live 对照与人工学习出口尚未完成。
+验收映射及本阶段完整回归已记录；[六次实验入口](../development/v0.6-comparison-runbook.md)已完成
+23 项离线演练。具体实验清单、独立评审、固定 Live 对照与人工学习出口尚未完成。
 Live 比较须先填写并冻结[比较记录模板](../development/v0.6-comparison-template.md)，具备共享总预算和明确调用授权。
 
 ## 测试入口
