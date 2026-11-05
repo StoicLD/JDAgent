@@ -46,7 +46,9 @@ uv run jdagent --provider deepseek --runtime-engine langgraph --model-adapter la
 `runtime_engine` 决定一轮任务怎样调度，`model_adapter` 决定怎样接入模型；两项可分别选择和回退。
 选择方式、四种组合及重启要求见[后端选择教程](docs/guides/usage.md#选择执行引擎与模型适配器)。
 仅验证图引擎启动可加 `--provider fake`；Fake 不经过 LangChain 网络适配器。
-离线证据和未完成门禁见[v0.6 实施记录](docs/plans/v0.6-implementation.md)，当前不代表 v0.6 已发布。
+真实对照的六次任务全部完成，但目标后端仅一次满足全部冻结比较指标，因此默认仍保持原生。
+结果见[六次对照报告](docs/reviews/v0.6-live-comparison-20261105-r2.md)，其他证据和未完成门禁见
+[v0.6 实施记录](docs/plans/v0.6-implementation.md)；当前不代表 v0.6 已发布。
 
 ## 常用操作
 
