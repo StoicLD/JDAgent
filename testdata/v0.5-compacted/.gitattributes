@@ -1,0 +1,4 @@
+*.jsonl -text
+manifest.json -text
+# Content-addressed v0.5 payloads preserve intentional prompt trailing spaces.
+objects/* -text whitespace=-blank-at-eol

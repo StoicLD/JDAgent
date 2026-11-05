@@ -1,0 +1,1 @@
+{"finished":true,"request_id":"00000000000000000000000000000005","text":"{\"goal\": \"Legacy compacted goal\", \"facts\": [{\"text\": \"Report read\", \"status\": \"completed\", \"sources\": [4]}], \"pending\": [], \"decisions\": [], \"paths\": [\"protected.txt\"]}"}
