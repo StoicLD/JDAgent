@@ -16,6 +16,7 @@
 | v0.4，2026-09-23 真实 DeepSeek | 1 failed、2 passed，基准 `7e18a1a` | 三次固定工具任务；[完整 Live 记录](../reviews/v0.4-live-verification.md) |
 | v0.5，2026-10-22 完整离线 | 273 passed、1 既有 RAG 失败、14 skipped | I 快照完整套件；后续定向修复及规模实验见[实施记录](../reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5，2026-10-22 真实 DeepSeek | 第一轮 0/3、第二轮 1/3、修复后第三轮 3/3 通过 | 第三轮基于 `94d90aa`，三次均成功压缩并完成必需工具链；全部失败与诊断计费保留，固定夹具通过不等于整版通过 |
+| v0.6，2026-11-05 完整离线 | 434 passed、1 个既有 RAG 失败、3 skipped、11 deselected；Ruff、Pyright 通过 | `b0dc5a8` 的 SDK 错误收尾切片；后续参数隔离 29 项、v0.5 副本兼容 16 项定向通过，见[实施记录](../plans/v0.6-implementation.md) |
 
 v0.4 实现的 Standards／Spec 独立评审在修复后定向复核通过，见[处置记录](../reviews/v0.4-implementation-review.md)。
 该报告前部“Live 未执行”是当时事实，末尾已追加后续结果，最新结论以三次 Live 记录为准。
@@ -35,6 +36,10 @@ v0.4 三次真实任务都修复了夹具错误并获得 exit 0，但首次遗�
 Q23 按实际依赖处理跨版本阻塞：相关权限、Session、工具与基础回归问题须处理；
 无关 RAG 质量缺口单独跟踪。既有失败不因此变成通过，新结果也不能覆盖失败尝试。
 
+v0.6 仍在实施：已有真实适配器加假 HTTP 的四组合证据，默认未切换；完整记忆／知识依赖矩阵、
+最终安装检查、独立评审、六次固定 Live 对照与人工学习出口尚未完成。
+Live 比较须先填写并冻结[比较记录模板](../development/v0.6-comparison-template.md)，具备共享总预算和明确调用授权。
+
 ## 测试入口
 
 | 模块 | 优先测试 |
@@ -44,6 +49,7 @@ Q23 按实际依赖处理跨版本阻塞：相关权限、Session、工具与基
 | Session／CLI | `test_jsonl_session.py`、`test_session_recovery.py`、`test_forced_exit_recovery.py`、`test_interactive_cli.py`、`test_configuration.py` |
 | RAG | `test_ingestion.py`、`test_source_revision_regressions.py`、`test_retrieval.py`、`test_citation.py`、`test_v03_eval.py` |
 | v0.5 Context / Memory | `test_v05_*.py`；规模实验与真实模型夹具分别显式 opt-in，见实施记录 |
+| v0.6 框架与四组合 | `test_langchain_model.py`、`test_v06_*.py`、`test_model_stream_lifecycle.py`；预算、工具、取消、强退恢复、历史副本和参数快照均有独立入口 |
 
 上述文件都位于 [tests](../../tests)。工具 Eval 使用[v0.4 固定夹具](../../testdata/v0.4-tools/DATASET.md)，
 检索使用[v0.3 Gold](../../testdata/v0.3-gold/DATASET.md)。

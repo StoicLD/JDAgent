@@ -89,7 +89,7 @@
 | v0.3 | [高层设计评审处置](reviews/REV-20260829-001-v0.3-rag-design-disposition.md)、[P1 实现评审处置](reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)、[2026-09-05 实现审查与修复](reviews/REV-20260905-001-v0.3-implementation-audit.md) |
 | v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
 | v0.5 | [设计初审与 R1 逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)、[R1 文件指纹](reviews/REV-20261021-001-v0.5-design-revision.sha256) |
-| v0.6 | [原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)、[R1 处置](reviews/REV-20261105-001-v0.6-design-disposition.md)、[原稿快照与指纹说明](reviews/evidence/v0.6-20261105/README.md)；仅设计文档验证 |
+| v0.6 | [原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)、[R1 处置](reviews/REV-20261105-001-v0.6-design-disposition.md)、[设计快照](reviews/evidence/v0.6-20261105/README.md)；后续分段实现和离线验证见[实施记录](plans/v0.6-implementation.md)，真实比较使用[记录模板](development/v0.6-comparison-template.md) |
 | Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
 
 ## 实现参考

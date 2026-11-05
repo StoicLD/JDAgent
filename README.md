@@ -1,6 +1,6 @@
 # JDAgent
 
-状态：`Implemented`（使用说明），更新：2026-10-23，当前版本：`0.5.0`。
+状态：`Implemented`（使用说明），更新：2026-11-05，当前包版本：`0.5.0`。
 
 JDAgent 是用于实践 Agent 核心机制的 Python 命令行项目。目前支持 DeepSeek 对话、持久会话、
 项目文件读写、命令执行、上下文压缩、历史检索和长期记忆。知识库已有管理与摄取入口，
@@ -34,6 +34,19 @@ uv run jdagent --provider deepseek --tool-scope analyze
 
 默认模型标识为 `deepseek-v4-flash`。直接输入问题，`/help` 查看命令，`/exit` 退出。
 `analyze` 适合先阅读代码；真实问答、压缩与后台记忆整理会使用模型服务。
+
+## 试用 v0.6 框架后端
+
+v0.6 正在实施，默认仍使用原生执行引擎和模型适配器。安装当前锁定依赖后，可显式选择新后端：
+
+```powershell
+uv run jdagent --provider deepseek --runtime-engine langgraph --model-adapter langchain --tool-scope analyze
+```
+
+`runtime_engine` 决定一轮任务怎样调度，`model_adapter` 决定怎样接入模型；两项可分别选择和回退。
+选择方式、四种组合及重启要求见[后端选择教程](docs/guides/usage.md#选择执行引擎与模型适配器)。
+仅验证图引擎启动可加 `--provider fake`；Fake 不经过 LangChain 网络适配器。
+离线证据和未完成门禁见[v0.6 实施记录](docs/plans/v0.6-implementation.md)，当前不代表 v0.6 已发布。
 
 ## 常用操作
 
@@ -75,6 +88,7 @@ uv run jdagent --provider deepseek --tool-scope analyze
 - [验证与验收](docs/modules/verification.md)：测试入口和原始证据。v0.5 修复后的三次固定
   DeepSeek 验收通过，完整故障矩阵、语义 Eval 等尚未完成，既有 RAG Recall 失败仍保留。
 
-v0.5 使用新 Session 格式，不兼容旧会话，也不会自动清理旧目录。
+v0.5 不兼容 v0.4 及更早的会话格式，也不会自动清理旧目录。v0.6 当前两种后端沿用 v0.5 的
+Session schema-v4 和 sessions-v5 目录；切换后端不需要清空会话。
 Agent 开发入口为 [AGENTS.md](AGENTS.md)；工程与学习验收分别遵循
 [模块交付与学习工作流](docs/development/module-delivery-workflow.md)。
