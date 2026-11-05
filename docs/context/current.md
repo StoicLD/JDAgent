@@ -21,11 +21,12 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 | v0.4 工具执行 | 八工具和离线链已实现；真实 DeepSeek 三次主线仅 2/3 通过 | 未完成，人工语义验收待学习者 |
 | v0.5 Context 与 Memory | 代码与确定性验证已落地，独立发现逐项修复；修复后的第三轮固定 DeepSeek 复验 3/3 通过，完整工程门禁仍有未完成项，见实现记录 | 初始模型已记录，学习出口未关闭 |
 
-最近完整离线运行：2026-11-05，v0.6 CLI 切片 `b131570`：`506 passed, 1 failed, 3 skipped, 11 deselected`；
-唯一失败仍为 v0.3 词项 Recall `0.8125 < 0.85`，integration 未运行。随后自建资源关闭 8 项定向通过。
+最近完整离线运行：2026-11-05，v0.6 `40946ef`：`545 passed, 1 failed, 3 skipped, 11 deselected`；
+唯一失败仍为 v0.3 词项 Recall `0.8125 < 0.85`，integration 未运行。随后实验记录校验修复的控制器 15 项定向通过。
 范围和证据见[实施记录](../plans/v0.6-implementation.md)及[A01–A13 映射](../development/v0.6-acceptance-matrix.md)。
-六次实验入口及统一任务已完成 23 项离线演练，具体 Live 清单、真实调用、独立审查和人工学习出口
-仍未完成，不代表完整版本或既有门禁通过。
+六次入口和统一任务已完成离线演练，[固定实现自审](../reviews/REV-20261105-002-v0.6-implementation-self-review.md)
+的发现已处置；最终 revision 的 Live 清单、真实调用、独立审查和人工学习出口仍未完成，
+不代表完整版本或既有门禁通过。
 
 ## 当前待办
 

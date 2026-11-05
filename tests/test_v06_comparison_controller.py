@@ -76,6 +76,12 @@ def test_controller_runs_ordered_samples_and_enforces_frozen_ceilings(
             comparison.freeze_criteria(experiment, criteria())
         for sample in SAMPLES:
             if sample.label == "T1":
+                for invalid in (None, -1, True, float("nan")):
+                    bad = criteria()
+                    bad["total_ms"] = {"maximum": invalid, "basis": "invalid test ceiling"}
+                    with pytest.raises(ValueError, match="finite nonnegative"):
+                        comparison.freeze_criteria(experiment, bad)
+                    assert not (experiment / "criteria.json").exists()
                 selected = criteria()
                 if reject_target:
                     selected["total_ms"] = {
@@ -85,6 +91,18 @@ def test_controller_runs_ordered_samples_and_enforces_frozen_ceilings(
                 comparison.freeze_criteria(experiment, selected)
                 with pytest.raises(FileExistsError):
                     comparison.freeze_criteria(experiment, selected)
+                frozen_path = experiment / "criteria.json"
+                original = frozen_path.read_bytes()
+                edited = _read(frozen_path)
+                require_object(edited["metrics"], "metrics")["total_ms"] = {
+                    "maximum": 1e10,
+                    "basis": "edited after freeze, before T1",
+                }
+                frozen_path.write_text(json.dumps(edited), encoding="utf-8")
+                with pytest.raises(ValueError, match="changed"):
+                    await comparison.execute(experiment, "T1", api_key="dummy-key", authorized=True)
+                assert not (experiment / "T1").exists()
+                frozen_path.write_bytes(original)
                 with pytest.raises(ValueError, match="startup measurement scope"):
                     await comparison.execute(
                         experiment,
@@ -116,7 +134,7 @@ def test_controller_runs_ordered_samples_and_enforces_frozen_ceilings(
             "basis": "too late",
         }
         frozen.write_text(json.dumps(changed), encoding="utf-8")
-        with pytest.raises(ValueError, match="Criteria changed"):
+        with pytest.raises(ValueError, match="changed"):
             await comparison.execute(experiment, "T1", api_key="dummy-key", authorized=True)
         assert len(ledger.entries()) == 54
 
@@ -217,6 +235,31 @@ def test_result_tampering_is_detected_before_next_attempt(
         with pytest.raises(ValueError, match="result changed"):
             await comparison.execute(experiment, "B2", api_key="dummy-key", authorized=True)
         assert len(ledger.entries()) == 9
+        assert not (experiment / "B2").exists()
+
+    asyncio.run(scenario())
+
+
+def test_completed_measurement_edit_is_rejected_before_next_attempt(
+    experiment: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ledger = _ledger(experiment)
+
+    async def forbidden(*args: object, **kwargs: object) -> JsonObject:
+        del args, kwargs
+        raise AssertionError("Edited measurement must be rejected before task execution")
+
+    async def scenario() -> None:
+        async with adapter_http(monkeypatch, SAMPLES[0], Script(ledger)):
+            await comparison.execute(experiment, "B1", api_key="dummy-key", authorized=True)
+        path = experiment / "B1" / "completion.json"
+        completion = _read(path)
+        require_object(completion["metrics"], "metrics")["total_ms"] = 0
+        path.write_text(json.dumps(completion), encoding="utf-8")
+        monkeypatch.setattr(comparison, "run_fixed_task", forbidden)
+        with pytest.raises(ValueError, match="changed"):
+            await comparison.execute(experiment, "B2", api_key="dummy-key", authorized=True)
         assert not (experiment / "B2").exists()
 
     asyncio.run(scenario())

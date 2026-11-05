@@ -157,6 +157,25 @@ def _ledger(root: Path, plan: JsonObject) -> ExperimentLedger:
     )
 
 
+def _content_hash(value: JsonObject) -> str:
+    payload = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_sealed(path: Path, value: JsonObject) -> None:
+    write_json(path, {**value, "content_sha256": _content_hash(value)})
+
+
+def _read_sealed(path: Path) -> JsonObject:
+    value = _read(path)
+    digest = value.pop("content_sha256", None)
+    if digest != _content_hash(value):
+        raise ValueError(f"{path.name} changed after being sealed")
+    return value
+
+
 def _sample(label: str) -> Sample:
     for sample in SAMPLES:
         if sample.label == label:
@@ -166,7 +185,7 @@ def _sample(label: str) -> Sample:
 
 def _completed(root: Path, sample: Sample) -> JsonObject:
     directory = root / sample.label
-    completion = _read(directory / "completion.json")
+    completion = _read_sealed(directory / "completion.json")
     claim = _read(directory / "claim.json")
     if claim.get("plan_sha256") != _hash(root / "plan.json") or claim.get("sample") != sample.label:
         raise ValueError("Sample claim does not match prepared plan")
@@ -209,7 +228,7 @@ def freeze_criteria(root: Path, criteria: JsonObject) -> None:
             _number(item.get("maximum"), name)
             if not require_string(item, "basis").strip():
                 raise ValueError("Every ceiling requires a baseline-based explanation")
-        write_json(
+        _write_sealed(
             root / "criteria.json",
             {
                 "plan_sha256": _hash(root / "plan.json"),
@@ -223,7 +242,7 @@ def freeze_criteria(root: Path, criteria: JsonObject) -> None:
 
 
 def _criteria(root: Path, startup_scope: str) -> JsonObject:
-    criteria = _read(root / "criteria.json")
+    criteria = _read_sealed(root / "criteria.json")
     if criteria.get("plan_sha256") != _hash(root / "plan.json") or criteria.get(
         "baseline"
     ) != _baseline_hashes(root):
@@ -344,7 +363,7 @@ async def execute(
                     "exceeded": normalize_json(exceeded),
                     "startup_scope": startup_scope,
                 }
-                await asyncio.to_thread(write_json, directory / "completion.json", completion)
+                await asyncio.to_thread(_write_sealed, directory / "completion.json", completion)
         return await asyncio.to_thread(_completed, root, sample)
     finally:
         lease.close()
@@ -366,7 +385,7 @@ def record_interruption(root: Path, label: str) -> None:
             for e in ledger.entries()
             if e.combination == sample.combination and e.attempt == sample.attempt
         ]
-        write_json(
+        _write_sealed(
             directory / "completion.json",
             {
                 "sample": label,
