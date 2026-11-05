@@ -1,0 +1,55 @@
+{
+  "revision": "f1ee9a0b04e325deffb7cdd9f5a93e1faebf117d",
+  "python": "3.11.15",
+  "installed_module": "Lib\\site-packages\\jdagent\\__init__.py",
+  "lock_sha256": "e3449e6a5b78857761eee420a96f235c13b571df73f3b31ec21a8bb7567ee55a",
+  "versions": {
+    "jdagent": "0.5.0",
+    "langgraph": "1.2.20",
+    "langchain-core": "1.7.6",
+    "langchain-deepseek": "1.1.1",
+    "langchain-openai": "1.7.4",
+    "openai": "2.54.0"
+  },
+  "cli": [
+    {
+      "engine": "native",
+      "provider": "fake",
+      "schema": 2,
+      "exit_code": 0
+    },
+    {
+      "engine": "langgraph",
+      "provider": "fake",
+      "schema": 2,
+      "exit_code": 0
+    }
+  ],
+  "combinations": [
+    {
+      "engine": "native",
+      "adapter": "native",
+      "http_calls": 1,
+      "stop_reason": "completed"
+    },
+    {
+      "engine": "native",
+      "adapter": "langchain",
+      "http_calls": 1,
+      "stop_reason": "completed"
+    },
+    {
+      "engine": "langgraph",
+      "adapter": "native",
+      "http_calls": 1,
+      "stop_reason": "completed"
+    },
+    {
+      "engine": "langgraph",
+      "adapter": "langchain",
+      "http_calls": 1,
+      "stop_reason": "completed"
+    }
+  ],
+  "installed_bytes": 71345824
+}
