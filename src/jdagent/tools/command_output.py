@@ -82,7 +82,8 @@ class CommandLogs:
         total_limit: int = 100 * 1024 * 1024,
         call_limit: int = 10 * 1024 * 1024,
     ) -> None:
-        self.root = root
+        # Supervisors use these paths from the command's cwd, not the launcher's.
+        self.root = root.resolve()
         self.total_limit = total_limit
         self.call_limit = call_limit
 

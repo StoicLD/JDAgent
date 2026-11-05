@@ -62,6 +62,8 @@ revision 绑定规范路径和原始完整字节。编辑在 Windows 独占句�
 
 stdout/stderr 分开留存，单次合计 10 MiB、workspace 合计 100 MiB、预览合计 16 KiB。
 达限仍排空管道并标记丢失；容量不足拒绝新命令。`/logs clear` 只清当前 Session 输出并保留标记。
+日志目录在构造时解析为绝对路径，确保命令切换 cwd 后仍写入同一份进程记录；相对 `--data-dir`
+的修复与运行证据见[v0.6 首轮真实对照](../reviews/v0.6-live-comparison-20261105.md)。
 
 ## 结果语义
 

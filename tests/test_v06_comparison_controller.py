@@ -67,6 +67,10 @@ def test_controller_runs_ordered_samples_and_enforces_frozen_ceilings(
     monkeypatch: pytest.MonkeyPatch,
     reject_target: bool,
 ) -> None:
+    # Match the documented CLI invocation: a relative experiment directory,
+    # with commands running in a different workspace than the launcher cwd.
+    monkeypatch.chdir(experiment.parent)
+    experiment = Path(experiment.name)
     ledger = _ledger(experiment)
 
     async def scenario() -> None:
