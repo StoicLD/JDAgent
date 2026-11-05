@@ -47,6 +47,8 @@
 | v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)，原始结论保持 |
 | v0.5 实现与审查 | [代码快照、逐项修复与验收](reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
+| v0.6 框架重构提案 | [LangChain 与 LangGraph 设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[官方资料核对](research/v0.6-langchain-langgraph.md)（`Proposed`） |
+| v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
 ## 术语与学习资料
@@ -55,7 +57,8 @@
 - 工具：[设计阶段词汇表](context/v0.4-tools-glossary.md)（`Proposed`）；当前工具行为见工具模块。
 - 学习出口：[v0.1](learning/v0.1-learning-checklist.md)、[v0.2](learning/v0.2-learning-checklist.md)、
   [v0.3](learning/v0.3-rag-learning-checklist.md)、[v0.4](learning/v0.4-tools-learning-checklist.md)、
-  [v0.5](learning/v0.5-context-memory-learning-checklist.md)（待执行）。
+  [v0.5](learning/v0.5-context-memory-learning-checklist.md)（待执行）、
+  [v0.6 框架编排与接入](learning/v0.6-langchain-langgraph-learning-checklist.md)（`Proposed`）。
 - 后续模块：[交付与学习工作流](development/module-delivery-workflow.md)、
   [学习检查表模板](learning/module-learning-checklist-template.md)。
 
@@ -68,7 +71,8 @@
 - [ADR-0005 产品仓库作为唯一启动事实源](decisions/ADR-0005-agent-context-free-startup.md)
 - [ADR-0006 Milvus Standalone](decisions/ADR-0006-milvus-standalone-knowledge-index.md)
 
-待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)（`Proposed`）。
+待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)、
+[ADR-0008 LangChain 与 LangGraph 的接入边界](decisions/ADR-0008-langchain-langgraph-boundaries.md)（均为 `Proposed`）。
 
 ## 工程规范
 
@@ -85,6 +89,7 @@
 | v0.3 | [高层设计评审处置](reviews/REV-20260829-001-v0.3-rag-design-disposition.md)、[P1 实现评审处置](reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)、[2026-09-05 实现审查与修复](reviews/REV-20260905-001-v0.3-implementation-audit.md) |
 | v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
 | v0.5 | [设计初审与 R1 逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)、[R1 文件指纹](reviews/REV-20261021-001-v0.5-design-revision.sha256) |
+| v0.6 | [原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)、[R1 处置](reviews/REV-20261105-001-v0.6-design-disposition.md)、[原稿快照与指纹说明](reviews/evidence/v0.6-20261105/README.md)；仅设计文档验证 |
 | Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
 
 ## 实现参考
