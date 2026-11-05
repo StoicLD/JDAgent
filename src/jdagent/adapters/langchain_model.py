@@ -291,7 +291,17 @@ class LangChainModelPort:
                 provider_code=str(error.status_code),
                 request_id=error.request_id,
             )
-        except (ValueError, TypeError, KeyError, openai.APIResponseValidationError):
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            AssertionError,
+            openai.APIResponseValidationError,
+            openai.LengthFinishReasonError,
+            openai.ContentFilterFinishReasonError,
+        ):
+            # Structured streams use an SDK final parse; an empty stream asserts,
+            # and truncated/filtered JSON raises dedicated non-HTTP exceptions.
             failure = ModelFailed(ModelErrorCategory.INVALID_RESPONSE, "Invalid DeepSeek response")
         if usage is not None:
             yield UsageReported(usage)

@@ -172,18 +172,35 @@ def test_invalid_complete_arguments_never_publish_an_executable_call(arguments: 
     assert not any(isinstance(event, (ToolCallCompleted, ResponseCompleted)) for event in events)
 
 
-def _response_events(body: bytes) -> list[ModelEvent]:
+def _response_events(body: bytes, *, json_mode: bool = False) -> list[ModelEvent]:
     async def scenario() -> list[ModelEvent]:
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body))
         ) as client:
             port = LangChainModelPort("dummy-key", base_url="https://test", client=client)
             try:
-                return await _collect(port.stream(_request()))
+                request = _request()
+                if json_mode:
+                    request = replace(
+                        request,
+                        provider_options={"deepseek": {"response_format": {"type": "json_object"}}},
+                    )
+                return await _collect(port.stream(request))
             finally:
                 await port.aclose()
 
     return asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("finish", ["empty", "length", "content_filter"])
+def test_incomplete_json_mode_is_a_model_failure_without_sdk_exception(finish: str) -> None:
+    body = (
+        _sse() if finish == "empty" else _sse(_chunk({"role": "assistant", "content": "{"}, finish))
+    )
+    events = _response_events(body, json_mode=True)
+    assert isinstance(events[-1], ModelFailed)
+    assert events[-1].category is ModelErrorCategory.INVALID_RESPONSE
+    assert not any(isinstance(event, (ToolCallCompleted, ResponseCompleted)) for event in events)
 
 
 @pytest.mark.parametrize(
