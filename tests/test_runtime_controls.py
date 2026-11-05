@@ -32,9 +32,12 @@ from jdagent.domain.tools import (
 )
 from jdagent.eventing import EventJournal
 from jdagent.observability import TraceProjection
+from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 from jdagent.tools.permissions import DefaultPermissionPolicy
 from jdagent.tools.runtime import ToolRegistry, ToolRuntime
 from tests.runtime_factory import create_test_coordinator
+
+RunnerType = type[AgentLoop] | type[LangGraphTurnRunner]
 
 
 class ExplodingModel:
@@ -79,13 +82,14 @@ def test_tool_runtime_returns_timeout_result(tmp_path: Path) -> None:
     assert result.error_code is ToolErrorCode.TIMEOUT
 
 
-def test_model_timeout_records_turn_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
+def test_model_timeout_records_turn_failure(tmp_path: Path, runner_type: RunnerType) -> None:
     async def scenario() -> tuple[StopReason, RuntimeEventType]:
         session = InMemorySession()
         journal = await EventJournal.open(session, "session-1")
         await journal.record(None, RuntimeEventType.SESSION_STARTED, SessionStartedPayload())
         await journal.record("turn-1", RuntimeEventType.USER_MESSAGE, UserMessagePayload("wait"))
-        loop = AgentLoop(
+        loop = runner_type(
             FakeModelPort(
                 scripts=((ResponseCompleted("stop"),),),
                 delay_seconds=60,
@@ -113,7 +117,10 @@ def test_model_timeout_records_turn_failure(tmp_path: Path) -> None:
     assert final_event is RuntimeEventType.TURN_FAILED
 
 
-def test_cancellation_propagates_without_extra_side_effect(tmp_path: Path) -> None:
+@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
+def test_cancellation_propagates_without_extra_side_effect(
+    tmp_path: Path, runner_type: RunnerType
+) -> None:
     target = tmp_path / "should-not-exist.txt"
 
     async def scenario() -> None:
@@ -121,7 +128,7 @@ def test_cancellation_propagates_without_extra_side_effect(tmp_path: Path) -> No
         journal = await EventJournal.open(session, "session-1")
         await journal.record(None, RuntimeEventType.SESSION_STARTED, SessionStartedPayload())
         await journal.record("turn-1", RuntimeEventType.USER_MESSAGE, UserMessagePayload("cancel"))
-        loop = AgentLoop(
+        loop = runner_type(
             FakeModelPort(
                 scripts=((ResponseCompleted("stop"),),),
                 delay_seconds=60,
@@ -179,13 +186,16 @@ def test_trace_projects_same_runtime_event_ids(tmp_path: Path) -> None:
     assert trace.summary.stop_reason is StopReason.COMPLETED
 
 
-def test_model_adapter_exception_is_classified_without_leaking_message(tmp_path: Path) -> None:
+@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
+def test_model_adapter_exception_is_classified_without_leaking_message(
+    tmp_path: Path, runner_type: RunnerType
+) -> None:
     async def scenario() -> tuple[StopReason, str | None, str]:
         session = InMemorySession()
         journal = await EventJournal.open(session, "session-1")
         await journal.record(None, RuntimeEventType.SESSION_STARTED, SessionStartedPayload())
         await journal.record("turn-1", RuntimeEventType.USER_MESSAGE, UserMessagePayload("fail"))
-        loop = AgentLoop(
+        loop = runner_type(
             ExplodingModel(),
             ContextBuilder(model="broken"),
             ToolRuntime(
@@ -209,7 +219,10 @@ def test_model_adapter_exception_is_classified_without_leaking_message(tmp_path:
     assert "unsafe provider detail" not in persisted
 
 
-def test_task_cancellation_during_tool_records_result_before_stopping(tmp_path: Path) -> None:
+@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
+def test_task_cancellation_during_tool_records_result_before_stopping(
+    tmp_path: Path, runner_type: RunnerType
+) -> None:
     events_after_cancel: list[RuntimeEventType] = []
 
     async def scenario() -> None:
@@ -240,7 +253,7 @@ def test_task_cancellation_during_tool_records_result_before_stopping(tmp_path: 
             FakeApproval(ApprovalDecision.APPROVE),
             recorder=journal,
         )
-        loop = AgentLoop(model, ContextBuilder(model="fake", tools=(tool,)), runtime, journal)
+        loop = runner_type(model, ContextBuilder(model="fake", tools=(tool,)), runtime, journal)
         task = asyncio.create_task(
             loop.run(
                 "turn-1",

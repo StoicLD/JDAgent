@@ -56,6 +56,11 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 `--model-context-window`、`--max-output-tokens` 和 `--max-context-tokens` 分别控制模型容量、
 输出预留和应用上限。后台与总费用配置见[记忆模块](memory.md)。
 
+v0.6 开发阶段提供 `--runtime-engine native|langgraph` 和 `--model-adapter native|langchain`，
+默认仍为 native/native。对应 `runtime_engine`、`model_adapter` 仅允许用户配置或 CLI 指定，
+项目配置不能覆盖；改变任一后端需退出后重启。Fake 适合检查图执行入口，但不验证真实模型适配器。
+完整默认切换和发布仍待[v0.6 验收](../plans/v0.6-implementation.md)。
+
 DeepSeek Key 优先读取 `DEEPSEEK_API_KEY`，其次使用用户配置 `api_key_file`，
 最后回退到开发期 `../tmp/keys/deepseek-api-key.txt`。
 开发文件位于产品仓库外；此处只描述既有读取机制，不把外层目录加入项目文档启动链。

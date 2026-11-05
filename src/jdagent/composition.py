@@ -18,7 +18,8 @@ from jdagent.context import ContextBuilder
 from jdagent.context_archive import reconstruct_request
 from jdagent.context_budget import ContextBudget, InputEstimator
 from jdagent.context_runtime import ContextService
-from jdagent.core.loop import AgentLoop, LoopLimits, ModelEventObserver
+from jdagent.core.contracts import LoopLimits, ModelEventObserver, TurnRunner
+from jdagent.core.loop import AgentLoop
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.json import JsonObject
 from jdagent.domain.model import (
@@ -44,6 +45,7 @@ from jdagent.ports import (
     RuntimeJournal,
     SessionPort,
 )
+from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 from jdagent.tools.builtins import create_calculator_tool
 from jdagent.tools.command_output import CommandLogs
 from jdagent.tools.commands import create_command_tools
@@ -162,11 +164,14 @@ class ConfiguredLoopFactory:
     runtime_limits: LoopLimits | None = None
     maintenance: MemoryMaintenance | None = None
     model_adapter: str = "native"
+    runtime_engine: str = "native"
 
     def prepare_turn(self) -> None:
         if self.reload_configuration is None:
             return
         config = self.reload_configuration()
+        if config.runtime_engine != self.runtime_engine:
+            raise ValueError("Runtime engine changed; restart before beginning the next Turn")
         if config.model_adapter != self.model_adapter:
             raise ValueError("Model adapter changed; restart before beginning the next Turn")
         if config.provider != self.provider_name:
@@ -216,7 +221,7 @@ class ConfiguredLoopFactory:
     def context_for(self, session_id: str) -> ContextService | None:
         return self.contexts.get(session_id)
 
-    def create(self, journal: RuntimeJournal) -> AgentLoop:
+    def create(self, journal: RuntimeJournal) -> TurnRunner:
         if not journal.events:
             raise ValueError("Session journal must contain session_started before loop creation")
         session_id = journal.events[0].session_id
@@ -264,7 +269,8 @@ class ConfiguredLoopFactory:
             instructions_max_tokens=self.instructions_max_tokens,
         )
         self.contexts[session_id] = context
-        return AgentLoop(
+        runner_type = LangGraphTurnRunner if self.runtime_engine == "langgraph" else AgentLoop
+        return runner_type(
             self.model,
             context_builder,
             tools,
@@ -288,6 +294,8 @@ def build_runtime(
     """Select concrete adapters and wire them into the application seam."""
 
     options = runtime_options or RuntimeOptions()
+    if configuration.runtime_engine not in {"native", "langgraph"}:
+        raise ValueError("Unsupported runtime engine")
     if configuration.model_adapter not in {"native", "langchain"}:
         raise ValueError("Unsupported model adapter")
     close_resources: list[Callable[[], Awaitable[None]]] = []
@@ -432,6 +440,7 @@ def build_runtime(
         initial_base_url=configuration.base_url,
         maintenance=maintenance,
         model_adapter=configuration.model_adapter,
+        runtime_engine=configuration.runtime_engine,
         runtime_limits=LoopLimits(options.max_model_calls, options.max_tool_calls)
         if runtime_options is not None
         else None,

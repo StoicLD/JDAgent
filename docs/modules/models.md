@@ -14,19 +14,20 @@ ContextBuilder 在发请求前验证必要能力。
 
 响应通过异步事件流返回：`TextDelta` 用于文本增量，`ToolCallDelta`／`ToolCallCompleted`
 用于工具参数流与完整调用，`UsageReported` 记录用量，`ResponseCompleted` 标记响应结束，
-`ModelError` 表达模型边界错误。Loop 消费这些类型，Provider 原始 JSON 不进入 Loop。
+`ModelFailed` 表达模型边界错误。Runner 消费这些类型，Provider 原始 JSON 不进入 Runner。
 
 ## 现有适配器
 
 | 实现 | 用途与行为 |
 | --- | --- |
 | `DeepSeekModelPort` | 使用 httpx 请求 `/chat/completions`，解析 SSE、拼装工具参数、映射 HTTP／流错误 |
+| `LangChainModelPort` | 使用 ChatDeepSeek 发送请求，将 SDK 消息及流转换为项目事件；关闭 SDK 重试和云端追踪，完整聚合并验证后才发布工具调用 |
 | `FakeModelPort` | 按预设脚本输出事件，支持延迟与重复脚本，为测试提供确定性响应 |
 
 默认配置为 DeepSeek、`deepseek-v4-flash`、`https://api.deepseek.com`；
 这是仓库当前默认值，不表示对外部服务最新型号的判断。
 DeepSeek 请求关闭 thinking，当前统一事件模型不承载 reasoning 内容。
-普通 CLI 的 Fake 默认返回 `Fake response`；复杂工具轨迹由测试注入脚本。
+普通 CLI 的 Fake 默认返回 `Offline fake model response.`；复杂工具轨迹由测试注入脚本。
 
 模型超时默认 30 秒，由请求设置和 Loop 控制；具体值可经 CLI／配置覆盖。
 HTTP 错误映射为认证、权限、限流、连接、超时等类别，Loop 再映射整个 Turn 的停止原因。
@@ -35,16 +36,23 @@ HTTP 错误映射为认证、权限、限流、连接、超时等类别，Loop �
 ## 依赖与扩展
 
 组合根选择真实或 Fake Adapter，并注入 Loop。更换 Provider 需要实现同一端口并验证事件合同，
-不要求修改工具 Handler 或 Session 存储格式。当前只有 DeepSeek 一个真实生成模型适配器。
+不要求修改工具 Handler 或 Session 存储格式。当前真实生成 Provider 仍只有 DeepSeek，有原生和
+LangChain 两种适配实现。`--model-adapter native|langchain` 独立于执行引擎，开发阶段默认 native；
+Fake Provider 始终使用 FakeModelPort。
 RAG 的 Embedding 是独立接口与配置，不能用生成模型接入成功推断检索配置也已完成。
 
 Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter。
 `RuntimeComposition.aclose()` 负责关闭真实模型客户端。
+两个适配器使用每份 ModelRequest 的 model、timeout 和输出上限；复用传输不固化启动时参数。
+后端切换需要重启，逐轮模型参数重载和请求归档保持一致。完整验证及当前限制见
+[v0.6 实施记录](../plans/v0.6-implementation.md)。
 
 ## 代码与验证入口
 
 - [模型类型](../../src/jdagent/domain/model.py)、[ModelPort](../../src/jdagent/ports.py)
 - [DeepSeek Adapter](../../src/jdagent/adapters/deepseek.py)、[Fake Adapter](../../src/jdagent/adapters/fake.py)
+- [LangChain Adapter](../../src/jdagent/adapters/langchain_model.py)、[假 HTTP 协议验证](../../tests/test_langchain_model.py)、
+  [四组合接线与配置重载](../../tests/test_v06_composition.py)
 - [协议测试](../../tests/test_deepseek_adapter.py)、[端口替身测试](../../tests/test_contract_adapters.py)、
   [真实模型测试](../../tests/integration/test_deepseek_live.py)
 - [ModelPort 设计](../architecture/model-port.md)、[ADR-0002](../decisions/ADR-0002-model-port.md)

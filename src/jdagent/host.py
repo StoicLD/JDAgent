@@ -53,6 +53,7 @@ class CliStartup:
     model_context_window: int | None = None
     max_output_tokens: int | None = None
     model_adapter: str | None = None
+    runtime_engine: str | None = None
 
 
 async def run_single_turn(
@@ -128,6 +129,7 @@ async def run_cli(startup: CliStartup) -> int:
         CliOverrides(
             provider=startup.provider,
             model_adapter=startup.model_adapter,
+            runtime_engine=startup.runtime_engine,
             model=startup.model,
             base_url=startup.base_url,
             model_timeout_seconds=startup.model_timeout_seconds,
@@ -256,6 +258,7 @@ async def run_maintenance(startup: CliStartup) -> int:
         CliOverrides(
             provider=startup.provider,
             model_adapter=startup.model_adapter,
+            runtime_engine=startup.runtime_engine,
             model=startup.model,
             base_url=startup.base_url,
             data_dir=startup.data_dir,

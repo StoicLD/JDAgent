@@ -22,6 +22,7 @@ _VALUE_FLAGS = frozenset(
         "--provider",
         "--model",
         "--model-adapter",
+        "--runtime-engine",
         "--base-url",
         "--model-timeout-seconds",
         "--tool-timeout-seconds",
@@ -65,6 +66,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=("fake", "deepseek"))
     parser.add_argument("--model")
     parser.add_argument("--model-adapter", choices=("native", "langchain"))
+    parser.add_argument("--runtime-engine", choices=("native", "langgraph"))
     parser.add_argument("--base-url")
     parser.add_argument("--model-timeout-seconds", type=float)
     parser.add_argument("--tool-timeout-seconds", type=float)
@@ -104,6 +106,7 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
         provider=cast(str, namespace.provider),
         model=cast(str, namespace.model),
         model_adapter=cast(str | None, namespace.model_adapter),
+        runtime_engine=cast(str | None, namespace.runtime_engine),
         base_url=cast(str, namespace.base_url),
         model_timeout_seconds=cast(float, namespace.model_timeout_seconds),
         tool_timeout_seconds=cast(float, namespace.tool_timeout_seconds),

@@ -13,7 +13,7 @@ from uuid import uuid4
 from jdagent.application.session_recovery import LogicalRecovery, classify_logical_recovery
 from jdagent.context_archive import encode_json
 from jdagent.context_runtime import ContextService, WindowSnapshot
-from jdagent.core.loop import AgentLoop, CancellationToken, TurnResult
+from jdagent.core.contracts import CancellationToken, TurnResult, TurnRunner
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -49,7 +49,7 @@ from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 class AgentLoopFactory(Protocol):
     """Create a configured loop for a per-session journal."""
 
-    def create(self, journal: RuntimeJournal) -> AgentLoop: ...
+    def create(self, journal: RuntimeJournal) -> TurnRunner: ...
 
     def context_for(self, session_id: str) -> ContextService | None: ...
 

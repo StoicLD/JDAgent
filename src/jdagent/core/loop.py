@@ -1,11 +1,13 @@
 """The small state machine that drives one agent turn."""
 
 import asyncio
-from dataclasses import dataclass
-from typing import Protocol
 
 from jdagent.context import ContextBuilder, ContextLimitError
 from jdagent.context_runtime import CompactionError, ContextService
+from jdagent.core.contracts import CancellationToken as CancellationToken
+from jdagent.core.contracts import LoopLimits as LoopLimits
+from jdagent.core.contracts import ModelEventObserver as ModelEventObserver
+from jdagent.core.contracts import TurnResult as TurnResult
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -20,7 +22,6 @@ from jdagent.domain.events import (
 )
 from jdagent.domain.model import (
     ModelErrorCategory,
-    ModelEvent,
     ModelRequest,
     ResponseCompleted,
     TextDelta,
@@ -37,52 +38,6 @@ from jdagent.eventing import close_pending_calls
 from jdagent.knowledge.citation import finalize_answer, repair_message
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
-
-
-class ModelEventObserver(Protocol):
-    """Consume transient model events such as displayable text deltas."""
-
-    async def observe(self, event: ModelEvent) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class LoopLimits:
-    """Hard call-count limits for one turn."""
-
-    max_model_calls: int = 16
-    max_tool_calls: int = 32
-    max_failure_recoveries: int = 2
-
-    def __post_init__(self) -> None:
-        if self.max_model_calls <= 0 or self.max_tool_calls <= 0:
-            raise ValueError("Loop limits must be positive")
-
-
-@dataclass(frozen=True, slots=True)
-class TurnResult:
-    """The caller-visible result of one complete turn."""
-
-    stop_reason: StopReason
-    assistant_text: str
-    model_calls: int
-    tool_calls: int
-    error_category: str | None = None
-    citations: tuple[CitationRecord, ...] = ()
-    model_supplement: str = ""
-
-
-class CancellationToken:
-    """A cooperative cancellation signal checked at safe loop boundaries."""
-
-    def __init__(self) -> None:
-        self._cancelled = False
-
-    @property
-    def cancelled(self) -> bool:
-        return self._cancelled
-
-    def cancel(self) -> None:
-        self._cancelled = True
 
 
 class AgentLoop:

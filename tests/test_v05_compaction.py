@@ -32,6 +32,7 @@ from jdagent.domain.model import (
 )
 from jdagent.domain.tools import ToolCall, ToolExecutionContext, ToolResult, ToolResultStatus
 from jdagent.eventing import EventJournal
+from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 
 
 def test_large_closed_batch_is_archived_and_compacted_without_losing_user_constraint() -> None:
@@ -164,7 +165,10 @@ def test_statement_is_distinct_from_execution_and_failed_response_is_auditable(s
     asyncio.run(scenario())
 
 
-def test_one_turn_continues_after_three_compactions_without_replaying_tools(tmp_path: Path) -> None:
+@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
+def test_one_turn_continues_after_three_compactions_without_replaying_tools(
+    tmp_path: Path, runner_type: type[AgentLoop] | type[LangGraphTurnRunner]
+) -> None:
     class BatchModel:
         capabilities = ModelCapabilities(context_window=4096)
 
@@ -220,7 +224,7 @@ def test_one_turn_continues_after_three_compactions_without_replaying_tools(tmp_
             objects=InMemoryContextObjects(),
             budget=ContextBudget(4096, output_tokens=200, safety_tokens=20),
         )
-        loop = AgentLoop(model, builder, tools, journal, context_service=service)
+        loop = runner_type(model, builder, tools, journal, context_service=service)
         result = await loop.run("turn", ToolExecutionContext("session", "turn", tmp_path))
         assert result.assistant_text == "done"
         assert result.model_calls == 4

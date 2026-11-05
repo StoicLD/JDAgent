@@ -20,6 +20,8 @@ def test_cli_exposes_model_and_tool_timeout_configuration(
     assert "--model-timeout-seconds" in output
     assert "--tool-timeout-seconds" in output
     assert "--max-context-tokens" in output
+    assert "--runtime-engine" in output
+    assert "--model-adapter" in output
 
 
 def test_cli_fake_provider_creates_and_resumes_session(
@@ -66,13 +68,19 @@ def test_cli_fake_provider_creates_and_resumes_session(
     assert second_payload["stop_reason"] == "completed"
 
 
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_headless_json_stdout_is_machine_parseable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    engine: str,
 ) -> None:
     code = main(
         [
             "hello",
+            "--runtime-engine",
+            engine,
+            "--model-adapter",
+            "langchain",
             "--provider",
             "fake",
             "--workspace",
