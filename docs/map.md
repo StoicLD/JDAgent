@@ -47,7 +47,7 @@
 | v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)，原始结论保持 |
 | v0.5 实现与审查 | [代码快照、逐项修复与验收](reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
-| v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
+| v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[A01–A13 覆盖映射](development/v0.6-acceptance-matrix.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
 | v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
