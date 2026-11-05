@@ -5,8 +5,10 @@ from pathlib import Path
 
 import httpx
 import pytest
-from langsmith import Client
-from langsmith import tracing_context  # pyright: ignore[reportUnknownVariableType]
+from langsmith import (
+    Client,
+    tracing_context,  # pyright: ignore[reportUnknownVariableType]
+)
 
 from jdagent.domain.errors import StopReason
 from jdagent.domain.tools import ToolCall
