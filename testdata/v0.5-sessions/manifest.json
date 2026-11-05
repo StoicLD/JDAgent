@@ -1,0 +1,14 @@
+{
+  "source_revision": "6996e764537c12f27e85a060011ace32d359a5db",
+  "schema_version": 4,
+  "files": {
+    "v05-complete.jsonl": "c809861fd19769ce3a8b6b3482218dc4c581f50a0afbbb46e7d2460b5f809a40",
+    "v05-safe.jsonl": "da9bfbc527c19034272488a6df71dfa650dff2ae4ade2e4a8bf34eaf35c9c69e",
+    "v05-unknown_started.jsonl": "c18f5f98f1e00e9eae3802d60438394e8643790897288338125612d7f0b1e95c",
+    "v05-unknown_result.jsonl": "304f11e76ca3fb1e0250947b95e0ccd07b54db444f2781e814b28bfdc0aa6770"
+  },
+  "source_files": {
+    "jdagent/adapters/jsonl_session.py": "d719727dac40c5c05177da57166aee1b342251e29681f420883de62e085576e0",
+    "jdagent/domain/events.py": "3521d15e0cc7da884a1bf2fe7725dab58642943cf9a8e944fdecac07d071e9a8"
+  }
+}
