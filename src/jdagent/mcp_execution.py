@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, replace
 
 from jsonschema import Draft202012Validator, ValidationError
 
+from jdagent.cancellation import complete_before_cancel
 from jdagent.domain.events import (
     MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
@@ -281,6 +282,7 @@ class MCPExecution:
             entry.kind,
         )
         waiting_task = False
+        raw: JsonObject | MCPTask | None = None
         task_execution = MCPTaskExecution(
             self._service,
             self._journal,
@@ -289,7 +291,7 @@ class MCPExecution:
         )
         try:
             async with asyncio.timeout(self._service.execution_timeout(context.session_id, entry)):
-                raw = await self._call_with_retries(
+                raw, attempt = await self._call_with_retries(
                     entry,
                     arguments,
                     context,
@@ -301,6 +303,13 @@ class MCPExecution:
                 )
                 if isinstance(raw, MCPTask):
                     waiting_task = True
+                    await task_execution.register(entry, raw, context)
+                await self._journal.record(
+                    context.turn_id,
+                    RuntimeEventType.MCP_ATTEMPT_FINISHED,
+                    MCPAttemptFinishedPayload(context.call_id, attempt, True),
+                )
+                if isinstance(raw, MCPTask):
                     final = await task_execution.wait(entry, raw, context)
                     if isinstance(final, ToolOutcome):
                         if task_execution.final_result is not None:
@@ -344,10 +353,11 @@ class MCPExecution:
                 observed_failure=confirmed_timeout,
                 requires_stop=not server_timeout or waiting_task,
             )
-            if task_execution.final_result is not None:
+            received = task_execution.final_result if waiting_task else raw
+            if isinstance(received, dict):
                 return await self._complete(
                     entry,
-                    task_execution.final_result,
+                    received,
                     context,
                     origin,
                     task_execution.details,
@@ -368,7 +378,9 @@ class MCPExecution:
                 completed=False,
                 cancelled=True,
                 error_code=ToolErrorCode.CANCELLED,
-                message="MCP waiting cancelled; remote Task termination confirmed"
+                message="MCP waiting cancelled; remote result was received"
+                if isinstance(raw, dict) and not waiting_task
+                else "MCP waiting cancelled; remote Task termination confirmed"
                 if task_execution.result_confirmed
                 else "MCP waiting cancelled after a confirmed server timeout"
                 if confirmed_timeout
@@ -376,10 +388,11 @@ class MCPExecution:
                 observed_failure=confirmed_timeout,
                 requires_stop=True,
             )
-            if task_execution.final_result is not None:
+            received = task_execution.final_result if waiting_task else raw
+            if isinstance(received, dict):
                 return await self._complete(
                     entry,
-                    task_execution.final_result,
+                    received,
                     context,
                     origin,
                     task_execution.details,
@@ -406,6 +419,49 @@ class MCPExecution:
         management_task_ref: str | None = None,
     ) -> ToolOutcome:
         """Retain a received result even when completion races local cancellation."""
+        published: ToolOutcome | None = None
+
+        async def publish() -> None:
+            nonlocal published
+            published = await self._publish(
+                entry,
+                raw,
+                context,
+                origin,
+                task_details,
+                interruption=interruption,
+                management_task_ref=management_task_ref,
+            )
+
+        # This transaction performs only local object/event writes, never RPCs.
+        # Once a response is received, cancelling its disk wait must not orphan
+        # an ongoing write or erase the reference to that known result.
+        try:
+            await complete_before_cancel(publish())
+        except asyncio.CancelledError:
+            if published is None:
+                raise
+            return replace(
+                published,
+                cancelled=True,
+                error_code=ToolErrorCode.CANCELLED,
+                requires_stop=True,
+                message="MCP waiting cancelled; remote result was saved",
+            )
+        assert published is not None
+        return published
+
+    async def _publish(
+        self,
+        entry: MCPCapability,
+        raw: JsonObject,
+        context: ToolExecutionContext,
+        origin: ToolOrigin,
+        task_details: JsonObject,
+        *,
+        interruption: ToolOutcome | None,
+        management_task_ref: str | None,
+    ) -> ToolOutcome:
         if len(_encode(raw)) > self._limits.reservation_bytes:
             raise MCPFailure("response_limit")
         content = project_content(raw, entry.kind)
@@ -511,7 +567,7 @@ class MCPExecution:
         attempted: int,
         safe_repeat: bool,
         reservation: int,
-    ) -> JsonObject | MCPTask:
+    ) -> tuple[JsonObject | MCPTask, int]:
         for attempt in range(attempted + 1, 4):
             await self._journal.record(
                 context.turn_id,
@@ -553,12 +609,9 @@ class MCPExecution:
                 )
                 raise
             else:
-                await self._journal.record(
-                    context.turn_id,
-                    RuntimeEventType.MCP_ATTEMPT_FINISHED,
-                    MCPAttemptFinishedPayload(context.call_id, attempt, True),
-                )
-                return raw
+                # Return the receipt before another cancellable persistence or
+                # observer boundary, so invoke can preserve it during cleanup.
+                return raw, attempt
         raise RuntimeError("MCP attempt guard did not reject an exhausted operation")
 
     async def _save(

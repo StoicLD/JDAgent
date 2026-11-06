@@ -61,7 +61,8 @@ safe_repeat 默认为 false；设为 true 只允许宿主在可靠识别服务�
 可靠识别的 Server JSON-RPC 超时且 safe_repeat=true 时，总共最多 3 次，退避分别为 0.5 秒、1 秒。
 首次调用、退避和重试共用 timeout_seconds，不会每次重置。HTTP 504、isError 或文本里的 timeout 均不足以重试。
 同 Turn 失败后更换模型 call_id 不恢复已耗尽额度；成功结束后的正常再次读取仍可执行。
-进度及通用执行路径的有界清理仍在实施，范围与验证见[实施记录](../plans/v0.7-implementation.md)。
+普通 MCP 调用不受内置工具的十秒限制。取消沿适配层的有界协议清理返回；已经收到的句柄与结果仍完成本地保存，
+当前 Turn 按取消停止。进度展示仍在实施，范围与验证见[实施记录](../plans/v0.7-implementation.md)。
 
 ## 长操作与新版 Tasks
 

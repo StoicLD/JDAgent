@@ -5,6 +5,7 @@ import json
 from dataclasses import asdict
 from uuid import uuid4
 
+from jdagent.cancellation import complete_before_cancel
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.events import (
     MCPTaskCancelRequestedPayload,
@@ -68,9 +69,15 @@ class MCPTaskExecution:
             "result_confirmed": self.result_confirmed,
         }
 
-    async def wait(
+    async def register(
         self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
-    ) -> JsonObject | ToolOutcome:
+    ) -> None:
+        """Publish the received handle before entering cancellable Task polling."""
+        await complete_before_cancel(self._register(entry, task, context))
+
+    async def _register(
+        self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
+    ) -> None:
         task_ref = uuid4().hex
         control = {
             "task": asdict(task),
@@ -87,6 +94,9 @@ class MCPTaskExecution:
         if len(encoded) > self._max_control_bytes:
             raise MCPFailure("response_limit")
         digest = await self._objects.put(encoded)
+        # Keep the received handle available if cancellation arrives while its
+        # durable registration finishes or observers receive that event.
+        self._task_ref, self._task = task_ref, task
         await self._journal.record(
             context.turn_id,
             RuntimeEventType.MCP_TASK_REGISTERED,
@@ -102,7 +112,13 @@ class MCPTaskExecution:
                 task.timing,
             ),
         )
-        self._task_ref, self._task = task_ref, task
+
+    async def wait(
+        self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
+    ) -> JsonObject | ToolOutcome:
+        task_ref = self._task_ref
+        if task_ref is None:
+            raise MCPFailure("configuration")
         while True:
             if task.status == "input_required":
                 await self.cancel(entry, context)
@@ -231,6 +247,11 @@ class MCPTaskExecution:
                     max(0.5 * 2 ** (attempt - 1), (task.poll_interval_ms or 0) / 1000)
                 )
             else:
+                # A completed response must survive cancellation at the event
+                # boundary; cleanup must not query or cancel the old state.
+                self._task = snapshot.task
+                self.result_confirmed = snapshot.task.status in {"completed", "failed", "cancelled"}
+                self.final_result = snapshot.result
                 await self._journal.record(
                     None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_OBSERVED,

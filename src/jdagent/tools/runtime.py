@@ -390,34 +390,43 @@ class ToolRuntime:
         if context.external_context:
             metadata["derived_from_mcp"] = True
         side_effect = definition.risk in (RiskLevel.WRITE, RiskLevel.EXECUTE)
-        task = asyncio.ensure_future(
-            definition.handler(
-                prepared_arguments, replace(context, call_id=call.call_id, tool_name=call.name)
-            )
+        operation = definition.handler(
+            prepared_arguments, replace(context, call_id=call.call_id, tool_name=call.name)
         )
+        # MCP owns its logical deadline and bounded transport cleanup. Running it
+        # inline lets cancellation reach that owner; the local transaction wait
+        # below must not become an additional unbounded MCP cleanup layer.
+        task = asyncio.ensure_future(operation) if definition.origin.kind == "builtin" else None
         try:
-            output = await asyncio.wait_for(
-                asyncio.shield(task),
-                timeout=None if definition.manages_timeout else self._timeout_seconds,
-            )
+            if task is None:
+                output = await operation
+            else:
+                output = await asyncio.wait_for(
+                    asyncio.shield(task),
+                    timeout=None if definition.manages_timeout else self._timeout_seconds,
+                )
         except TimeoutError:
-            task.cancel()
-            try:
-                await self._settle(task)
-            except (asyncio.CancelledError, Exception):
-                pass
+            if task is not None:
+                task.cancel()
+                try:
+                    await self._settle(task)
+                except (asyncio.CancelledError, Exception):
+                    pass
             output = ToolOutcome(
                 completed=False,
                 effect="unknown" if side_effect else "none",
                 error_code=ToolErrorCode.TIMEOUT,
                 message="Tool execution timed out",
+                requires_stop=definition.origin.kind != "builtin",
             )
         except asyncio.CancelledError:
-            task.cancel()
-            try:
-                output = await self._settle(task)
-            except (asyncio.CancelledError, Exception):
-                output = ToolOutcome(completed=False, effect="unknown" if side_effect else "none")
+            output = ToolOutcome(completed=False, effect="unknown" if side_effect else "none")
+            if task is not None:
+                task.cancel()
+                try:
+                    output = await self._settle(task)
+                except (asyncio.CancelledError, Exception):
+                    pass
             if not isinstance(output, ToolOutcome):
                 output = ToolOutcome(data={"output": output})
             output = replace(output, cancelled=True, error_code=ToolErrorCode.CANCELLED)

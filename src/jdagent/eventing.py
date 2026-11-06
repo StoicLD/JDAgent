@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 
+from jdagent.cancellation import complete_before_cancel
 from jdagent.domain.errors import SessionError, SessionErrorCode
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -91,10 +92,15 @@ class EventJournal:
                 SessionErrorCode.APPEND_FAILED,
                 f"Expected journal sequence {expected}, received {event.sequence}",
             )
-        await self._session.append(event)
-        self._events.append(event)
+        # A cancelled thread wait cannot stop a JSONL append. Keep the durable
+        # record and the in-memory sequence in the same finite transaction.
+        await complete_before_cancel(self._persist(event))
         for observer in self._observers:
             await observer.observe(event)
+
+    async def _persist(self, event: RuntimeEvent) -> None:
+        await self._session.append(event)
+        self._events.append(event)
 
 
 async def close_pending_calls(

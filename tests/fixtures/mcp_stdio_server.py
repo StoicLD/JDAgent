@@ -237,6 +237,12 @@ def main() -> None:
         elif method == "tools/call":
             name = message["params"]["name"]
             tool_calls[name] = tool_calls.get(name, 0) + 1
+            gate = message["params"].get("arguments", {}).get("fixture_gate")
+            if gate is not None:
+                Path(gate + ".started").touch()
+                stop_at = time.monotonic() + 30
+                while not Path(gate + ".release").exists() and time.monotonic() < stop_at:
+                    time.sleep(0.01)
             timeout_mode = message["params"].get("arguments", {}).get("fixture_timeout")
             if timeout_mode == "stall":
                 time.sleep(3)
