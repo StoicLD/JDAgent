@@ -62,6 +62,9 @@ def wire_server(
     task_query_gate: tuple[threading.Event, threading.Event] | None = None,
     tool_gate: tuple[threading.Event, threading.Event] | None = None,
     progress_values: tuple[float, float | None] | None = None,
+    tool_schema: dict[str, object] | None = None,
+    parameter_headers: list[dict[str, str]] | None = None,
+    extra_tools: tuple[dict[str, object], ...] = (),
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -118,6 +121,8 @@ def wire_server(
                 }
                 if tool_error is not None or task_state is not None:
                     result["tools"] = [{"name": "read", "inputSchema": {"type": "object"}}]
+                if tool_schema is not None:
+                    result["tools"] = [{"name": "read", "inputSchema": tool_schema}, *extra_tools]
                 if message.get("params", {}).get("cursor") == "oversized":
                     length = 800_000 if encoding == "sse" else 2_000_000
                     result["tools"] = [
@@ -163,6 +168,16 @@ def wire_server(
                 content = "ok" if message["params"]["name"] == "small" else "x" * length
                 if tool_error is not None:
                     content = "timeout"
+                if tool_schema is not None:
+                    content = "ok"
+                if parameter_headers is not None:
+                    parameter_headers.append(
+                        {
+                            key.lower(): value
+                            for key, value in self.headers.items()
+                            if key.lower().startswith("mcp-param-")
+                        }
+                    )
                 result = {"resultType": "complete", "content": [{"type": "text", "text": content}]}
                 if task_state is not None:
                     task_state.submissions += 1

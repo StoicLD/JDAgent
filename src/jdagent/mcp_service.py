@@ -14,7 +14,14 @@ from uuid import uuid4
 
 from jsonschema import Draft202012Validator, SchemaError
 
-from jdagent.domain.json import JsonObject, JsonValue, require_array, require_object, require_string
+from jdagent.domain.json import (
+    JsonObject,
+    JsonValue,
+    normalize_json,
+    require_array,
+    require_object,
+    require_string,
+)
 from jdagent.domain.mcp import (
     MCPActivityStatus,
     MCPCapability,
@@ -183,7 +190,15 @@ class MCPService:
                 "prompts/get", {"name": entry.name, "arguments": arguments}, on_progress=report
             )
         raw = await server.peer.request(
-            "tools/call", {"name": entry.name, "arguments": arguments}, on_progress=report
+            "tools/call",
+            {"name": entry.name, "arguments": arguments},
+            on_progress=report,
+            input_schema=require_object(
+                require_object(normalize_json(json.loads(entry.definition_json)), "MCP tool")[
+                    "inputSchema"
+                ],
+                "MCP input schema",
+            ),
         )
         if raw.get("resultType") != "task":
             return raw
@@ -662,6 +677,13 @@ class MCPService:
                                 rejected.append(
                                     MCPRejectedCapability(name, "unsupported_input_schema")
                                 )
+                                continue
+                            if kind == "tool" and (
+                                issue := peer.input_schema_issue(
+                                    require_object(item["inputSchema"], "MCP input schema")
+                                )
+                            ):
+                                rejected.append(MCPRejectedCapability(name, issue))
                                 continue
                             if (
                                 kind == "tool"

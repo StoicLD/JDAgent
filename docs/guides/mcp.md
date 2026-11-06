@@ -10,6 +10,9 @@
 新版 Tasks 已接入当前调用的顺序等待；CLI 支持重开会话后显式管理原任务。
 TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；两种 Runner 共用同一会话服务。
 目录与索引的容量单位、默认值和固定检索样例见[实施记录](../plans/v0.7-implementation.md)。
+新版核心的 x-mcp-header 参数注解由 Client 自动处理：HTTP 调用按已加载工具定义发送对应的 Mcp-Param-* Header，
+用户无需另配 Header。不合法的注解在目录中标为 invalid_header_annotation，仅拒绝对应工具。
+旧版核心不应用这套参数 Header 规则。
 
 ## CLI 目录与原任务管理
 

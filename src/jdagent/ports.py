@@ -42,12 +42,17 @@ class MCPConnectionPort(Protocol):
 
     async def connect(self) -> MCPPeerInformation: ...
 
+    def input_schema_issue(self, schema: JsonObject) -> str | None:
+        """Report a negotiated-protocol constraint before exposing a tool."""
+        ...
+
     async def request(
         self,
         method: MCPMethod,
         params: JsonObject,
         *,
         on_progress: MCPProgressCallback | None = None,
+        input_schema: JsonObject | None = None,
     ) -> JsonObject: ...
 
     async def aclose(self) -> bool: ...

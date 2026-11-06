@@ -5,16 +5,21 @@ import hashlib
 import json
 import math
 import os
+from collections.abc import Mapping
 from contextlib import AsyncExitStack
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import Any, TypeAlias, cast
 
 import httpx2
 from mcp import MCPError, types
 from mcp.client import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.dispatcher import CallOptions
+from mcp.shared.inbound import find_invalid_x_mcp_header, mcp_param_headers, x_mcp_header_map
 from mcp.shared.jsonrpc_dispatcher import JSONRPCDispatcher
 from mcp.shared.transport_context import TransportContext
+from mcp_types import RequestId
 from pydantic import TypeAdapter, ValidationError
 
 from jdagent.adapters.mcp_stdio import bounded_stdio_client
@@ -44,6 +49,34 @@ _TaskCallResult: TypeAlias = types.CallToolResult | TaskHandle
 # The runtime union is supported by Pydantic; pinned Pyright does not yet accept
 # this TypeForm argument. The adapter's result remains explicitly typed.
 _TASK_CALL_RESULT = TypeAdapter[_TaskCallResult](_TaskCallResult)  # pyright: ignore[reportArgumentType]
+_PARAMETER_HEADERS: ContextVar[dict[str, str] | None] = ContextVar(
+    "mcp_parameter_headers", default=None
+)
+
+
+class _ParameterHeaderDispatcher(JSONRPCDispatcher[TransportContext]):
+    """Attach request-scoped headers at the SDK's public dispatch boundary.
+
+    SDK 2.3 send_request ignores metadata.headers; its normal parameter header
+    resolver requires list_tools' unbounded schema cache. Keep both protocol
+    validation and transmission in the SDK, using the host's frozen definition.
+    The Any annotations stay wholly inside this SDK-to-SDK boundary.
+    """
+
+    async def send_raw_request(
+        self,
+        method: str,
+        params: Mapping[str, Any] | None,
+        opts: CallOptions | None = None,
+        *,
+        _related_request_id: RequestId | None = None,
+    ) -> dict[str, Any]:
+        options: CallOptions = {**(opts or {})}
+        if method == "tools/call" and (headers := _PARAMETER_HEADERS.get()):
+            options["headers"] = {**options.get("headers", {}), **headers}
+        return await super().send_raw_request(
+            method, params, options, _related_request_id=_related_request_id
+        )
 
 
 @dataclass(slots=True)
@@ -52,6 +85,7 @@ class _Request:
     params: JsonObject
     result: asyncio.Future[JsonObject | MCPFailure]
     on_progress: MCPProgressCallback | None = None
+    input_schema: JsonObject | None = None
     operation: asyncio.Task[JsonObject] | None = None
     abandoned: bool = False
 
@@ -81,15 +115,27 @@ class SDKMCPConnection:
     def information(self) -> MCPPeerInformation | None:
         return self._information
 
+    def input_schema_issue(self, schema: JsonObject) -> str | None:
+        if (
+            self._information is not None
+            and self._information.protocol_version == "2026-07-28"
+            and find_invalid_x_mcp_header(schema) is not None
+        ):
+            return "invalid_header_annotation"
+        return None
+
     async def request(
         self,
         method: MCPMethod,
         params: JsonObject,
         *,
         on_progress: MCPProgressCallback | None = None,
+        input_schema: JsonObject | None = None,
     ) -> JsonObject:
         """Return an SDK-validated result or a safe failure; never retry a send."""
-        return await self._request(method, params, on_progress=on_progress)
+        return await self._request(
+            method, params, on_progress=on_progress, input_schema=input_schema
+        )
 
     async def connect(self) -> MCPPeerInformation:
         """Negotiate capabilities without assuming the peer offers Tools."""
@@ -103,12 +149,15 @@ class SDKMCPConnection:
         params: JsonObject,
         *,
         on_progress: MCPProgressCallback | None = None,
+        input_schema: JsonObject | None = None,
     ) -> JsonObject:
         if self._state in ("unavailable", "closed") or self._closing:
             raise MCPFailure("connection")
         if self._pending is not None:
             raise MCPFailure("busy")
-        request = _Request(method, params, asyncio.get_running_loop().create_future(), on_progress)
+        request = _Request(
+            method, params, asyncio.get_running_loop().create_future(), on_progress, input_schema
+        )
         self._pending = request
         if self._owner is None:
             self._state = "connecting"
@@ -249,7 +298,7 @@ class SDKMCPConnection:
             read, write = await stack.enter_async_context(
                 streamable_http_client(config.url, http_client=http)
             )
-        dispatcher: JSONRPCDispatcher[TransportContext] = JSONRPCDispatcher(
+        dispatcher: JSONRPCDispatcher[TransportContext] = _ParameterHeaderDispatcher(
             read, write, on_stream_exception=self._stream_failure
         )
         session = await stack.enter_async_context(
@@ -369,13 +418,29 @@ class SDKMCPConnection:
                     progress_callback=progress_callback,
                 )
             case "tools/call":
-                result = await session.send_request(
-                    types.CallToolRequest.model_validate(wire),
-                    _TASK_CALL_RESULT
-                    if self._information is not None and self._information.tasks
-                    else types.CallToolResult,
-                    progress_callback=progress_callback,
-                )
+                headers: dict[str, str] = {}
+                if (
+                    request.input_schema is not None
+                    and self._information is not None
+                    and self._information.protocol_version == "2026-07-28"
+                ):
+                    if self.input_schema_issue(request.input_schema) is not None:
+                        raise MCPFailure("unsupported")
+                    headers = mcp_param_headers(
+                        x_mcp_header_map(request.input_schema),
+                        require_object(request.params.get("arguments", {}), "MCP arguments"),
+                    )
+                token = _PARAMETER_HEADERS.set(headers)
+                try:
+                    result = await session.send_request(
+                        types.CallToolRequest.model_validate(wire),
+                        _TASK_CALL_RESULT
+                        if self._information is not None and self._information.tasks
+                        else types.CallToolResult,
+                        progress_callback=progress_callback,
+                    )
+                finally:
+                    _PARAMETER_HEADERS.reset(token)
             case "tasks/get" | "tasks/cancel":
                 if self._information is None or not self._information.tasks:
                     raise MCPFailure("unsupported")
