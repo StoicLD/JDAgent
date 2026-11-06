@@ -4,6 +4,7 @@
 
 实现进度见[实施记录](../plans/v0.7-implementation.md)。当前 CLI 能读取并验证以下配置，普通对话不会因此启动 Server。
 模型现在可通过 search_tools 检索已启用工具，并从下一请求开始调用选中的定义；两个 Runner 共用此路径。
+完整定义还须装得进本次输入窗口；空间不足时在请求之间移除较少使用的定义，保留检索入口，不截断参数约束。
 结果预览有界，完整原文可通过 read_mcp_result 按引用分页读回。
 开启相应能力后，模型也可发现／读取 Resources，以及检索／获取 Prompts；直接 Prompt 命令和 Tasks 仍待接通。
 TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；两种 Runner 共用同一会话服务。

@@ -386,6 +386,11 @@ class MCPService:
         if cache is not None:
             cache.used(server_id, name)
 
+    def unload_tool(self, session_id: str, server_id: str, name: str) -> None:
+        cache = self._definitions.get(session_id)
+        if cache is not None:
+            cache.unload(server_id, name)
+
     async def aclose(self) -> None:
         for session_id in tuple(self._sessions):
             await self.release_session(session_id)

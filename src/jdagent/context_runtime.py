@@ -454,6 +454,10 @@ class ContextService:
                 )
         through, checkpoint = await self._checkpoint()
         request = self._bound_external(self._project(base, through, checkpoint))
+        if record_request:
+            request = self._bound_tools(request)
+            # Compaction may rebuild from base; it must not reintroduce omitted schemas.
+            base = replace(base, tools=request.tools, metadata=request.metadata)
         estimate = self._estimator.measure(request)
         cutoff = max(
             (
@@ -501,6 +505,8 @@ class ContextService:
                 messages=(*request.messages, ModelMessage(MessageRole.USER, repair_message)),
             )
         request = self._bound_external(request)
+        if record_request:
+            request = self._bound_tools(request)
         estimate = self._estimator.measure(request)
         call_kind = "citation_repair" if repair_message else "task"
         request = replace(
@@ -548,6 +554,18 @@ class ContextService:
             await self._archive(request, knowledge, call_kind)
         if self._instructions is not None and record_request:
             self._instructions.acknowledge()
+        return request
+
+    def _bound_tools(self, request: ModelRequest) -> ModelRequest:
+        """Release complete dynamic definitions before compacting protected conversation facts."""
+        if self._request_tools is None:
+            return request
+        target = int(self._budget.input_limit * self._budget.trigger_ratio) - 1
+        while self._estimator.measure(request).input_tokens > target:
+            reduced = self._request_tools.reduce_tools(request)
+            if reduced is request:
+                break
+            request = reduced
         return request
 
     def _bound_external(self, request: ModelRequest) -> ModelRequest:

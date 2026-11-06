@@ -130,3 +130,7 @@ class MCPDefinitionCache:
     def used(self, server_id: str, name: str) -> None:
         if (server_id, name) in self._loaded:
             self._loaded.move_to_end((server_id, name))
+
+    def unload(self, server_id: str, name: str) -> None:
+        """Release a definition only between requests; the directory remains discoverable."""
+        self._loaded.pop((server_id, name), None)

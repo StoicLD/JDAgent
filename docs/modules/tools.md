@@ -29,6 +29,7 @@ Loop 保存最终 `tool_execution_completed`，并决定继续还是停止。
 
 v0.7 另接入 search_tools、read_mcp_result 和动态 MCP 定义。工具检索复用 Session 的 BM25 与两层缓存，
 新定义只在下一模型请求生效；ToolRuntime 通过请求快照核验曝光范围、Schema 和宿主来源。
+完整输入接近压缩触发线时，先在请求之间释放较少使用的 MCP 定义，仍不足才压缩历史；本批次快照保持固定。
 MCP 参数不进入本地目录规则。Resources 的目录／读取、Prompts 的 BM25 检索／获取也通过模型工具执行，
 保留外部来源和完整原文。Prompt 消息不会提升为用户或系统消息；不支持的内容有独立完整性标记。
 普通调用、原文引用与分段读回已接线，直接 Prompt 命令、Tasks 和完整故障合同仍在实施；

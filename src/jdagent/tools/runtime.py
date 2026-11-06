@@ -118,6 +118,35 @@ class ToolRegistry:
             self._dynamic_definitions = {item.name: item for item in definitions}
         return self.definitions(self._exposure_capability)
 
+    def reduce_tools(self, request: ModelRequest) -> ModelRequest:
+        """Omit one least recently used remote schema before the request is bound."""
+        if self._request_id:
+            raise ValueError("Cannot unload a definition from a bound tool batch")
+        if self._dynamic is None:
+            return request
+        visible = {item.name for item in request.tools}
+        victim = next(
+            (
+                item
+                for item in self._dynamic_definitions.values()
+                if item.name in visible and item.origin.kind == "mcp"
+            ),
+            None,
+        )
+        if victim is None:
+            return request
+        self._dynamic.unload(victim)
+        del self._dynamic_definitions[victim.name]
+        omitted: list[str] = json.loads(request.metadata.get("mcp_tools_omitted", "[]"))
+        return replace(
+            request,
+            tools=tuple(item for item in request.tools if item.name != victim.name),
+            metadata={
+                **request.metadata,
+                "mcp_tools_omitted": json.dumps([*omitted, victim.name]),
+            },
+        )
+
     def bind_request(self, request: ModelRequest) -> ModelRequest:
         definitions = {item.name: item for item in self.definitions()}
         snapshot: dict[str, ToolDefinition] = {}

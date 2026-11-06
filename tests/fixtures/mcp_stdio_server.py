@@ -91,6 +91,11 @@ def main() -> None:
                     }
                     if sys.argv[2] == "catalog_output_array":
                         reader["outputSchema"] = {"type": "array", "items": {"type": "integer"}}
+                    if sys.argv[2] == "catalog_large_schema":
+                        reader["inputSchema"] = {
+                            "type": "object",
+                            "properties": {"path": {"type": "string", "description": "p" * 6200}},
+                        }
                     result["tools"] = [reader]
                 else:
                     catalog_tools: list[dict[str, object]] = [

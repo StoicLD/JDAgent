@@ -71,11 +71,17 @@ class MCPTools:
         if origin.server_id is not None and origin.raw_name is not None:
             self._service.tool_used(self._session_id, origin.server_id, origin.raw_name)
 
+    def unload(self, definition: ToolDefinition) -> None:
+        origin = definition.origin
+        if origin.server_id is not None and origin.raw_name is not None:
+            self._service.unload_tool(self._session_id, origin.server_id, origin.raw_name)
+
     def _search_definition(self) -> ToolDefinition:
         return ToolDefinition(
             "search_tools",
             "Find allowed MCP tools by keywords (BM25). Selected tools become available on the "
-            "next model request. Use Server filters or rewrite keywords when coverage is "
+            "next model request if the complete definition fits its input budget. "
+            "Use Server filters or rewrite keywords when coverage is "
             "incomplete or there are no matches.",
             {
                 "type": "object",
