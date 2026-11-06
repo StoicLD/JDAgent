@@ -18,7 +18,13 @@ from jdagent.adapters.mcp_transport import BoundedHttpTransport, ResponseLimitEx
 
 
 @contextmanager
-def wire_server(version: str, encoding: str) -> Generator[str]:
+def wire_server(
+    version: str,
+    encoding: str,
+    *,
+    discover_gate: tuple[threading.Event, threading.Event] | None = None,
+    expected_authorization: str | None = None,
+) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
             pass
@@ -32,6 +38,12 @@ def wire_server(version: str, encoding: str) -> Generator[str]:
 
         def do_POST(self) -> None:
             message = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if (
+                expected_authorization is not None
+                and self.headers.get("Authorization") != expected_authorization
+            ):
+                self.send_error(401)
+                return
             if "id" not in message:
                 self.send_response(202)
                 self.end_headers()
@@ -40,6 +52,9 @@ def wire_server(version: str, encoding: str) -> Generator[str]:
             result: dict[str, object]
             response: dict[str, object] = {"jsonrpc": "2.0", "id": message["id"]}
             if method == "server/discover":
+                if discover_gate is not None:
+                    discover_gate[0].set()
+                    discover_gate[1].wait(10)
                 result = {"supportedVersions": [version], "capabilities": {"tools": {}}}
                 if version == "2025-11-25":
                     response["error"] = {"code": -32601, "message": "Method not found"}
@@ -56,6 +71,15 @@ def wire_server(version: str, encoding: str) -> Generator[str]:
                     "ttlMs": 0,
                     "tools": [],
                 }
+                if message.get("params", {}).get("cursor") == "oversized":
+                    length = 800_000 if encoding == "sse" else 2_000_000
+                    result["tools"] = [
+                        {
+                            "name": "large",
+                            "description": "x" * length,
+                            "inputSchema": {"type": "object"},
+                        }
+                    ]
             else:
                 assert method == "tools/call"
                 length = 800_000 if encoding == "sse" else 2_000_000
@@ -65,7 +89,7 @@ def wire_server(version: str, encoding: str) -> Generator[str]:
                 response["result"] = result
             body = json.dumps(response).encode()
             content_type = "application/json"
-            if method == "tools/call" and encoding == "sse":
+            if method in {"tools/call", "tools/list"} and encoding == "sse":
                 body = b":" + b" " * 400_000 + b"\n\nevent: message\ndata: " + body + b"\n\n"
                 content_type = "text/event-stream"
             self.send_response(200)
@@ -88,6 +112,8 @@ def wire_server(version: str, encoding: str) -> Generator[str]:
     try:
         yield f"http://127.0.0.1:{server.server_port}/mcp"
     finally:
+        if discover_gate is not None:
+            discover_gate[1].set()
         server.shutdown()
         server.server_close()
         worker.join(2)

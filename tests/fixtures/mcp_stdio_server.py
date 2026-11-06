@@ -9,6 +9,7 @@ import time
 
 def main() -> None:
     version = sys.argv[1]
+    list_calls = 0
     task: dict[str, object] = {
         "taskId": "stdio-task",
         "status": "working",
@@ -42,17 +43,72 @@ def main() -> None:
                 "supportedVersions": [version],
                 "capabilities": {
                     "tools": {},
+                    "resources": {},
+                    "prompts": {},
                     "extensions": {"io.modelcontextprotocol/tasks": {}},
                 },
             }
         elif method == "initialize":
             result = {
                 "protocolVersion": version,
-                "capabilities": {"tools": {}},
+                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
                 "serverInfo": {"name": "independent-fixture", "version": "1"},
             }
         elif method == "tools/list":
-            result = {"tools": [], "resultType": "complete", "cacheScope": "private", "ttlMs": 0}
+            list_calls += 1
+            cursor = message.get("params", {}).get("cursor")
+            if cursor == "remote-error":
+                print(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": message["id"],
+                            "error": {"code": -32001, "message": "fixture-secret-error-text"},
+                        }
+                    ),
+                    flush=True,
+                )
+                continue
+            if cursor == "hang":
+                time.sleep(60)
+            result = {
+                "tools": [],
+                "resultType": "complete",
+                "cacheScope": "private",
+                "ttlMs": 0,
+                "_meta": {"fixturePid": os.getpid(), "listCalls": list_calls},
+            }
+            if cursor == "oversized":
+                result["tools"] = [
+                    {
+                        "name": "large",
+                        "description": "x" * (1 << 20),
+                        "inputSchema": {"type": "object"},
+                    }
+                ]
+        elif method == "resources/list":
+            result = {
+                "resources": [{"name": "manual", "uri": "docs://manual"}],
+                "resultType": "complete",
+                "cacheScope": "private",
+                "ttlMs": 0,
+            }
+        elif method == "resources/templates/list":
+            result = {
+                "resourceTemplates": [{"name": "page", "uriTemplate": "docs://{page}"}],
+                "resultType": "complete",
+                "cacheScope": "private",
+                "ttlMs": 0,
+            }
+        elif method == "prompts/list":
+            result = {
+                "prompts": [
+                    {"name": "explain", "arguments": [{"name": "topic", "required": True}]}
+                ],
+                "resultType": "complete",
+                "cacheScope": "private",
+                "ttlMs": 0,
+            }
         elif method == "tools/call":
             name = message["params"]["name"]
             if name == "unterminated":

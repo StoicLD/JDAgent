@@ -1,7 +1,7 @@
 """Bounded byte transports beneath the official MCP protocol implementation."""
 
 import zlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import httpx2
 
@@ -15,10 +15,17 @@ class ResponseEncodingError(httpx2.ReadError):
 
 
 class _LimitedStream(httpx2.AsyncByteStream):
-    def __init__(self, source: httpx2.AsyncByteStream, limit_bytes: int, encoding: str) -> None:
+    def __init__(
+        self,
+        source: httpx2.AsyncByteStream,
+        limit_bytes: int,
+        encoding: str,
+        on_failure: Callable[[Exception], None] | None = None,
+    ) -> None:
         self._source = source
         self._limit = limit_bytes
         self._encoding = encoding
+        self._on_failure = on_failure
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
         received = 0
@@ -49,7 +56,14 @@ class _LimitedStream(httpx2.AsyncByteStream):
             if decoder is not None and not decoder.eof:
                 raise ResponseEncodingError("Incomplete compressed response")
         except zlib.error:
-            raise ResponseEncodingError("Invalid compressed response") from None
+            failure = ResponseEncodingError("Invalid compressed response")
+            if self._on_failure is not None:
+                self._on_failure(failure)
+            raise failure from None
+        except (ResponseLimitExceeded, ResponseEncodingError) as failure:
+            if self._on_failure is not None:
+                self._on_failure(failure)
+            raise
         finally:
             await self._source.aclose()
 
@@ -60,11 +74,18 @@ class _LimitedStream(httpx2.AsyncByteStream):
 class BoundedHttpTransport(httpx2.AsyncBaseTransport):
     """Own an HTTP transport and bound each response before protocol parsing."""
 
-    def __init__(self, transport: httpx2.AsyncBaseTransport, *, limit_bytes: int = 1 << 20) -> None:
+    def __init__(
+        self,
+        transport: httpx2.AsyncBaseTransport,
+        *,
+        limit_bytes: int = 1 << 20,
+        on_failure: Callable[[Exception], None] | None = None,
+    ) -> None:
         if limit_bytes <= 0:
             raise ValueError("Receive limit must be positive")
         self._transport = transport
         self._limit = limit_bytes
+        self._on_failure = on_failure
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         request.headers["accept-encoding"] = "gzip, deflate"
@@ -73,7 +94,10 @@ class BoundedHttpTransport(httpx2.AsyncBaseTransport):
         encoding = response.headers.get("content-encoding", "identity").strip().lower()
         if encoding not in {"identity", "gzip", "deflate"}:
             await response.aclose()
-            raise ResponseEncodingError("Unsupported response content encoding")
+            failure = ResponseEncodingError("Unsupported response content encoding")
+            if self._on_failure is not None:
+                self._on_failure(failure)
+            raise failure
         headers = httpx2.Headers(response.headers)
         # Our stream decodes once with an allocation budget; HTTPX must not decode again.
         headers.pop("content-encoding", None)
@@ -81,7 +105,7 @@ class BoundedHttpTransport(httpx2.AsyncBaseTransport):
         return httpx2.Response(
             response.status_code,
             headers=headers,
-            stream=_LimitedStream(response.stream, self._limit, encoding),
+            stream=_LimitedStream(response.stream, self._limit, encoding, self._on_failure),
             extensions=response.extensions,
             request=request,
         )
