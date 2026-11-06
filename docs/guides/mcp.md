@@ -13,6 +13,8 @@ TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；�
 新版核心的 x-mcp-header 参数注解由 Client 自动处理：HTTP 调用按已加载工具定义发送对应的 Mcp-Param-* Header，
 用户无需另配 Header。不合法的注解在目录中标为 invalid_header_annotation，仅拒绝对应工具。
 旧版核心不应用这套参数 Header 规则。
+受控互操作已覆盖两版核心的 stdio、HTTP JSON／SSE，以及锁定官方 MCPServer 的三类能力和直接 Prompt；
+具体范围见实施记录，不表示所有商业服务均已测试。
 
 ## CLI 目录与原任务管理
 

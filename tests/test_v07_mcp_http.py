@@ -65,7 +65,13 @@ def wire_server(
     tool_schema: dict[str, object] | None = None,
     parameter_headers: list[dict[str, str]] | None = None,
     extra_tools: tuple[dict[str, object], ...] = (),
+    materials: bool = False,
+    tools_capability: bool = True,
 ) -> Generator[str]:
+    capabilities: dict[str, object] = {"tools": {}} if tools_capability else {}
+    if materials:
+        capabilities.update({"resources": {}, "prompts": {}})
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
             pass
@@ -98,10 +104,10 @@ def wire_server(
                 if discover_gate is not None:
                     discover_gate[0].set()
                     discover_gate[1].wait(10)
-                result = {"supportedVersions": [version], "capabilities": {"tools": {}}}
+                result = {"supportedVersions": [version], "capabilities": capabilities}
                 if task_state is not None:
                     result["capabilities"] = {
-                        "tools": {},
+                        **capabilities,
                         "extensions": {"io.modelcontextprotocol/tasks": {}},
                     }
                 if version == "2025-11-25":
@@ -109,10 +115,11 @@ def wire_server(
             elif method == "initialize":
                 result = {
                     "protocolVersion": version,
-                    "capabilities": {"tools": {}},
+                    "capabilities": capabilities,
                     "serverInfo": {"name": "wire-peer", "version": "1"},
                 }
             elif method == "tools/list":
+                assert tools_capability
                 result = {
                     "resultType": "complete",
                     "cacheScope": "private",
@@ -132,6 +139,38 @@ def wire_server(
                             "inputSchema": {"type": "object"},
                         }
                     ]
+            elif method in {"resources/list", "resources/templates/list", "prompts/list"}:
+                assert materials
+                result = {"resultType": "complete", "cacheScope": "private", "ttlMs": 0}
+                if method == "resources/list":
+                    result["resources"] = [{"name": "manual", "uri": "docs://manual"}]
+                elif method == "resources/templates/list":
+                    result["resourceTemplates"] = [{"name": "page", "uriTemplate": "docs://{page}"}]
+                else:
+                    result["prompts"] = [
+                        {"name": "explain", "arguments": [{"name": "topic", "required": True}]}
+                    ]
+            elif method == "resources/read":
+                assert materials
+                result = {
+                    "resultType": "complete",
+                    "contents": [{"uri": message["params"]["uri"], "text": "Remote file material"}],
+                }
+            elif method == "prompts/get":
+                assert materials
+                result = {
+                    "resultType": "complete",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": {
+                                "type": "text",
+                                "text": "External template for: "
+                                + message["params"]["arguments"]["topic"],
+                            },
+                        }
+                    ],
+                }
             elif method in {"tasks/get", "tasks/cancel"}:
                 assert task_state is not None
                 assert message["params"]["taskId"] == "private-http-task"
@@ -191,7 +230,19 @@ def wire_server(
                 response["result"] = result
             body = json.dumps(response).encode()
             content_type = "application/json"
-            if method in {"tools/call", "tools/list"} and encoding == "sse":
+            if (
+                method
+                in {
+                    "tools/call",
+                    "tools/list",
+                    "resources/list",
+                    "resources/templates/list",
+                    "resources/read",
+                    "prompts/list",
+                    "prompts/get",
+                }
+                and encoding == "sse"
+            ):
                 body = b":" + b" " * 400_000 + b"\n\nevent: message\ndata: " + body + b"\n\n"
                 content_type = "text/event-stream"
             if progress_values is not None and method in {

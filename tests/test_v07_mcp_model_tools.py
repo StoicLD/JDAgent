@@ -24,8 +24,9 @@ from jdagent.mcp_definitions import MCPDefinitionLimits
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
 def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_them(
-    tmp_path: Path, engine: str
+    tmp_path: Path, engine: str, version: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -36,7 +37,7 @@ def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_
         "[memory]\nauto_consolidation = false\n"
         '[mcp.servers.docs]\nenabled = true\ntransport = "stdio"\n'
         f"command = {json.dumps(sys.executable)}\n"
-        f"args = {json.dumps([str(fixture), '2026-07-28', 'catalog_once'])}\n"
+        f"args = {json.dumps([str(fixture), version, 'catalog_once'])}\n"
         'tools = ["read", "search"]\n',
         encoding="utf-8",
     )
@@ -104,7 +105,7 @@ def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_
             assert result.status is ToolResultStatus.SUCCESS
             assert result.outcome is not None
             assert result.outcome.data["preview"] == {
-                "resultType": "complete",
+                **({"resultType": "complete"} if version == "2026-07-28" else {}),
                 "content": [{"type": "text", "text": "ok"}],
             }
             assert result.metadata["tool_origin"] is not None

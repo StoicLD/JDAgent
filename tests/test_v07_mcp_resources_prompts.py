@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -15,24 +16,39 @@ from jdagent.domain.events import ToolExecutionCompletedPayload, UserMessagePayl
 from jdagent.domain.json import JsonValue, require_array, require_object
 from jdagent.domain.model import MessageRole, ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
+from tests.test_v07_mcp_http import wire_server
+
+
+@pytest.fixture
+def material_url(request: pytest.FixtureRequest, version: str) -> Generator[str | None]:
+    if request.param == "stdio":
+        yield None
+    else:
+        with wire_server(version, request.param, materials=True, tools_capability=False) as url:
+            yield url
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
+@pytest.mark.parametrize("material_url", ["stdio", "json", "sse"], indirect=True)
 def test_model_discovers_resources_and_prompts_then_explicitly_reads_external_material(
-    tmp_path: Path, engine: str, version: str
+    tmp_path: Path, engine: str, version: str, material_url: str | None
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
     paths.user_config_file.parent.mkdir(parents=True)
     peer = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
-    paths.user_config_file.write_text(
-        "[memory]\nauto_consolidation = false\n"
-        '[mcp.servers.docs]\nenabled = true\ntransport = "stdio"\n'
+    transport = (
+        'transport = "stdio"\n'
         f"command = {json.dumps(sys.executable)}\n"
         f"args = {json.dumps([str(peer), version, 'catalog_once'])}\n"
-        "resources = true\nprompts = true\n",
+        if material_url is None
+        else f'transport = "http"\nurl = {json.dumps(material_url)}\n'
+    )
+    paths.user_config_file.write_text(
+        "[memory]\nauto_consolidation = false\n"
+        "[mcp.servers.docs]\nenabled = true\n" + transport + "resources = true\nprompts = true\n",
         encoding="utf-8",
     )
     config = resolve_configuration(
