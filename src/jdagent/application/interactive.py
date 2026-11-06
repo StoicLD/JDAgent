@@ -162,6 +162,7 @@ class TerminalStatus:
     session: str
     model: str
     write_permission: str
+    activity: str = ""
 
 
 def parse_user_action(raw: str) -> UserAction:
@@ -208,6 +209,21 @@ def _session_row(item: SessionSummary, workspace: Path) -> str:
     )
 
 
+def _mcp_activity_text(server: MCPServerStatus) -> str:
+    activity = server.activity
+    if activity is None:
+        return ""
+    progress = "unavailable" if activity.progress is None else f"{activity.progress:g}"
+    if activity.total is not None:
+        progress += f"/{activity.total:g}"
+    return (
+        f"MCP {server.server_id} name={json.dumps(activity.name[:64], ensure_ascii=False)} "
+        f"operation={activity.operation} elapsed={activity.elapsed_seconds:.1f}s "
+        f"progress={progress}"
+        + (f" task={activity.task_status}" if activity.task_status is not None else "")
+    )
+
+
 def _mcp_status_text(servers: Sequence[MCPServerStatus]) -> str:
     return (
         "\n".join(
@@ -215,6 +231,7 @@ def _mcp_status_text(servers: Sequence[MCPServerStatus]) -> str:
             f"directory={server.directory} protocol={server.protocol_version or 'unknown'} "
             f"entries={server.entry_count} rejected={len(server.rejected)} "
             f"reason={server.reason or 'none'}"
+            + ("\n" + _mcp_activity_text(server) if server.activity is not None else "")
             for server in servers
         )
         or "No MCP Servers configured"
@@ -286,15 +303,23 @@ class InteractiveApplication:
 
     async def _set_state(self, state: InteractionState) -> None:
         self._state = state
+        await self._update_terminal_status()
+        await self._presenter.publish(UiEvent(UiEventKind.STATE, state.value, state))
+
+    async def _update_terminal_status(self) -> None:
         await self._terminal.update_status(
             TerminalStatus(
-                state=state,
+                state=self._state,
                 session=self._session_name,
                 model=self._context.model,
                 write_permission=self._context.write_permission,
+                activity="; ".join(
+                    _mcp_activity_text(server)
+                    for server in self._coordinator.mcp_status(self._session_id or "")
+                    if server.activity is not None
+                ),
             )
         )
-        await self._presenter.publish(UiEvent(UiEventKind.STATE, state.value, state))
 
     async def run(self) -> int:
         """Run until an explicit exit action while always closing the terminal."""
@@ -387,6 +412,22 @@ class InteractiveApplication:
             await self._set_state(InteractionState.IDLE)
 
     async def _wait_with_controls(
+        self, operation: asyncio.Task[_OperationResult]
+    ) -> _OperationResult:
+        async def watch_activity() -> None:
+            while not operation.done():
+                await asyncio.sleep(1)
+                if not operation.done():
+                    await self._update_terminal_status()
+
+        watcher = asyncio.create_task(watch_activity(), name="mcp-activity-display")
+        try:
+            return await self._consume_controls(operation)
+        finally:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+
+    async def _consume_controls(
         self, operation: asyncio.Task[_OperationResult]
     ) -> _OperationResult:
         while not operation.done():

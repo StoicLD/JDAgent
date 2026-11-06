@@ -164,6 +164,12 @@ class MCPTaskManagement:
             entry = await self._service.bind_task(
                 session_id, entry, require_string(control, "identity_digest")
             )
+            self._service.begin_activity(
+                session_id,
+                entry,
+                "tasks/cancel" if action == "cancel" else "tasks/get",
+                task_status=task.status,
+            )
             if action == "cancel":
                 await execution.cancel(entry, context)
                 if execution.control_failure is not None:
@@ -200,6 +206,8 @@ class MCPTaskManagement:
                 error_code=ToolErrorCode.TOOL_UNAVAILABLE,
                 message=f"Original MCP Task could not be queried: {reason}",
             )
+        finally:
+            self._service.end_activity(session_id, entry)
         if execution.final_result is not None:
             saved = await MCPExecution(
                 self._service, journal, self._objects, self._limits

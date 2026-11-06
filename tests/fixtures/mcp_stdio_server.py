@@ -243,11 +243,47 @@ def main() -> None:
         elif method == "tools/call":
             name = message["params"]["name"]
             tool_calls[name] = tool_calls.get(name, 0) + 1
+            progress_token = message["params"].get("_meta", {}).get("progressToken")
+            if (
+                message["params"].get("arguments", {}).get("fixture_progress")
+                and progress_token is not None
+            ):
+                print(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/progress",
+                            "params": {
+                                "progressToken": progress_token,
+                                "progress": 1,
+                                "total": 4,
+                                "message": "private-progress-diagnostic",
+                            },
+                        }
+                    ),
+                    flush=True,
+                )
             gate = message["params"].get("arguments", {}).get("fixture_gate")
             if gate is not None:
                 Path(gate + ".started").touch()
                 stop_at = time.monotonic() + 30
                 while not Path(gate + ".release").exists() and time.monotonic() < stop_at:
+                    if progress_token is not None and Path(gate + ".progress").exists():
+                        Path(gate + ".progress").unlink()
+                        print(
+                            json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "method": "notifications/progress",
+                                    "params": {
+                                        "progressToken": progress_token,
+                                        "progress": 2,
+                                        "total": 4,
+                                    },
+                                }
+                            ),
+                            flush=True,
+                        )
                     time.sleep(0.01)
             timeout_mode = message["params"].get("arguments", {}).get("fixture_timeout")
             if timeout_mode == "stall":

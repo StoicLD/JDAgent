@@ -301,6 +301,7 @@ class MCPExecution:
             self._objects,
             max_control_bytes=self._limits.reservation_bytes,
         )
+        self._service.begin_activity(context.session_id, entry, operation)
         try:
             async with asyncio.timeout(self._service.execution_timeout(context.session_id, entry)):
                 raw, attempt = await self._call_with_retries(
@@ -417,7 +418,10 @@ class MCPExecution:
                 confirmed=confirmed_timeout or task_execution.result_confirmed,
             )
             return outcome
-        return await self._complete(entry, raw, context, origin, task_execution.details)
+        else:
+            return await self._complete(entry, raw, context, origin, task_execution.details)
+        finally:
+            self._service.end_activity(context.session_id, entry)
 
     async def _complete(
         self,

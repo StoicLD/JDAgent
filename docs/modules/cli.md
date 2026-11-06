@@ -37,7 +37,7 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 | `/logs clear` | 清理当前 Session 的命令日志；读取日志通过 read_command_output 工具 |
 | `/compact` | 空闲时提前压缩；运行中拒绝，不排队 |
 | `/context-window` | 显示窗口、输入预算、最近完整占用与分类 |
-| `/mcp status` | 读取本地 MCP 状态，不连接或刷新 |
+| `/mcp status` | 读取本地 MCP 状态及活动操作的已用时间／进度，不连接或刷新 |
 | `/mcp list [server\|*] [offset]`、`/mcp refresh [server]` | 空闲时发现目录／显式刷新；含局部拒绝原因 |
 | `/mcp tasks [offset]`、`/mcp task <ref> [query\|result\|cancel]` | 查看原会话任务或显式管理原引用，不启动 Agent Turn |
 | `/mcp prompt <server> <name> [key=value ...]` | 获取外部模板并运行一轮；原命令与外部材料分别保存 |
@@ -48,6 +48,8 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 成为审批答案，普通输入也不会暗中启动另一 Turn。
 运行中及审批期间只允许本地状态、上下文窗口、取消和退出；其他操作要求空闲后重发。
 MCP 管理等待也使用同一控制入口；首次对话前发现目录可创建空 Session，不伪造模型调用或用户消息。
+长 MCP 调用和原 Task 管理等待时，底部状态栏每秒更新本地已用时间及最新有效进度；缺少进度不提前判为失败。
+显示更新不发远端请求、不延长期限；结束或取消后清除活动显示，输入读取仍由原控制入口负责。
 命令分页、原引用、取消和直接 Prompt 的 Headless 用法见[MCP 使用说明](../guides/mcp.md)。
 `jdagent maintain --pending --workspace <路径>` 续做已登记的后台整理。
 知识管理还提供 `jdagent knowledge ...` 独立命令树，负责连接、知识库、来源和 Binding 等操作；

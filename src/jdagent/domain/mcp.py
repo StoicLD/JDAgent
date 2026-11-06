@@ -1,12 +1,14 @@
 """Host-owned MCP connection state, without SDK objects or credential values."""
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import Literal, TypeAlias, cast
 
 from jdagent.domain.json import JsonObject, require_string
 
 MCPConnectionState = Literal["not_connected", "connecting", "ready", "unavailable", "closed"]
+MCPProgressCallback: TypeAlias = Callable[[float, float | None], Awaitable[None]]
 MCPMethod = Literal[
     "tools/list",
     "resources/list",
@@ -161,6 +163,18 @@ class MCPRejectedCapability:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPActivityStatus:
+    """A bounded local observation; progress never changes an operation's deadline."""
+
+    name: str
+    operation: str
+    elapsed_seconds: float
+    progress: float | None = None
+    total: float | None = None
+    task_status: MCPTaskStatus | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class MCPServerStatus:
     server_id: str
     generation: str | None
@@ -172,6 +186,7 @@ class MCPServerStatus:
     metadata_bytes: int = 0
     index_bytes: int = 0
     rejected: tuple[MCPRejectedCapability, ...] = ()
+    activity: MCPActivityStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)

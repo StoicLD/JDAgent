@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import math
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ from jdagent.domain.mcp import (
     MCPFailure,
     MCPMethod,
     MCPPeerInformation,
+    MCPProgressCallback,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 
@@ -49,6 +51,7 @@ class _Request:
     method: MCPMethod | None
     params: JsonObject
     result: asyncio.Future[JsonObject | MCPFailure]
+    on_progress: MCPProgressCallback | None = None
     operation: asyncio.Task[JsonObject] | None = None
     abandoned: bool = False
 
@@ -78,9 +81,15 @@ class SDKMCPConnection:
     def information(self) -> MCPPeerInformation | None:
         return self._information
 
-    async def request(self, method: MCPMethod, params: JsonObject) -> JsonObject:
+    async def request(
+        self,
+        method: MCPMethod,
+        params: JsonObject,
+        *,
+        on_progress: MCPProgressCallback | None = None,
+    ) -> JsonObject:
         """Return an SDK-validated result or a safe failure; never retry a send."""
-        return await self._request(method, params)
+        return await self._request(method, params, on_progress=on_progress)
 
     async def connect(self) -> MCPPeerInformation:
         """Negotiate capabilities without assuming the peer offers Tools."""
@@ -88,12 +97,18 @@ class SDKMCPConnection:
         assert self._information is not None
         return self._information
 
-    async def _request(self, method: MCPMethod | None, params: JsonObject) -> JsonObject:
+    async def _request(
+        self,
+        method: MCPMethod | None,
+        params: JsonObject,
+        *,
+        on_progress: MCPProgressCallback | None = None,
+    ) -> JsonObject:
         if self._state in ("unavailable", "closed") or self._closing:
             raise MCPFailure("connection")
         if self._pending is not None:
             raise MCPFailure("busy")
-        request = _Request(method, params, asyncio.get_running_loop().create_future())
+        request = _Request(method, params, asyncio.get_running_loop().create_future(), on_progress)
         self._pending = request
         if self._owner is None:
             self._state = "connecting"
@@ -322,15 +337,36 @@ class SDKMCPConnection:
         # a third cache outside the host's directory/loaded-definition budgets.
         if request.method is None:
             return {}
+
+        async def report_progress(
+            progress: float, total: float | None, message: str | None
+        ) -> None:
+            # Peer text is neither a diagnostic nor a durable event. Retain only
+            # valid finite numbers, with no deadline or retry side effects.
+            del message
+            if isinstance(progress, bool) or not math.isfinite(progress) or progress < 0:
+                return
+            if total is not None and (
+                isinstance(total, bool) or not math.isfinite(total) or total < progress
+            ):
+                return
+            if not request.abandoned and request.on_progress is not None:
+                await request.on_progress(progress, total)
+
+        progress_callback = report_progress if request.on_progress is not None else None
         wire = {"method": request.method, "params": request.params}
         match request.method:
             case "resources/read":
                 result = await session.send_request(
-                    types.ReadResourceRequest.model_validate(wire), types.ReadResourceResult
+                    types.ReadResourceRequest.model_validate(wire),
+                    types.ReadResourceResult,
+                    progress_callback=progress_callback,
                 )
             case "prompts/get":
                 result = await session.send_request(
-                    types.GetPromptRequest.model_validate(wire), types.GetPromptResult
+                    types.GetPromptRequest.model_validate(wire),
+                    types.GetPromptResult,
+                    progress_callback=progress_callback,
                 )
             case "tools/call":
                 result = await session.send_request(
@@ -338,15 +374,16 @@ class SDKMCPConnection:
                     _TASK_CALL_RESULT
                     if self._information is not None and self._information.tasks
                     else types.CallToolResult,
+                    progress_callback=progress_callback,
                 )
             case "tasks/get" | "tasks/cancel":
                 if self._information is None or not self._information.tasks:
                     raise MCPFailure("unsupported")
                 task_id = require_string(request.params, "taskId")
                 if request.method == "tasks/cancel":
-                    await cancel_task(session, task_id)
+                    await cancel_task(session, task_id, progress_callback=progress_callback)
                     return {}
-                result = await get_task(session, task_id)
+                result = await get_task(session, task_id, progress_callback=progress_callback)
             case "tools/list":
                 result = await session.send_request(
                     types.ListToolsRequest.model_validate(wire), types.ListToolsResult

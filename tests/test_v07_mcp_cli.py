@@ -20,6 +20,7 @@ from jdagent.application.interactive import (
     InteractionState,
     InteractiveApplication,
     InteractiveContext,
+    TerminalStatus,
     UiEvent,
     parse_user_action,
 )
@@ -346,7 +347,7 @@ def test_remote_task_management_itself_remains_controllable(
                     pipe.send_text(f"/mcp task {task_ref} query\n")
                     assert await asyncio.to_thread(arrived.wait, 5)
                     for command, response in (
-                        ("/mcp status", "server=docs connection=ready"),
+                        ("/mcp status", "operation=tasks/get"),
                         ("/context-window", "input_budget="),
                         ("/compact", "/compact requires an idle session"),
                         (f"/mcp task {task_ref} cancel", "Session is busy"),
@@ -402,7 +403,11 @@ def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
                 ResponseCompleted("tool_calls"),
             ),
             (
-                ToolCallCompleted(ToolCall("read", "mcp__docs__read", {"fixture_gate": gate})),
+                ToolCallCompleted(
+                    ToolCall(
+                        "read", "mcp__docs__read", {"fixture_gate": gate, "fixture_progress": True}
+                    )
+                ),
                 ResponseCompleted("tool_calls"),
             ),
         )
@@ -417,6 +422,12 @@ def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
 
     async def scenario() -> None:
         updates: asyncio.Queue[UiEvent] = asyncio.Queue()
+        statuses: asyncio.Queue[TerminalStatus] = asyncio.Queue()
+
+        class Terminal(PromptToolkitTerminal):
+            async def update_status(self, status: TerminalStatus) -> None:
+                await super().update_status(status)
+                statuses.put_nowait(status)
 
         class Presenter:
             async def publish(self, event: UiEvent) -> None:
@@ -428,9 +439,7 @@ def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
                     pass
 
         with create_pipe_input() as pipe:
-            terminal = PromptToolkitTerminal(
-                history_file=tmp_path / "history", input=pipe, output=DummyOutput()
-            )
+            terminal = Terminal(history_file=tmp_path / "history", input=pipe, output=DummyOutput())
             observer = InteractionRuntimeObserver()
             runtime = build_runtime(
                 config,
@@ -457,9 +466,13 @@ def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
                 await until(InteractionState.IDLE.value)
                 pipe.send_text("Read the document\n")
                 await asyncio.to_thread(wait_for_request)
+                async with asyncio.timeout(3):
+                    while "progress=1/4" not in (status := await statuses.get()).activity:
+                        pass
+                assert "elapsed=" in status.activity
                 for command, response in (
                     ("/status", "provider=fake"),
-                    ("/mcp status", "server=docs connection=ready"),
+                    ("/mcp status", "progress=1/4"),
                     ("/context-window", "input_budget="),
                     ("/compact", "/compact requires an idle session"),
                     ("/mcp refresh docs", "Session is busy"),

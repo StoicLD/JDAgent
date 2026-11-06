@@ -5,6 +5,7 @@ import hmac
 import json
 import math
 import re
+import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
@@ -15,6 +16,7 @@ from jsonschema import Draft202012Validator, SchemaError
 
 from jdagent.domain.json import JsonObject, JsonValue, require_array, require_object, require_string
 from jdagent.domain.mcp import (
+    MCPActivityStatus,
     MCPCapability,
     MCPCapabilityKind,
     MCPCatalogView,
@@ -22,12 +24,14 @@ from jdagent.domain.mcp import (
     MCPDirectoryState,
     MCPFailure,
     MCPMethod,
+    MCPProgressCallback,
     MCPRejectedCapability,
     MCPSearchHit,
     MCPSearchResult,
     MCPServerStatus,
     MCPTask,
     MCPTaskSnapshot,
+    MCPTaskStatus,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 from jdagent.mcp_definitions import (
@@ -37,6 +41,26 @@ from jdagent.mcp_definitions import (
     definition_digest,
 )
 from jdagent.ports import MCPConnectionPort
+
+
+@dataclass(slots=True)
+class _Activity:
+    name: str
+    operation: str
+    started: float = field(default_factory=time.monotonic)
+    progress: float | None = None
+    total: float | None = None
+    task_status: MCPTaskStatus | None = None
+
+    def snapshot(self) -> MCPActivityStatus:
+        return MCPActivityStatus(
+            self.name,
+            self.operation,
+            max(0, time.monotonic() - self.started),
+            self.progress,
+            self.total,
+            self.task_status,
+        )
 
 
 @dataclass(slots=True)
@@ -53,6 +77,19 @@ class _Server:
     touched: int = 0
     rejected: tuple[MCPRejectedCapability, ...] = ()
     quarantined: bool = False
+    activity: _Activity | None = None
+
+    def progress_callback(self) -> MCPProgressCallback | None:
+        activity = self.activity
+        if activity is None:
+            return None
+        activity.progress, activity.total = None, None
+
+        async def report(progress: float, total: float | None) -> None:
+            if self.activity is activity:
+                activity.progress, activity.total = progress, total
+
+        return report
 
     def status(self) -> MCPServerStatus:
         information = None if self.peer is None else self.peer.information
@@ -67,6 +104,7 @@ class _Server:
             self.metadata_bytes,
             self.index_bytes,
             self.rejected,
+            None if self.activity is None else self.activity.snapshot(),
         )
 
 
@@ -135,14 +173,45 @@ class MCPService:
             raise MCPFailure("configuration")
         server = self._sessions[session_id][entry.server_id]
         assert server.peer is not None
+        report = server.progress_callback()
         if entry.kind == "resource":
-            return await server.peer.request("resources/read", {"uri": entry.name})
+            return await server.peer.request(
+                "resources/read", {"uri": entry.name}, on_progress=report
+            )
         if entry.kind == "prompt":
             return await server.peer.request(
-                "prompts/get", {"name": entry.name, "arguments": arguments}
+                "prompts/get", {"name": entry.name, "arguments": arguments}, on_progress=report
             )
-        raw = await server.peer.request("tools/call", {"name": entry.name, "arguments": arguments})
-        return MCPTask.from_data(raw) if raw.get("resultType") == "task" else raw
+        raw = await server.peer.request(
+            "tools/call", {"name": entry.name, "arguments": arguments}, on_progress=report
+        )
+        if raw.get("resultType") != "task":
+            return raw
+        task = MCPTask.from_data(raw)
+        if server.activity is not None:
+            server.activity.task_status = task.status
+        return task
+
+    def begin_activity(
+        self,
+        session_id: str,
+        entry: MCPCapability,
+        operation: str,
+        *,
+        task_status: MCPTaskStatus | None = None,
+    ) -> None:
+        """Start one logical wait, including retries and Task polling gaps."""
+        self._sessions[session_id][entry.server_id].activity = _Activity(
+            entry.name,
+            operation,
+            task_status=task_status,
+        )
+
+    def end_activity(self, session_id: str, entry: MCPCapability) -> None:
+        """Discard the transient display when this serialized operation ends."""
+        server = self._sessions.get(session_id, {}).get(entry.server_id)
+        if server is not None:
+            server.activity = None
 
     def task_identity(self, session_id: str, entry: MCPCapability) -> str:
         peer = self._task_peer(session_id, entry)
@@ -188,7 +257,9 @@ class MCPService:
         self, session_id: str, entry: MCPCapability, task: MCPTask
     ) -> MCPTaskSnapshot:
         raw = await self._task_peer(session_id, entry).request(
-            "tasks/get", {"taskId": task.task_id}
+            "tasks/get",
+            {"taskId": task.task_id},
+            on_progress=self._sessions[session_id][entry.server_id].progress_callback(),
         )
         observed = MCPTask.from_data(raw)
         if datetime.fromisoformat(observed.created_at) != datetime.fromisoformat(task.created_at):
@@ -196,13 +267,20 @@ class MCPService:
         if task.status in {"completed", "failed", "cancelled"} and observed.status != task.status:
             raise MCPFailure("protocol")
         result = raw.get("result") if observed.status == "completed" else None
+        activity = self._sessions[session_id][entry.server_id].activity
+        if activity is not None:
+            activity.task_status = observed.status
         return MCPTaskSnapshot(
             observed,
             None if result is None else require_object(result, "Task result"),
         )
 
     async def cancel_task(self, session_id: str, entry: MCPCapability, task: MCPTask) -> None:
-        await self._task_peer(session_id, entry).request("tasks/cancel", {"taskId": task.task_id})
+        await self._task_peer(session_id, entry).request(
+            "tasks/cancel",
+            {"taskId": task.task_id},
+            on_progress=self._sessions[session_id][entry.server_id].progress_callback(),
+        )
 
     def quarantine(self, session_id: str, entry: MCPCapability) -> None:
         """Forbid reuse immediately while retaining bounded resource-close ownership."""

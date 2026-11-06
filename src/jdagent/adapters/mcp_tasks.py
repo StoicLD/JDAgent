@@ -5,6 +5,7 @@ from typing import Literal, Self
 
 from mcp import types
 from mcp.client import ClaimContext, ClientExtension, ClientSession, ResultClaim
+from mcp.shared.dispatcher import ProgressFnT
 from pydantic import Field, model_validator
 
 from jdagent.domain.mcp import MCPFailure
@@ -93,7 +94,11 @@ def _check_support(session: ClientSession) -> None:
 
 
 async def get_task(
-    session: ClientSession, task_id: str, *, timeout_seconds: float | None = None
+    session: ClientSession,
+    task_id: str,
+    *,
+    timeout_seconds: float | None = None,
+    progress_callback: ProgressFnT | None = None,
 ) -> TaskState:
     """Fetch only the existing task; do not repeat its originating operation."""
     _check_support(session)
@@ -101,6 +106,7 @@ async def get_task(
         _GetTask(params=_TaskParams(task_id=task_id)),
         TaskState,
         request_read_timeout_seconds=timeout_seconds,
+        progress_callback=progress_callback,
     )
     if state.task_id != task_id:
         raise MCPFailure("protocol")
@@ -108,7 +114,11 @@ async def get_task(
 
 
 async def cancel_task(
-    session: ClientSession, task_id: str, *, timeout_seconds: float | None = None
+    session: ClientSession,
+    task_id: str,
+    *,
+    timeout_seconds: float | None = None,
+    progress_callback: ProgressFnT | None = None,
 ) -> None:
     """Request cancellation; the acknowledgement does not prove work stopped."""
     _check_support(session)
@@ -116,4 +126,5 @@ async def cancel_task(
         _CancelTask(params=_TaskParams(task_id=task_id)),
         types.EmptyResult,
         request_read_timeout_seconds=timeout_seconds,
+        progress_callback=progress_callback,
     )

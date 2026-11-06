@@ -59,6 +59,7 @@ def wire_server(
     requests: list[str] | None = None,
     task_state: TaskPeerState | None = None,
     task_query_gate: tuple[threading.Event, threading.Event] | None = None,
+    progress_values: tuple[float, float | None] | None = None,
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -173,6 +174,29 @@ def wire_server(
             if method in {"tools/call", "tools/list"} and encoding == "sse":
                 body = b":" + b" " * 400_000 + b"\n\nevent: message\ndata: " + body + b"\n\n"
                 content_type = "text/event-stream"
+            if progress_values is not None and method in {
+                "tools/call",
+                "tasks/get",
+                "tasks/cancel",
+            }:
+                token = message["params"].get("_meta", {}).get("progressToken")
+                if token is not None:
+                    progress = json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/progress",
+                            "params": {
+                                "progressToken": token,
+                                "progress": progress_values[0],
+                                "total": progress_values[1],
+                                "message": "private-http-progress",
+                            },
+                        }
+                    ).encode()
+                    if content_type != "text/event-stream":
+                        body = b"event: message\ndata: " + body + b"\n\n"
+                    body = b"event: message\ndata: " + progress + b"\n\n" + body
+                    content_type = "text/event-stream"
             self.send_response(504 if method == "tools/call" and tool_error == "http504" else 200)
             self.send_header("Content-Type", content_type)
             if encoding == "gzip":

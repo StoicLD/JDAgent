@@ -5,7 +5,12 @@ from typing import Protocol
 
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType, RuntimePayload
 from jdagent.domain.json import JsonObject
-from jdagent.domain.mcp import MCPConnectionState, MCPMethod, MCPPeerInformation
+from jdagent.domain.mcp import (
+    MCPConnectionState,
+    MCPMethod,
+    MCPPeerInformation,
+    MCPProgressCallback,
+)
 from jdagent.domain.model import ModelCapabilities, ModelEvent, ModelRequest
 from jdagent.domain.tools import (
     ApprovalOutcome,
@@ -37,7 +42,13 @@ class MCPConnectionPort(Protocol):
 
     async def connect(self) -> MCPPeerInformation: ...
 
-    async def request(self, method: MCPMethod, params: JsonObject) -> JsonObject: ...
+    async def request(
+        self,
+        method: MCPMethod,
+        params: JsonObject,
+        *,
+        on_progress: MCPProgressCallback | None = None,
+    ) -> JsonObject: ...
 
     async def aclose(self) -> bool: ...
 

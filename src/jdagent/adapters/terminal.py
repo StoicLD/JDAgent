@@ -163,6 +163,7 @@ class PromptToolkitTerminal:
                     bottom_toolbar=lambda: (
                         f" JDAgent | {self._status.session} | {self._status.model} | "
                         f"write={self._status.write_permission} | {self._status.state.value} "
+                        f"{self._status.activity}"
                     ),
                 )
             except EOFError:
@@ -196,6 +197,7 @@ class PromptToolkitTerminal:
     async def update_status(self, status: TerminalStatus) -> None:
         self._status = status
         self._state = status.state
+        self._session.app.invalidate()
 
     async def request(self, request: ApprovalRequest) -> ApprovalChoice:
         try:
