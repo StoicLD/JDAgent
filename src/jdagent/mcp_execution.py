@@ -41,6 +41,14 @@ def _encode(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def _origin(entry: MCPCapability) -> ToolOrigin:
+    if entry.kind == "resource_template":
+        raise MCPFailure("unsupported")
+    return ToolOrigin(
+        "mcp", entry.server_id, entry.name, entry.generation, definition_digest(entry), entry.kind
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class MCPResultLimits:
     session_bytes: int = 100 << 20
@@ -73,6 +81,7 @@ class MCPExecution:
         charges: dict[tuple[str | None, str], int] = {}
         objects: dict[str, int] = {}
         tasks: dict[str, tuple[str | None, str]] = {}
+        metadata_bytes = 0
         for event in self._journal.events:
             payload = event.payload
             if isinstance(payload, MCPInvocationStartedPayload):
@@ -97,28 +106,40 @@ class MCPExecution:
                 if payload.result_confirmed:
                     charges[event.turn_id, payload.result.call_id] = 0
                 if payload.original_hash is not None:
+                    metadata_bytes += len(_encode(asdict(payload)))
                     objects[payload.original_hash] = max(
                         objects.get(payload.original_hash, 0), payload.original_bytes
                     )
             elif isinstance(payload, MCPTaskResultSavedPayload):
+                metadata_bytes += len(_encode(asdict(payload)))
                 charges[payload.origin_turn_id, payload.call_id] = 0
                 objects[payload.original_hash] = max(
                     objects.get(payload.original_hash, 0), payload.original_bytes
                 )
             elif isinstance(payload, MCPTaskResultReservedPayload):
                 charges[payload.origin_turn_id, payload.call_id] = payload.reserved_bytes
-        return sum(charges.values()) + sum(objects.values()), charges
+        return sum(charges.values()) + sum(objects.values()) + metadata_bytes, charges
+
+    def _metadata_reservation(self, origin: ToolOrigin, context: ToolExecutionContext) -> int:
+        # Result records contain a bounded preview and repeated host identities.
+        # Reserve their serialization, separately from the complete peer result.
+        identity_bytes = len(_encode((asdict(origin), context.call_id, context.tool_name)))
+        return 4 * (self._limits.preview_tokens + identity_bytes) + 8192
 
     def _has_capacity(self, required: int | None = None) -> bool:
         used, _ = self._usage()
         reserve = self._limits.reservation_bytes if required is None else required
         return used + reserve <= self._limits.session_bytes
 
-    async def reserve_task_result(self, task_ref: str, context: ToolExecutionContext) -> bool:
+    async def reserve_task_result(
+        self, entry: MCPCapability, task_ref: str, context: ToolExecutionContext
+    ) -> bool:
         """Retain existing capacity or commit new capacity before a management RPC."""
         used, reservations = self._usage()
         existing = reservations.get((context.turn_id, context.call_id), 0)
-        required = self._limits.reservation_bytes
+        required = self._limits.reservation_bytes + self._metadata_reservation(
+            _origin(entry), context
+        )
         if existing >= required:
             return True
         if used + required - existing > self._limits.session_bytes:
@@ -140,13 +161,14 @@ class MCPExecution:
     ) -> ToolOutcome:
         """Persist a local directory projection using the same quota and preview contract."""
         size = len(_encode(raw))
-        if not self._has_capacity(size):
+        origin = ToolOrigin("mcp_control", raw_name=name)
+        reservation = size + self._metadata_reservation(origin, context)
+        if not self._has_capacity(reservation):
             return ToolOutcome(
                 completed=False,
                 error_code=ToolErrorCode.CAPACITY,
                 message="MCP result storage quota is full",
             )
-        origin = ToolOrigin("mcp_control", raw_name=name)
         await self._journal.record(
             context.turn_id,
             RuntimeEventType.MCP_INVOCATION_STARTED,
@@ -157,7 +179,7 @@ class MCPExecution:
                 "",
                 context.request_id,
                 hashlib.sha256(_encode(arguments)).hexdigest(),
-                size,
+                reservation,
                 operation="discovery",
             ),
         )
@@ -307,23 +329,16 @@ class MCPExecution:
                 message="MCP automatic replay is forbidden or its attempt allowance is exhausted",
                 requires_stop=True,
             )
+        origin = _origin(entry)
         reservation = self._limits.reservation_bytes * (
             2 if self._service.supports_tasks(context.session_id, entry) else 1
-        )
+        ) + self._metadata_reservation(origin, context)
         if not self._has_capacity(reservation):
             return ToolOutcome(
                 completed=False,
                 error_code=ToolErrorCode.CAPACITY,
                 message="MCP result storage quota cannot reserve another response",
             )
-        origin = ToolOrigin(
-            "mcp",
-            entry.server_id,
-            entry.name,
-            entry.generation,
-            definition_digest(entry),
-            entry.kind,
-        )
         waiting_task = False
         raw: JsonObject | MCPTask | None = None
         task_execution = MCPTaskExecution(
@@ -577,9 +592,7 @@ class MCPExecution:
         details: JsonObject,
     ) -> ToolOutcome:
         """Save an explicitly retrieved result without repeating the original call's completion."""
-        origin = ToolOrigin(
-            "mcp", entry.server_id, entry.name, entry.generation, definition_digest(entry), "tool"
-        )
+        origin = _origin(entry)
         return await self._complete(
             entry,
             raw,

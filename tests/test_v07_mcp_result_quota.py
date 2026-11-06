@@ -9,13 +9,14 @@ from pathlib import Path
 import pytest
 
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
-from jdagent.composition import build_runtime
+from jdagent.composition import RuntimeOptions, build_runtime
 from jdagent.configuration import CliOverrides, resolve_configuration
 from jdagent.data_paths import DataPaths
 from jdagent.domain.events import MCPInvocationFinishedPayload, ToolExecutionCompletedPayload
 from jdagent.domain.json import require_object, require_string
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode
+from jdagent.mcp_execution import MCPResultLimits
 from tests.test_v07_mcp_http import TaskPeerState, wire_server
 from tests.test_v07_mcp_task_management import leave_running_task, task_configuration
 
@@ -95,6 +96,80 @@ def test_identical_originals_share_capacity_across_distinct_calls_and_restart(
             finally:
                 await runtime.aclose()
         assert len(originals) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+def test_result_metadata_consumes_capacity_even_when_every_original_is_identical(
+    tmp_path: Path, engine: str
+) -> None:
+    paths = DataPaths.for_workspace(
+        tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
+    )
+    paths.user_config_file.parent.mkdir(parents=True)
+    peer = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
+    paths.user_config_file.write_text(
+        "[memory]\nauto_consolidation = false\n"
+        '[mcp.servers.docs]\nenabled = true\ntransport = "stdio"\n'
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = {json.dumps([str(peer), '2026-07-28', 'catalog_once'])}\n"
+        'tools = ["read"]\n',
+        encoding="utf-8",
+    )
+    config = resolve_configuration(
+        tmp_path,
+        CliOverrides(provider="fake", runtime_engine=engine),
+        data_paths=paths,
+        environment={},
+    )
+    model = FakeModelPort(
+        scripts=(
+            (
+                ToolCallCompleted(ToolCall("find", "search_tools", {"query": "read"})),
+                ResponseCompleted("tool_calls"),
+            ),
+            *(
+                (
+                    ToolCallCompleted(ToolCall(f"tiny-{index}", "mcp__docs__read", {})),
+                    ResponseCompleted("tool_calls"),
+                )
+                for index in range(12)
+            ),
+            (TextDelta("Read repeated originals."), ResponseCompleted("stop")),
+        )
+    )
+
+    async def scenario() -> None:
+        runtime = build_runtime(
+            config,
+            FakeApproval(ApprovalDecision.APPROVE),
+            model_wrapper=lambda _: model,
+            runtime_options=RuntimeOptions(
+                mcp_result_limits=MCPResultLimits(session_bytes=70_000, reservation_bytes=4096)
+            ),
+        )
+        try:
+            turn = await runtime.coordinator.send("Read the same tiny result several times")
+            events = [event async for event in runtime.session.read(turn.session_id)]
+            reads = [
+                event.payload.result
+                for event in events
+                if isinstance(event.payload, ToolExecutionCompletedPayload)
+                and event.payload.result.tool_name == "mcp__docs__read"
+            ]
+            assert reads[0].error_code is None
+            assert any(result.error_code is ToolErrorCode.CAPACITY for result in reads)
+            stored = [
+                event.payload
+                for event in events
+                if isinstance(event.payload, MCPInvocationFinishedPayload)
+                and event.payload.result.tool_name == "mcp__docs__read"
+            ]
+            assert len({result.original_hash for result in stored}) == 1
+            assert all(result.original_bytes < 128 for result in stored)
+        finally:
+            await runtime.aclose()
 
     asyncio.run(scenario())
 

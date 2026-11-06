@@ -171,7 +171,7 @@ class MCPTaskManagement:
             entry = await self._service.bind_task(
                 session_id, entry, require_string(control, "identity_digest")
             )
-            can_fetch = await results.reserve_task_result(task_ref, context)
+            can_fetch = await results.reserve_task_result(entry, task_ref, context)
             if not can_fetch and action != "cancel":
                 return ToolOutcome(
                     completed=False,
