@@ -84,13 +84,14 @@ def main() -> None:
             }
             if len(sys.argv) > 2 and sys.argv[2].startswith("catalog"):
                 if cursor == "page2":
-                    result["tools"] = [
-                        {
-                            "name": "read",
-                            "description": "Read repository files 读取仓库文件",
-                            "inputSchema": {"type": "object"},
-                        }
-                    ]
+                    reader: dict[str, object] = {
+                        "name": "read",
+                        "description": "Read repository files 读取仓库文件",
+                        "inputSchema": {"type": "object"},
+                    }
+                    if sys.argv[2] == "catalog_output_array":
+                        reader["outputSchema"] = {"type": "array", "items": {"type": "integer"}}
+                    result["tools"] = [reader]
                 else:
                     catalog_tools: list[dict[str, object]] = [
                         {
@@ -174,6 +175,36 @@ def main() -> None:
                 "cacheScope": "private",
                 "ttlMs": 0,
             }
+        elif method == "resources/read":
+            uri = message["params"]["uri"]
+            contents: list[dict[str, object]] = [{"uri": uri, "text": "Remote file material"}]
+            result = {
+                "resultType": "complete",
+                "contents": contents,
+            }
+            if uri.endswith("/binary"):
+                result["contents"] = [
+                    {"uri": uri, "blob": "AAE=", "mimeType": "application/octet-stream"}
+                ]
+            elif uri.endswith("/mixed"):
+                contents.append(
+                    {"uri": uri + "/binary", "blob": "AAE=", "mimeType": "application/octet-stream"}
+                )
+        elif method == "prompts/get":
+            assert message["params"]["name"] == "explain"
+            result = {
+                "resultType": "complete",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {
+                            "type": "text",
+                            "text": "External template for: "
+                            + message["params"]["arguments"]["topic"],
+                        },
+                    }
+                ],
+            }
         elif method == "tools/call":
             name = message["params"]["name"]
             if name == "unterminated":
@@ -181,6 +212,13 @@ def main() -> None:
                 sys.stdout.buffer.flush()
                 continue
             result = {"resultType": "complete", "content": [{"type": "text", "text": "ok"}]}
+            if name == "read" and "fixture_structured" in message["params"].get("arguments", {}):
+                result["structuredContent"] = message["params"]["arguments"]["fixture_structured"]
+                result["content"] = []
+            if name == "read" and "fixture_blocks" in message["params"].get("arguments", {}):
+                result["content"] = message["params"]["arguments"]["fixture_blocks"]
+            if name == "read" and message["params"].get("arguments", {}).get("fixture_error"):
+                result["isError"] = True
             if name == "read" and "fixture_size" in message["params"].get("arguments", {}):
                 result["content"] = [
                     {"type": "text", "text": "z" * message["params"]["arguments"]["fixture_size"]}

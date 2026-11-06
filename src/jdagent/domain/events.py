@@ -7,6 +7,7 @@ from typing import TypeAlias
 from uuid import uuid4
 
 from jdagent.domain.errors import StopReason
+from jdagent.domain.mcp import MCPOperation
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -278,6 +279,7 @@ class MCPInvocationStartedPayload:
     arguments_sha256: str
     reserved_bytes: int
     attempt: int = 1
+    operation: MCPOperation = "tools/call"
 
 
 @dataclass(frozen=True, slots=True)

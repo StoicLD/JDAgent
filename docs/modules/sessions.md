@@ -11,9 +11,11 @@ Session 保存对话和执行事实，模型上下文、Trace、Session Catalog 
 先持久化事件，再更新进程内序列并通知观察者。持久化失败时不把事件当作已经保存。
 高频文本增量另供实时展示，最终 assistant 消息才成为可恢复事实。
 
-v0.7 P2a 为 MCP 增加发送前意图／容量预留与最终结果事实，保存在同一 EventJournal 中。
+v0.7 为 MCP 增加发送前意图／容量预留与最终结果事实，保存在同一 EventJournal 中。
 恢复补全可区分未发送、可能已发送和最终结果已保存；只读但结果未知不会补成 NOT_EXECUTED。
-这是普通工具调用的初步恢复，Tasks 和完整身份／故障矩阵仍待实施，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
+意图的 operation 区分 tools/call、resources/read、prompts/get 和宿主 discovery；
+读取旧记录时从已有 Server ID 推断原来的工具调用或发现，不跳过未知操作类型。
+这是三类普通调用的初步恢复，Tasks 和完整身份／故障矩阵仍待实施，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
 
 事件记录用户输入、完整模型消息、工具请求、权限决定、规则授予／撤销、工具开始与结束、
 用量、检索元数据、窗口裁剪以及 Turn 完成／失败。Trace 消费同一事件流，

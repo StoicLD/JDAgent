@@ -5,8 +5,15 @@ from typing import Literal
 
 MCPConnectionState = Literal["not_connected", "connecting", "ready", "unavailable", "closed"]
 MCPMethod = Literal[
-    "tools/list", "resources/list", "resources/templates/list", "prompts/list", "tools/call"
+    "tools/list",
+    "resources/list",
+    "resources/templates/list",
+    "prompts/list",
+    "tools/call",
+    "resources/read",
+    "prompts/get",
 ]
+MCPOperation = Literal["tools/call", "resources/read", "prompts/get", "discovery"]
 MCPCapabilityKind = Literal["tool", "resource", "resource_template", "prompt"]
 MCPDirectoryState = Literal["not_loaded", "ready", "partial", "failed", "evicted", "disabled"]
 MCPFailureKind = Literal[

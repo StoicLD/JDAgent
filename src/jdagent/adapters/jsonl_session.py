@@ -55,6 +55,7 @@ from jdagent.domain.json import (
     require_object,
     require_string,
 )
+from jdagent.domain.mcp import MCPOperation
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -158,6 +159,7 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "arguments_sha256": payload.arguments_sha256,
             "reserved_bytes": payload.reserved_bytes,
             "attempt": payload.attempt,
+            "operation": payload.operation,
         }
     if isinstance(payload, MCPInvocationFinishedPayload):
         return {
@@ -425,6 +427,11 @@ def _tool_result(data: JsonObject) -> ToolResult:
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
     if event_type is RuntimeEventType.MCP_INVOCATION_STARTED:
+        operation = data.get(
+            "operation", "discovery" if data.get("server_id") == "" else "tools/call"
+        )
+        if operation not in {"tools/call", "resources/read", "prompts/get", "discovery"}:
+            raise ValueError("Unsupported MCP invocation operation")
         return MCPInvocationStartedPayload(
             require_string(data, "call_id"),
             require_string(data, "server_id"),
@@ -434,6 +441,7 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
             require_string(data, "arguments_sha256"),
             require_integer(data, "reserved_bytes"),
             require_integer(data, "attempt"),
+            cast(MCPOperation, operation),
         )
     if event_type is RuntimeEventType.MCP_INVOCATION_FINISHED:
         if not isinstance(data.get("result_confirmed"), bool):

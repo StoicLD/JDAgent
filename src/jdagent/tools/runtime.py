@@ -362,7 +362,9 @@ class ToolRuntime:
             metadata["derived_from_mcp"] = True
         side_effect = definition.risk in (RiskLevel.WRITE, RiskLevel.EXECUTE)
         task = asyncio.ensure_future(
-            definition.handler(prepared_arguments, replace(context, call_id=call.call_id))
+            definition.handler(
+                prepared_arguments, replace(context, call_id=call.call_id, tool_name=call.name)
+            )
         )
         try:
             output = await asyncio.wait_for(

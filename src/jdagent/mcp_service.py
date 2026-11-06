@@ -108,6 +108,8 @@ class MCPService:
 
     def execution_timeout(self, session_id: str, entry: MCPCapability) -> float:
         config = self._sessions[session_id][entry.server_id].configuration
+        if entry.kind != "tool":
+            return config.timeout_seconds
         return next(
             (item.timeout_seconds for item in config.tool_overrides if item.name == entry.name),
             config.timeout_seconds,
@@ -117,11 +119,82 @@ class MCPService:
         self, session_id: str, entry: MCPCapability, arguments: JsonObject
     ) -> JsonObject:
         """Use the previously exposed host route without reconnecting or replaying."""
-        if not self.tool_allowed(session_id, entry.server_id, entry.name, entry.generation):
+        if not self.capability_allowed(session_id, entry):
             raise MCPFailure("configuration")
         server = self._sessions[session_id][entry.server_id]
         assert server.peer is not None
+        if entry.kind == "resource":
+            return await server.peer.request("resources/read", {"uri": entry.name})
+        if entry.kind == "prompt":
+            return await server.peer.request(
+                "prompts/get", {"name": entry.name, "arguments": arguments}
+            )
         return await server.peer.request("tools/call", {"name": entry.name, "arguments": arguments})
+
+    def material_enabled(self, session_id: str, kind: MCPCapabilityKind) -> bool:
+        """Inspect only host configuration; exposing controls must not connect a peer."""
+        return any(
+            server.configuration.enabled
+            and (
+                server.configuration.prompts if kind == "prompt" else server.configuration.resources
+            )
+            for server in self._sessions.get(session_id, {}).values()
+        )
+
+    def capability_allowed(self, session_id: str, entry: MCPCapability) -> bool:
+        if entry.kind == "tool":
+            return self.tool_allowed(session_id, entry.server_id, entry.name, entry.generation)
+        server = self._sessions.get(session_id, {}).get(entry.server_id)
+        if (
+            server is None
+            or not server.configuration.enabled
+            or server.generation != entry.generation
+            or server.peer is None
+            or server.peer.state != "ready"
+            or server.peer.information is None
+        ):
+            return False
+        return (
+            (server.configuration.prompts and server.peer.information.prompts)
+            if entry.kind == "prompt"
+            else (server.configuration.resources and server.peer.information.resources)
+        )
+
+    async def resolve_material(
+        self, session_id: str, server_id: str, kind: MCPCapabilityKind, name: str
+    ) -> MCPCapability:
+        """Resolve Prompt metadata or a concrete remote URI, never a host filesystem path."""
+        server = self._sessions.get(session_id, {}).get(server_id)
+        if (
+            server is None
+            or not server.configuration.enabled
+            or kind not in {"resource", "prompt"}
+            or not (
+                server.configuration.prompts if kind == "prompt" else server.configuration.resources
+            )
+        ):
+            raise MCPFailure("configuration")
+        directory = await self.capabilities(session_id, server_id=server_id)
+        if kind == "resource":
+            entry = MCPCapability(
+                server_id,
+                server.generation,
+                "resource",
+                name,
+                "",
+                json.dumps({"uri": name}, sort_keys=True),
+            )
+        else:
+            found = next(
+                (item for item in directory.entries if item.kind == "prompt" and item.name == name),
+                None,
+            )
+            if found is None:
+                raise MCPFailure("unsupported")
+            entry = found
+        if not self.capability_allowed(session_id, entry):
+            raise MCPFailure("unsupported")
+        return entry
 
     async def refresh(self, session_id: str, *, server_id: str | None = None) -> None:
         """Replace idle peers and invalidate their old configuration generation."""
@@ -155,11 +228,7 @@ class MCPService:
         servers = self._sessions[session_id]
         if server_id is not None and server_id not in servers:
             raise ValueError("Unknown MCP Server")
-        names = (
-            tuple(servers)
-            if server_id is None or not any(server.peer for server in servers.values())
-            else (server_id,)
-        )
+        names = tuple(servers) if server_id is None else (server_id,)
         for name in names:
             server = servers[name]
             if server.configuration.enabled and server.directory in {"not_loaded", "evicted"}:

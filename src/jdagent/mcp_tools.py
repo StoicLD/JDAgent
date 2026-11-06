@@ -15,6 +15,7 @@ from jdagent.domain.tools import (
 )
 from jdagent.mcp_definitions import definition_digest, model_tool_name
 from jdagent.mcp_execution import MCPExecution
+from jdagent.mcp_material_tools import MCPMaterialTools
 from jdagent.mcp_service import MCPService
 
 
@@ -31,6 +32,7 @@ class MCPTools:
         return (
             self._search_definition(),
             self._read_definition(),
+            *MCPMaterialTools(self._service, self._execution, self._session_id).definitions(),
             *(self._definition(entry) for entry in loaded),
         )
 
@@ -150,6 +152,11 @@ class MCPTools:
             invoke,
             manages_timeout=True,
             origin=ToolOrigin(
-                "mcp", entry.server_id, entry.name, entry.generation, definition_digest(entry)
+                "mcp",
+                entry.server_id,
+                entry.name,
+                entry.generation,
+                definition_digest(entry),
+                "tool",
             ),
         )

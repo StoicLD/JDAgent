@@ -13,7 +13,7 @@ from jdagent.domain.events import (
     RuntimeEventType,
 )
 from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
-from jdagent.domain.mcp import MCPCapability, MCPFailure
+from jdagent.domain.mcp import MCPCapability, MCPFailure, MCPOperation
 from jdagent.domain.tools import (
     ToolErrorCode,
     ToolExecutionContext,
@@ -22,6 +22,7 @@ from jdagent.domain.tools import (
     ToolResult,
     ToolResultStatus,
 )
+from jdagent.mcp_content import MCPContent, project_content
 from jdagent.mcp_definitions import definition_digest, model_tool_name
 from jdagent.mcp_service import MCPService
 from jdagent.ports import ContextObjects, RuntimeJournal
@@ -73,7 +74,12 @@ class MCPExecution:
         return sum(charges.values()) + reserve <= self._limits.session_bytes
 
     async def publish_discovery(
-        self, raw: JsonObject, arguments: JsonObject, context: ToolExecutionContext
+        self,
+        raw: JsonObject,
+        arguments: JsonObject,
+        context: ToolExecutionContext,
+        *,
+        name: str = "search_tools",
     ) -> ToolOutcome:
         """Persist a local directory projection using the same quota and preview contract."""
         size = len(_encode(raw))
@@ -83,18 +89,19 @@ class MCPExecution:
                 error_code=ToolErrorCode.CAPACITY,
                 message="MCP result storage quota is full",
             )
-        origin = ToolOrigin("mcp_control", raw_name="search_tools")
+        origin = ToolOrigin("mcp_control", raw_name=name)
         await self._journal.record(
             context.turn_id,
             RuntimeEventType.MCP_INVOCATION_STARTED,
             MCPInvocationStartedPayload(
                 context.call_id,
                 "",
-                "search_tools",
+                name,
                 "",
                 context.request_id,
                 hashlib.sha256(_encode(arguments)).hexdigest(),
                 size,
+                operation="discovery",
             ),
         )
         data, digest, size = await self._save(raw, context, origin)
@@ -158,10 +165,17 @@ class MCPExecution:
     async def invoke(
         self, entry: MCPCapability, arguments: JsonObject, context: ToolExecutionContext
     ) -> ToolOutcome:
-        if not self._service.tool_allowed(
-            context.session_id, entry.server_id, entry.name, entry.generation
-        ):
+        if not self._service.capability_allowed(context.session_id, entry):
             return ToolOutcome(completed=False, error_code=ToolErrorCode.TOOL_UNAVAILABLE)
+        if entry.kind == "resource_template":
+            return ToolOutcome(completed=False, error_code=ToolErrorCode.UNSUPPORTED)
+        operation: MCPOperation = (
+            "resources/read"
+            if entry.kind == "resource"
+            else "prompts/get"
+            if entry.kind == "prompt"
+            else "tools/call"
+        )
         fingerprint = hashlib.sha256(_encode(arguments)).hexdigest()
         # A second model call_id does not erase an unconfirmed send in this Turn.
         confirmed = {
@@ -176,6 +190,7 @@ class MCPExecution:
             and event.turn_id == context.turn_id
             and event.payload.server_id == entry.server_id
             and event.payload.raw_name == entry.name
+            and event.payload.operation == operation
             and event.payload.arguments_sha256 == fingerprint
             and event.payload.call_id not in confirmed
             for event in self._journal.events
@@ -193,7 +208,12 @@ class MCPExecution:
                 message="MCP result storage quota cannot reserve another response",
             )
         origin = ToolOrigin(
-            "mcp", entry.server_id, entry.name, entry.generation, definition_digest(entry)
+            "mcp",
+            entry.server_id,
+            entry.name,
+            entry.generation,
+            definition_digest(entry),
+            entry.kind,
         )
         await self._journal.record(
             context.turn_id,
@@ -206,6 +226,7 @@ class MCPExecution:
                 context.request_id,
                 fingerprint,
                 self._limits.reservation_bytes,
+                operation=operation,
             ),
         )
         try:
@@ -239,52 +260,77 @@ class MCPExecution:
             return outcome
         if len(_encode(raw)) > self._limits.reservation_bytes:
             raise MCPFailure("response_limit")
-        data, digest, size = await self._save(raw, context, origin)
+        content = project_content(raw, entry.kind)
         definition = require_object(
             normalize_json(json.loads(entry.definition_json)), "MCP definition"
         )
         schema = definition.get("outputSchema")
-        invalid = False
-        if schema is not None:
+        failed = raw.get("isError") is True
+        validate_output = schema is not None and not failed
+        invalid = validate_output and "structuredContent" not in raw
+        if validate_output:
             if not isinstance(schema, (dict, bool)):
                 raise MCPFailure("protocol")
             try:
                 Draft202012Validator(schema).validate(raw.get("structuredContent"))  # pyright: ignore[reportUnknownMemberType]
             except ValidationError:
                 invalid = True
-        failed = raw.get("isError") is True
+        unsupported_only = bool(content.unsupported) and not content.usable
+        data, digest, size = await self._save(
+            raw,
+            context,
+            origin,
+            content=content,
+            schema_valid=(not invalid if validate_output else None),
+        )
         outcome = ToolOutcome(
             data=data,
             observed_failure=failed or invalid,
-            error_code=ToolErrorCode.EXECUTION_FAILED if failed or invalid else None,
+            error_code=ToolErrorCode.EXECUTION_FAILED
+            if failed or invalid
+            else ToolErrorCode.UNSUPPORTED
+            if unsupported_only
+            else None,
             message="MCP result failed output Schema validation"
             if invalid
             else "MCP tool reported a business failure"
             if failed
+            else "MCP result contains only unsupported content"
+            if unsupported_only
             else "",
         )
         await self._finish(context, origin, outcome, confirmed=True, digest=digest, size=size)
         return outcome
 
     async def _save(
-        self, raw: JsonObject, context: ToolExecutionContext, origin: ToolOrigin
+        self,
+        raw: JsonObject,
+        context: ToolExecutionContext,
+        origin: ToolOrigin,
+        *,
+        content: MCPContent | None = None,
+        schema_valid: bool | None = None,
     ) -> tuple[JsonObject, str, int]:
         encoded = _encode(raw)
         digest = await self._objects.put(encoded)
         data: JsonObject = {
             "source": normalize_json(asdict(origin)),
             "original": {"session_id": context.session_id, "sha256": digest, "bytes": len(encoded)},
-            "preview": raw,
+            "preview": raw if content is None else content.preview,
             "preview_complete": True,
+            "received_complete": True,
+            "processing_complete": content is None or not content.unsupported,
+            "unsupported_content": [] if content is None else list(content.unsupported),
+            "schema_valid": schema_valid,
         }
         # Use the estimator's uncalibrated UTF-8 byte/token proxy. The request
         # projector can narrow this further to fit the actual remaining window.
         if len(_encode(data)) + 256 > self._limits.preview_tokens:
-            data.pop("preview")
+            projected = _encode(data.pop("preview"))
             data["preview_complete"] = False
             data["preview_format"] = "json_text_fragment"
             room = max(0, self._limits.preview_tokens - len(_encode(data)) - 512)
-            fragment = encoded[:room].decode("utf-8", errors="ignore")
+            fragment = projected[:room].decode("utf-8", errors="ignore")
             data["preview_text"] = fragment
             while len(_encode(data)) + 256 > self._limits.preview_tokens and fragment:
                 fragment = fragment[: len(fragment) // 2]
@@ -303,9 +349,12 @@ class MCPExecution:
     ) -> None:
         result = ToolResult(
             context.call_id,
-            origin.raw_name or "search_tools"
-            if origin.kind == "mcp_control"
-            else model_tool_name(origin.server_id or "", origin.raw_name or ""),
+            context.tool_name
+            or (
+                origin.raw_name or "search_tools"
+                if origin.kind == "mcp_control"
+                else model_tool_name(origin.server_id or "", origin.raw_name or "")
+            ),
             ToolResultStatus.ERROR if outcome.error_code else ToolResultStatus.SUCCESS,
             error_code=outcome.error_code,
             error_message=outcome.message or None,

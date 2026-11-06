@@ -262,6 +262,14 @@ class SDKMCPConnection:
             return {}
         wire = {"method": request.method, "params": request.params}
         match request.method:
+            case "resources/read":
+                result = await session.send_request(
+                    types.ReadResourceRequest.model_validate(wire), types.ReadResourceResult
+                )
+            case "prompts/get":
+                result = await session.send_request(
+                    types.GetPromptRequest.model_validate(wire), types.GetPromptResult
+                )
             case "tools/call":
                 result = await session.send_request(
                     types.CallToolRequest.model_validate(wire), types.CallToolResult

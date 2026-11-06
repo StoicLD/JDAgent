@@ -175,6 +175,7 @@ class ToolExecutionContext:
     memory_intent: str | None = None
     request_id: str = ""
     external_context: bool = False
+    tool_name: str = ""
 
 
 ToolHandler = Callable[[JsonObject, ToolExecutionContext], Awaitable[str | ToolOutcome]]
@@ -190,6 +191,7 @@ class ToolOrigin:
     raw_name: str | None = None
     generation: str | None = None
     definition_sha256: str | None = None
+    capability_kind: Literal["tool", "resource", "prompt"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
