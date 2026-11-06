@@ -115,6 +115,12 @@ class MCPService:
             config.timeout_seconds,
         )
 
+    def safe_repeat(self, session_id: str, entry: MCPCapability) -> bool:
+        config = self._sessions[session_id][entry.server_id].configuration
+        return entry.kind == "tool" and any(
+            item.name == entry.name and item.safe_repeat for item in config.tool_overrides
+        )
+
     async def call(
         self, session_id: str, entry: MCPCapability, arguments: JsonObject
     ) -> JsonObject:

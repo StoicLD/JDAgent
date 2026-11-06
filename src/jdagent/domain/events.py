@@ -44,6 +44,7 @@ class RuntimeEventType(StrEnum):
     TOOL_EXECUTION_COMPLETED = "tool_execution_completed"
     MCP_INVOCATION_STARTED = "mcp_invocation_started"
     MCP_INVOCATION_FINISHED = "mcp_invocation_finished"
+    MCP_ATTEMPT_FINISHED = "mcp_attempt_finished"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
@@ -293,6 +294,17 @@ class MCPInvocationFinishedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPAttemptFinishedPayload:
+    """A sanitized protocol observation; not the logical operation's final result."""
+
+    call_id: str
+    attempt: int
+    response_confirmed: bool
+    failure_kind: str | None = None
+    rpc_code: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ModelUsageRecordedPayload:
     """Usage associated with one model call."""
 
@@ -349,6 +361,7 @@ RuntimePayload: TypeAlias = (
     | ToolExecutionCompletedPayload
     | MCPInvocationStartedPayload
     | MCPInvocationFinishedPayload
+    | MCPAttemptFinishedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload
     | TurnFailedPayload

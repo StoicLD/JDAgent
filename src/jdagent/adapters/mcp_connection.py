@@ -126,7 +126,17 @@ class SDKMCPConnection:
                     except MCPError as error:
                         if error.code == types.CONNECTION_CLOSED:
                             raise
-                        result = MCPFailure("remote", rpc_code=error.code)
+                        # This session has no SDK request timer. On this pinned public
+                        # send_request path REQUEST_TIMEOUT can only be a peer reply;
+                        # HTTP status fallbacks use other codes. Host deadlines cancel
+                        # the request and never pass through this exception branch.
+                        kind = (
+                            "server_timeout"
+                            if request.method == "tools/call"
+                            and error.code == types.REQUEST_TIMEOUT
+                            else "remote"
+                        )
+                        result = MCPFailure(kind, rpc_code=error.code)
                     if not request.result.done():
                         request.result.set_result(result)
         except asyncio.CancelledError:
@@ -182,6 +192,7 @@ class SDKMCPConnection:
         session = await stack.enter_async_context(
             ClientSession(
                 dispatcher=dispatcher,
+                read_timeout_seconds=None,
                 client_info=types.Implementation(name="JDAgent", version="0.7"),
                 extensions={TASKS_EXTENSION: {}},
                 result_claims={TASKS_EXTENSION: TasksExtension().claims()},

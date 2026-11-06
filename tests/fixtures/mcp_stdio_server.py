@@ -10,6 +10,7 @@ import time
 def main() -> None:
     version = sys.argv[1]
     list_calls = 0
+    tool_calls: dict[str, int] = {}
     capabilities: dict[str, object] = {"tools": {}, "resources": {}, "prompts": {}}
     if len(sys.argv) > 2 and sys.argv[2] == "prompts_only":
         capabilities = {"prompts": {}}
@@ -214,11 +215,32 @@ def main() -> None:
             }
         elif method == "tools/call":
             name = message["params"]["name"]
+            tool_calls[name] = tool_calls.get(name, 0) + 1
+            timeout_mode = message["params"].get("arguments", {}).get("fixture_timeout")
+            if timeout_mode == "stall":
+                time.sleep(3)
+            if timeout_mode == "always" or timeout_mode == "twice" and tool_calls[name] <= 2:
+                print(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": message["id"],
+                            "error": {"code": -32001, "message": "private-server-diagnostic"},
+                        }
+                    ),
+                    flush=True,
+                )
+                continue
             if name == "unterminated":
                 sys.stdout.buffer.write(b"x" * 4096)
                 sys.stdout.buffer.flush()
                 continue
             result = {"resultType": "complete", "content": [{"type": "text", "text": "ok"}]}
+            if timeout_mode is not None:
+                result["content"] = [{"type": "text", "text": f"attempts={tool_calls[name]}"}]
+            if timeout_mode == "text_error":
+                result["isError"] = True
+                result["content"] = [{"type": "text", "text": "timeout; attempts=1"}]
             if name == "read" and "fixture_structured" in message["params"].get("arguments", {}):
                 result["structuredContent"] = message["params"]["arguments"]["fixture_structured"]
                 result["content"] = []

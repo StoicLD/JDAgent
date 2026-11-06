@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from jsonschema import Draft202012Validator, ValidationError
 
 from jdagent.domain.events import (
+    MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
     RuntimeEventType,
@@ -185,21 +186,66 @@ class MCPExecution:
             and isinstance(event.payload, MCPInvocationFinishedPayload)
             and event.payload.result_confirmed
         }
-        if any(
-            isinstance(event.payload, MCPInvocationStartedPayload)
+        stopped = {
+            event.payload.result.call_id
+            for event in self._journal.events
+            if event.turn_id == context.turn_id
+            and isinstance(event.payload, MCPInvocationFinishedPayload)
+            and event.payload.result.stop_turn
+        }
+        prior_records = [
+            (event.sequence, event.payload)
+            for event in self._journal.events
+            if isinstance(event.payload, MCPInvocationStartedPayload)
             and event.turn_id == context.turn_id
             and event.payload.server_id == entry.server_id
             and event.payload.raw_name == entry.name
+            and event.payload.generation == entry.generation
             and event.payload.operation == operation
             and event.payload.arguments_sha256 == fingerprint
-            and event.payload.call_id not in confirmed
-            for event in self._journal.events
-        ):
+        ]
+        prior = [item for _, item in prior_records]
+        if any(item.call_id not in confirmed or item.call_id in stopped for item in prior):
             return ToolOutcome(
                 completed=False,
                 error_code=ToolErrorCode.UNCERTAIN,
                 requires_stop=True,
-                message="Earlier MCP result is unconfirmed; automatic replay is forbidden",
+                message=(
+                    "Earlier MCP result is unconfirmed or stopped; automatic replay is forbidden"
+                ),
+            )
+        prior_ids = {item.call_id for item in prior}
+        last_success = max(
+            (
+                event.sequence
+                for event in self._journal.events
+                if event.turn_id == context.turn_id
+                and isinstance(event.payload, MCPInvocationFinishedPayload)
+                and event.payload.result.call_id in prior_ids
+                and event.payload.result_confirmed
+                and event.payload.result.status is ToolResultStatus.SUCCESS
+                and (event.payload.result.outcome is None or event.payload.result.outcome.completed)
+            ),
+            default=0,
+        )
+        # Success closes a logical operation. Failed attempts cannot be reset by
+        # another model call_id, but independent later successful reads remain usable.
+        prior = [item for sequence, item in prior_records if sequence > last_success]
+        attempted = len(prior) if entry.kind == "tool" else 0
+        safe_repeat = self._service.safe_repeat(context.session_id, entry)
+        previous_timeout = any(
+            isinstance(event.payload, MCPAttemptFinishedPayload)
+            and event.turn_id == context.turn_id
+            and event.payload.call_id in {item.call_id for item in prior}
+            and event.payload.failure_kind == "server_timeout"
+            for event in self._journal.events
+        )
+        if prior and (attempted >= 3 or not previous_timeout or not safe_repeat):
+            return ToolOutcome(
+                completed=False,
+                error_code=ToolErrorCode.NOT_EXECUTED,
+                message="MCP automatic replay is forbidden or its attempt allowance is exhausted",
+                requires_stop=True,
             )
         if not self._has_capacity():
             return ToolOutcome(
@@ -215,48 +261,56 @@ class MCPExecution:
             definition_digest(entry),
             entry.kind,
         )
-        await self._journal.record(
-            context.turn_id,
-            RuntimeEventType.MCP_INVOCATION_STARTED,
-            MCPInvocationStartedPayload(
-                context.call_id,
-                entry.server_id,
-                entry.name,
-                entry.generation,
-                context.request_id,
-                fingerprint,
-                self._limits.reservation_bytes,
-                operation=operation,
-            ),
-        )
         try:
             async with asyncio.timeout(self._service.execution_timeout(context.session_id, entry)):
-                raw = await self._service.call(context.session_id, entry, arguments)
+                raw = await self._call_with_retries(
+                    entry, arguments, context, operation, fingerprint, attempted, safe_repeat
+                )
         except (MCPFailure, TimeoutError) as error:
+            server_timeout = isinstance(error, MCPFailure) and error.kind == "server_timeout"
+            confirmed_timeout = server_timeout or self._last_attempt_timed_out_remotely(context)
             message = (
                 "MCP local waiting deadline expired"
                 if isinstance(error, TimeoutError)
                 else str(error)
             )
             outcome = ToolOutcome(
+                data={"timeout_source": "server" if server_timeout else "client"}
+                if server_timeout or isinstance(error, TimeoutError)
+                else {},
                 completed=False,
                 error_code=ToolErrorCode.TIMEOUT
-                if isinstance(error, TimeoutError)
+                if server_timeout or isinstance(error, TimeoutError)
                 else ToolErrorCode.UNCERTAIN,
                 message=message,
-                requires_stop=True,
+                observed_failure=confirmed_timeout,
+                requires_stop=not server_timeout,
             )
-            await self._finish(context, origin, outcome, confirmed=False)
+            await self._finish(
+                context,
+                origin,
+                outcome,
+                confirmed=confirmed_timeout,
+            )
             return outcome
         except asyncio.CancelledError:
+            confirmed_timeout = self._last_attempt_timed_out_remotely(context)
             outcome = ToolOutcome(
                 completed=False,
                 cancelled=True,
                 error_code=ToolErrorCode.CANCELLED,
-                message="MCP waiting cancelled; remote completion is unconfirmed",
+                message="MCP waiting cancelled after a confirmed server timeout"
+                if confirmed_timeout
+                else "MCP waiting cancelled; remote completion is unconfirmed",
+                observed_failure=confirmed_timeout,
                 requires_stop=True,
             )
-            await self._finish(context, origin, outcome, confirmed=False)
+            await self._finish(
+                context,
+                origin,
+                outcome,
+                confirmed=confirmed_timeout,
+            )
             return outcome
         if len(_encode(raw)) > self._limits.reservation_bytes:
             raise MCPFailure("response_limit")
@@ -301,6 +355,80 @@ class MCPExecution:
         )
         await self._finish(context, origin, outcome, confirmed=True, digest=digest, size=size)
         return outcome
+
+    def _last_attempt_timed_out_remotely(self, context: ToolExecutionContext) -> bool:
+        """Stopping during backoff must not erase the already-confirmed remote failure."""
+        for event in reversed(self._journal.events):
+            if event.turn_id != context.turn_id:
+                continue
+            payload = event.payload
+            if isinstance(payload, (MCPAttemptFinishedPayload, MCPInvocationStartedPayload)):
+                if payload.call_id == context.call_id:
+                    return (
+                        isinstance(payload, MCPAttemptFinishedPayload)
+                        and payload.response_confirmed
+                        and payload.failure_kind == "server_timeout"
+                    )
+        return False
+
+    async def _call_with_retries(
+        self,
+        entry: MCPCapability,
+        arguments: JsonObject,
+        context: ToolExecutionContext,
+        operation: MCPOperation,
+        fingerprint: str,
+        attempted: int,
+        safe_repeat: bool,
+    ) -> JsonObject:
+        for attempt in range(attempted + 1, 4):
+            await self._journal.record(
+                context.turn_id,
+                RuntimeEventType.MCP_INVOCATION_STARTED,
+                MCPInvocationStartedPayload(
+                    context.call_id,
+                    entry.server_id,
+                    entry.name,
+                    entry.generation,
+                    context.request_id,
+                    fingerprint,
+                    self._limits.reservation_bytes,
+                    attempt=attempt,
+                    operation=operation,
+                ),
+            )
+            try:
+                raw = await self._service.call(context.session_id, entry, arguments)
+            except MCPFailure as error:
+                await self._journal.record(
+                    context.turn_id,
+                    RuntimeEventType.MCP_ATTEMPT_FINISHED,
+                    MCPAttemptFinishedPayload(
+                        context.call_id,
+                        attempt,
+                        error.kind == "server_timeout",
+                        error.kind,
+                        error.rpc_code,
+                    ),
+                )
+                if error.kind != "server_timeout" or not safe_repeat or attempt == 3:
+                    raise
+                await asyncio.sleep(0.5 * 2 ** (attempt - 1))
+            except asyncio.CancelledError:
+                await self._journal.record(
+                    context.turn_id,
+                    RuntimeEventType.MCP_ATTEMPT_FINISHED,
+                    MCPAttemptFinishedPayload(context.call_id, attempt, False, "interrupted"),
+                )
+                raise
+            else:
+                await self._journal.record(
+                    context.turn_id,
+                    RuntimeEventType.MCP_ATTEMPT_FINISHED,
+                    MCPAttemptFinishedPayload(context.call_id, attempt, True),
+                )
+                return raw
+        raise RuntimeError("MCP attempt guard did not reject an exhausted operation")
 
     async def _save(
         self,

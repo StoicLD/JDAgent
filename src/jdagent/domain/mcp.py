@@ -23,6 +23,7 @@ MCPFailureKind = Literal[
     "connection_timeout",
     "protocol",
     "remote",
+    "server_timeout",
     "busy",
     "response_limit",
     "directory_capacity",

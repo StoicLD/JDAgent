@@ -15,6 +15,8 @@ v0.7 为 MCP 增加发送前意图／容量预留与最终结果事实，保存�
 恢复补全可区分未发送、可能已发送和最终结果已保存；只读但结果未知不会补成 NOT_EXECUTED。
 意图的 operation 区分 tools/call、resources/read、prompts/get 和宿主 discovery；
 读取旧记录时从已有 Server ID 推断原来的工具调用或发现，不跳过未知操作类型。
+普通调用的每次协议尝试另记录 mcp_attempt_finished，区分确认的服务端超时与未确认中断；
+它不替代逻辑调用的 mcp_invocation_finished。重试继续在发送前追加意图，同一逻辑调用只产生一次模型工具结果。
 这是三类普通调用的初步恢复，Tasks 和完整身份／故障矩阵仍待实施，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
 
 事件记录用户输入、完整模型消息、工具请求、权限决定、规则授予／撤销、工具开始与结束、

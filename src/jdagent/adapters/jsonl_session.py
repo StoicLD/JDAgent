@@ -20,6 +20,7 @@ from jdagent.domain.events import (
     CompactionFailedPayload,
     ConstraintRevokedPayload,
     ContextWindowSelectedPayload,
+    MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
     ModelRequestPreparedPayload,
@@ -149,6 +150,14 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, MCPAttemptFinishedPayload):
+        return {
+            "call_id": payload.call_id,
+            "attempt": payload.attempt,
+            "response_confirmed": payload.response_confirmed,
+            "failure_kind": payload.failure_kind,
+            "rpc_code": payload.rpc_code,
+        }
     if isinstance(payload, MCPInvocationStartedPayload):
         return {
             "call_id": payload.call_id,
@@ -429,6 +438,16 @@ def _tool_result(data: JsonObject) -> ToolResult:
 
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.MCP_ATTEMPT_FINISHED:
+        if not isinstance(data.get("response_confirmed"), bool):
+            raise ValueError("response_confirmed must be boolean")
+        return MCPAttemptFinishedPayload(
+            require_string(data, "call_id"),
+            require_integer(data, "attempt"),
+            data["response_confirmed"] is True,
+            optional_string(data, "failure_kind"),
+            require_integer(data, "rpc_code") if data.get("rpc_code") is not None else None,
+        )
     if event_type is RuntimeEventType.MCP_INVOCATION_STARTED:
         operation = data.get(
             "operation", "discovery" if data.get("server_id") == "" else "tools/call"

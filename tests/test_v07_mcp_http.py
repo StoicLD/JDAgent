@@ -24,6 +24,8 @@ def wire_server(
     *,
     discover_gate: tuple[threading.Event, threading.Event] | None = None,
     expected_authorization: str | None = None,
+    tool_error: str | None = None,
+    requests: list[str] | None = None,
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -49,6 +51,8 @@ def wire_server(
                 self.end_headers()
                 return
             method = message["method"]
+            if requests is not None:
+                requests.append(method)
             result: dict[str, object]
             response: dict[str, object] = {"jsonrpc": "2.0", "id": message["id"]}
             if method == "server/discover":
@@ -71,6 +75,8 @@ def wire_server(
                     "ttlMs": 0,
                     "tools": [],
                 }
+                if tool_error is not None:
+                    result["tools"] = [{"name": "read", "inputSchema": {"type": "object"}}]
                 if message.get("params", {}).get("cursor") == "oversized":
                     length = 800_000 if encoding == "sse" else 2_000_000
                     result["tools"] = [
@@ -84,7 +90,11 @@ def wire_server(
                 assert method == "tools/call"
                 length = 800_000 if encoding == "sse" else 2_000_000
                 content = "ok" if message["params"]["name"] == "small" else "x" * length
+                if tool_error is not None:
+                    content = "timeout"
                 result = {"resultType": "complete", "content": [{"type": "text", "text": content}]}
+                if tool_error == "server_timeout":
+                    response["error"] = {"code": -32001, "message": "private-timeout-text"}
             if "error" not in response:
                 response["result"] = result
             body = json.dumps(response).encode()
@@ -92,7 +102,7 @@ def wire_server(
             if method in {"tools/call", "tools/list"} and encoding == "sse":
                 body = b":" + b" " * 400_000 + b"\n\nevent: message\ndata: " + body + b"\n\n"
                 content_type = "text/event-stream"
-            self.send_response(200)
+            self.send_response(504 if method == "tools/call" and tool_error == "http504" else 200)
             self.send_header("Content-Type", content_type)
             if encoding == "gzip":
                 body = gzip.compress(body)
