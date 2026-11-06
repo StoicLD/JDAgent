@@ -1,6 +1,7 @@
 """Host-owned MCP connection state, without SDK objects or credential values."""
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Literal, cast
 
 from jdagent.domain.json import JsonObject, require_string
@@ -32,6 +33,11 @@ MCPFailureKind = Literal[
     "busy",
     "response_limit",
     "directory_capacity",
+    "identity_mismatch",
+    "task_expired",
+    "task_unavailable",
+    "cleanup_timeout",
+    "interrupted",
 ]
 
 
@@ -43,6 +49,39 @@ class MCPPeerInformation:
     prompts: bool
     tasks: bool
     identity_digest: str = field(default="", repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskTiming:
+    """Server retention metadata, independent of the local execution deadline."""
+
+    created_at: str
+    ttl_ms: int | None
+    poll_interval_ms: int | None
+
+    @classmethod
+    def from_data(cls, data: JsonObject) -> "MCPTaskTiming":
+        created_at = require_string(data, "createdAt")
+        if datetime.fromisoformat(created_at).tzinfo is None:
+            raise ValueError("Task creation timestamp must include a timezone")
+        ttl, interval = data.get("ttlMs"), data.get("pollIntervalMs")
+        if any(
+            type(value) is not int or value < 0 for value in (ttl, interval) if value is not None
+        ):
+            raise ValueError("Invalid Task retention or polling interval")
+        return cls(created_at, cast(int | None, ttl), cast(int | None, interval))
+
+    def to_data(self) -> JsonObject:
+        return {
+            "createdAt": self.created_at,
+            "ttlMs": self.ttl_ms,
+            "pollIntervalMs": self.poll_interval_ms,
+        }
+
+    @property
+    def expired(self) -> bool:
+        elapsed = (datetime.now(UTC) - datetime.fromisoformat(self.created_at)).total_seconds()
+        return self.ttl_ms is not None and elapsed * 1000 >= self.ttl_ms
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,24 +99,39 @@ class MCPTask:
         status = data.get("status")
         if status not in ("working", "input_required", "completed", "failed", "cancelled"):
             raise MCPFailure("protocol")
-        ttl, interval = data.get("ttlMs"), data.get("pollIntervalMs")
-        if any(
-            type(value) is not int or value < 0 for value in (ttl, interval) if value is not None
-        ):
-            raise MCPFailure("protocol")
+        try:
+            timing = MCPTaskTiming.from_data(data)
+        except ValueError:
+            raise MCPFailure("protocol") from None
         return cls(
             require_string(data, "taskId"),
             status,
-            require_string(data, "createdAt"),
-            cast(int | None, ttl),
-            cast(int | None, interval),
+            timing.created_at,
+            timing.ttl_ms,
+            timing.poll_interval_ms,
         )
+
+    @property
+    def timing(self) -> MCPTaskTiming:
+        return MCPTaskTiming(self.created_at, self.ttl_ms, self.poll_interval_ms)
 
 
 @dataclass(frozen=True, slots=True)
 class MCPTaskSnapshot:
     task: MCPTask
     result: JsonObject | None
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskView:
+    """Public, local-only task status; never contains the remote handle."""
+
+    task_ref: str
+    server_id: str
+    raw_name: str
+    status: MCPTaskStatus
+    result_available: bool
+    reference_expired: bool | None = None
 
 
 class MCPFailure(Exception):

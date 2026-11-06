@@ -52,7 +52,7 @@
 | v0.6 实现自审与实验 | [固定实现本地自审与修复](reviews/REV-20261105-002-v0.6-implementation-self-review.md)、[对照说明](development/v0.6-comparison-runbook.md)、[首轮失败与修复](reviews/v0.6-live-comparison-20261105.md)、[第二轮六次对照](reviews/v0.6-live-comparison-20261105-r2.md)；任务 6/6、目标比较 1/3，默认未切换，独立评审未完成 |
 | v0.7 MCP 已确认规格 | [通用 Client、BM25、两层缓存与顺序 Tasks](requirements/v0.7-mcp-client.md)、[R1 运行时衔接设计](architecture/v0.7-mcp-client.md)：已按用户授权进入分阶段实施 |
 | v0.7 Cursor 审查处置 | [F01–F09 逐项判断与文档验证](reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)；[原始审查](reviews/REV-20261106-001-v0.7-mcp-client-design-review.md)的 fail 保留，R1 独立复审未完成；后续 F08 锁版接入实验见 [P0 证据](reviews/REV-20261106-002-v0.7-p0-sdk-validation.md) |
-| v0.7 实施 | [P0–P5 实施与验证记录](plans/v0.7-implementation.md)、[模块学习清单](learning/v0.7-mcp-client-learning-checklist.md)、[MCP 配置说明](guides/mcp.md)；P2a–P2d 已接通三类模型入口、预算与来源，P3a/P3b 已接通有条件重试与 Tasks 顺序执行；显式任务管理、完整恢复、CLI 和最终审查仍在实施 |
+| v0.7 实施 | [P0–P5 实施与验证记录](plans/v0.7-implementation.md)、[模块学习清单](learning/v0.7-mcp-client-learning-checklist.md)、[MCP 配置说明](guides/mcp.md)；P2a–P2d 已接通三类模型入口、预算与来源，P3a–P3c 已接通有条件重试、Tasks 顺序执行及应用层原任务管理；完整恢复、CLI 和最终审查仍在实施 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
 ## 术语与学习资料

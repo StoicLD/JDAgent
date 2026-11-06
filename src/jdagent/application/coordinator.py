@@ -3,7 +3,8 @@
 import asyncio
 import json
 import re
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -29,8 +30,14 @@ from jdagent.domain.events import (
     TurnRetrievalRecordedPayload,
     UserMessagePayload,
 )
-from jdagent.domain.mcp import MCPCapabilityKind, MCPCatalogView, MCPSearchResult, MCPServerStatus
-from jdagent.domain.tools import ToolExecutionContext
+from jdagent.domain.mcp import (
+    MCPCapabilityKind,
+    MCPCatalogView,
+    MCPSearchResult,
+    MCPServerStatus,
+    MCPTaskView,
+)
+from jdagent.domain.tools import ToolErrorCode, ToolExecutionContext, ToolOutcome
 from jdagent.eventing import EventJournal
 from jdagent.knowledge.catalog import KnowledgeCatalog
 from jdagent.knowledge.embedding import AdaptiveEmbedding
@@ -44,6 +51,7 @@ from jdagent.knowledge.ptk import (
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_task_management import MCPTaskAction, MCPTaskManagement
 from jdagent.memory_service import MemoryService
 from jdagent.observability import TraceProjection
 from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
@@ -139,6 +147,7 @@ class TurnCoordinator:
         knowledge_index: Path | None = None,
         memory: MemoryService | None = None,
         mcp: MCPService | None = None,
+        mcp_task_management: MCPTaskManagement | None = None,
     ) -> None:
         self._session = session
         self._workspace = workspace
@@ -150,6 +159,7 @@ class TurnCoordinator:
         self._knowledge_index = knowledge_index
         self.memory = memory
         self._mcp = mcp
+        self._mcp_task_management = mcp_task_management
         self.after_output: Callable[[], None] = lambda: None
         self._owned_sessions: set[str] = set()
         self._running: set[str] = set()
@@ -228,6 +238,15 @@ class TurnCoordinator:
         """Discover an existing Session's granted capabilities while it is idle."""
         if self._mcp is None:
             return MCPCatalogView((), ())
+        async with self._mcp_journal(session_id):
+            if refresh:
+                await self._mcp.refresh(session_id, server_id=server_id)
+            return await self._mcp.capabilities(session_id, server_id=server_id)
+
+    @asynccontextmanager
+    async def _mcp_journal(
+        self, session_id: str, *, configure: bool = True
+    ) -> AsyncGenerator[EventJournal]:
         if (
             session_id in self._running
             or session_id in self._compacting
@@ -236,7 +255,8 @@ class TurnCoordinator:
             raise SessionError(SessionErrorCode.BUSY, "session_busy: operation already running")
         self._mcp_operations.add(session_id)
         try:
-            await asyncio.to_thread(self._loop_factory.prepare_turn)
+            if configure:
+                await asyncio.to_thread(self._loop_factory.prepare_turn)
             await self._session.acquire(session_id)
             self._owned_sessions.add(session_id)
             journal = await EventJournal.open(self._session, session_id, require_existing=True)
@@ -246,12 +266,29 @@ class TurnCoordinator:
                 and initial.workspace_identity != self._workspace_identity
             ):
                 raise ValueError("MCP Session belongs to a different workspace")
-            await self._mcp.configure(session_id, self._loop_factory.mcp_configuration())
-            if refresh:
-                await self._mcp.refresh(session_id, server_id=server_id)
-            return await self._mcp.capabilities(session_id, server_id=server_id)
+            if configure and self._mcp is not None:
+                await self._mcp.configure(session_id, self._loop_factory.mcp_configuration())
+            yield journal
         finally:
             self._mcp_operations.discard(session_id)
+
+    async def mcp_tasks(self, session_id: str) -> tuple[MCPTaskView, ...]:
+        """List original task references locally; never connect or resume the Agent."""
+        if self._mcp_task_management is None:
+            return ()
+        async with self._mcp_journal(session_id, configure=False) as journal:
+            return self._mcp_task_management.list_tasks(journal)
+
+    async def mcp_task(
+        self, session_id: str, task_ref: str, *, action: MCPTaskAction = "query"
+    ) -> ToolOutcome:
+        """Query, retrieve or cancel one original task while the Session is idle."""
+        if action not in {"query", "result", "cancel"}:
+            raise ValueError("Unsupported MCP task action")
+        if self._mcp_task_management is None:
+            return ToolOutcome(completed=False, error_code=ToolErrorCode.TOOL_UNAVAILABLE)
+        async with self._mcp_journal(session_id) as journal:
+            return await self._mcp_task_management.act(journal, session_id, task_ref, action)
 
     async def mcp_search(
         self,

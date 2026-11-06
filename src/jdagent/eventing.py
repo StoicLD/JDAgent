@@ -9,6 +9,7 @@ from jdagent.domain.events import (
     MCPInvocationStartedPayload,
     MCPTaskObservedPayload,
     MCPTaskRegisteredPayload,
+    MCPTaskResultSavedPayload,
     RuntimeEvent,
     RuntimeEventType,
     RuntimePayload,
@@ -130,9 +131,38 @@ async def close_pending_calls(
         for event in events
         if isinstance(event.payload, MCPTaskRegisteredPayload)
     }
+    requested_calls = {
+        call.call_id: call
+        for event in events
+        if isinstance(event.payload, AssistantMessageCompletedPayload)
+        for call in event.payload.tool_calls
+    }
+    for event in journal.events:
+        payload = event.payload
+        if not isinstance(payload, MCPTaskResultSavedPayload) or payload.origin_turn_id != turn_id:
+            continue
+        registration = task_references.get(payload.call_id)
+        call = requested_calls.get(payload.call_id)
+        if registration is None or registration.task_ref != payload.task_ref or call is None:
+            continue
+        outcome = payload.outcome
+        # Management may have obtained a result before interrupted model-call
+        # pairing is repaired. Preserve any already recorded invocation ending.
+        mcp_finished.setdefault(
+            payload.call_id,
+            ToolResult(
+                payload.call_id,
+                call.name,
+                ToolResultStatus.ERROR if outcome.error_code else ToolResultStatus.SUCCESS,
+                error_code=outcome.error_code,
+                error_message=outcome.message or None,
+                outcome=outcome,
+                metadata={"tool_origin": outcome.data.get("source")},
+            ),
+        )
     task_statuses = {
         event.payload.task_ref: event.payload.status
-        for event in events
+        for event in journal.events
         if isinstance(event.payload, MCPTaskObservedPayload) and event.payload.status is not None
     }
     for event in events:

@@ -12,6 +12,7 @@ from jdagent.domain.events import (
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
     MCPTaskRegisteredPayload,
+    MCPTaskResultSavedPayload,
     RuntimeEventType,
 )
 from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
@@ -78,6 +79,8 @@ class MCPExecution:
                 controls[payload.task_ref] = payload.handle_bytes
             elif isinstance(payload, MCPInvocationFinishedPayload) and payload.result_confirmed:
                 charges[event.turn_id, payload.result.call_id] = payload.original_bytes
+            elif isinstance(payload, MCPTaskResultSavedPayload):
+                charges[payload.origin_turn_id, payload.call_id] = payload.original_bytes
         reserve = self._limits.reservation_bytes if required is None else required
         return (
             sum(charges.values()) + sum(controls.values()) + reserve <= self._limits.session_bytes
@@ -137,7 +140,9 @@ class MCPExecution:
                 event.payload
                 for event in self._journal.events
                 if event.session_id == context.session_id
-                and isinstance(event.payload, MCPInvocationFinishedPayload)
+                and isinstance(
+                    event.payload, (MCPInvocationFinishedPayload, MCPTaskResultSavedPayload)
+                )
                 and event.payload.original_hash == digest
             ),
             None,
@@ -158,7 +163,9 @@ class MCPExecution:
         end = min(len(content), offset + limit)
         return ToolOutcome(
             data={
-                "source": record.result.metadata.get("tool_origin"),
+                "source": record.result.metadata.get("tool_origin")
+                if isinstance(record, MCPInvocationFinishedPayload)
+                else record.outcome.data.get("source"),
                 "original": {
                     "session_id": context.session_id,
                     "sha256": digest,
@@ -396,6 +403,7 @@ class MCPExecution:
         task_details: JsonObject,
         *,
         interruption: ToolOutcome | None = None,
+        management_task_ref: str | None = None,
     ) -> ToolOutcome:
         """Retain a received result even when completion races local cancellation."""
         if len(_encode(raw)) > self._limits.reservation_bytes:
@@ -446,8 +454,37 @@ class MCPExecution:
                 data={**data, **interruption.data, "result_received_during_cleanup": True},
                 observed_failure=interruption.observed_failure or failed or invalid,
             )
-        await self._finish(context, origin, outcome, confirmed=True, digest=digest, size=size)
+        if management_task_ref is not None:
+            await self._journal.record(
+                None,
+                RuntimeEventType.MCP_TASK_RESULT_SAVED,
+                MCPTaskResultSavedPayload(
+                    management_task_ref, context.call_id, context.turn_id, outcome, digest, size
+                ),
+            )
+        else:
+            await self._finish(context, origin, outcome, confirmed=True, digest=digest, size=size)
         return outcome
+
+    async def publish_task_result(
+        self,
+        entry: MCPCapability,
+        raw: JsonObject,
+        context: ToolExecutionContext,
+        details: JsonObject,
+    ) -> ToolOutcome:
+        """Save an explicitly retrieved result without repeating the original call's completion."""
+        origin = ToolOrigin(
+            "mcp", entry.server_id, entry.name, entry.generation, definition_digest(entry), "tool"
+        )
+        return await self._complete(
+            entry,
+            raw,
+            context,
+            origin,
+            details,
+            management_task_ref=require_string(details, "task_ref"),
+        )
 
     def _last_attempt_timed_out_remotely(self, context: ToolExecutionContext) -> bool:
         """Stopping during backoff must not erase the already-confirmed remote failure."""

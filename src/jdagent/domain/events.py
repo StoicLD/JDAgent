@@ -7,7 +7,7 @@ from typing import Literal, TypeAlias
 from uuid import uuid4
 
 from jdagent.domain.errors import StopReason
-from jdagent.domain.mcp import MCPOperation, MCPTaskStatus
+from jdagent.domain.mcp import MCPOperation, MCPTaskStatus, MCPTaskTiming
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -16,6 +16,7 @@ from jdagent.domain.tools import (
     RiskLevel,
     SessionPermissionRule,
     ToolCall,
+    ToolOutcome,
     ToolResult,
 )
 
@@ -48,6 +49,7 @@ class RuntimeEventType(StrEnum):
     MCP_TASK_REGISTERED = "mcp_task_registered"
     MCP_TASK_OBSERVED = "mcp_task_observed"
     MCP_TASK_CANCEL_REQUESTED = "mcp_task_cancel_requested"
+    MCP_TASK_RESULT_SAVED = "mcp_task_result_saved"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
@@ -319,6 +321,7 @@ class MCPTaskRegisteredPayload:
     handle_hash: str
     status: MCPTaskStatus
     handle_bytes: int
+    timing: MCPTaskTiming | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,6 +336,7 @@ class MCPTaskObservedPayload:
     failure_kind: str | None = None
     rpc_code: int | None = None
     operation: Literal["get", "cancel"] = "get"
+    timing: MCPTaskTiming | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,6 +345,18 @@ class MCPTaskCancelRequestedPayload:
 
     call_id: str
     task_ref: str
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskResultSavedPayload:
+    """An explicit management result, not another model-call completion."""
+
+    task_ref: str
+    call_id: str
+    origin_turn_id: str
+    outcome: ToolOutcome
+    original_hash: str
+    original_bytes: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,6 +420,7 @@ RuntimePayload: TypeAlias = (
     | MCPTaskRegisteredPayload
     | MCPTaskObservedPayload
     | MCPTaskCancelRequestedPayload
+    | MCPTaskResultSavedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload
     | TurnFailedPayload

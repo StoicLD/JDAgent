@@ -29,15 +29,31 @@ class MCPTaskExecution:
         objects: ContextObjects,
         *,
         max_control_bytes: int,
+        management: bool = False,
     ) -> None:
         self._service, self._journal, self._objects = service, journal, objects
         self._max_control_bytes = max_control_bytes
+        self._management = management
         self._task: MCPTask | None = None
         self._task_ref: str | None = None
         self._cancel_requested = False
         self._cancel_acknowledged = False
         self.result_confirmed = False
         self.final_result: JsonObject | None = None
+        self.control_failure: MCPFailure | None = None
+
+    def attach(self, task_ref: str, task: MCPTask) -> None:
+        """Use a verified durable binding without issuing a new business operation."""
+        self._task_ref, self._task = task_ref, task
+
+    async def query(self, entry: MCPCapability, context: ToolExecutionContext) -> MCPTaskSnapshot:
+        if self._task_ref is None or self._task is None:
+            raise MCPFailure("configuration")
+        snapshot = await self._query(entry, self._task, self._task_ref, context)
+        self._task = snapshot.task
+        self.result_confirmed = snapshot.task.status in {"completed", "failed", "cancelled"}
+        self.final_result = snapshot.result
+        return snapshot
 
     @property
     def details(self) -> JsonObject:
@@ -48,6 +64,8 @@ class MCPTaskExecution:
             "task_status": self._task.status,
             "cancellation_requested": self._cancel_requested,
             "cancellation_acknowledged": self._cancel_acknowledged,
+            "reference_expired": self._task.timing.expired,
+            "result_confirmed": self.result_confirmed,
         }
 
     async def wait(
@@ -81,6 +99,7 @@ class MCPTaskExecution:
                 digest,
                 task.status,
                 len(encoded),
+                task.timing,
             ),
         )
         self._task_ref, self._task = task_ref, task
@@ -126,10 +145,12 @@ class MCPTaskExecution:
         if self._task_ref is None or self._task is None or self.result_confirmed:
             return
         task_ref, task = self._task_ref, self._task
+        if task.timing.expired:
+            return
         try:
             async with asyncio.timeout(5):
                 await self._journal.record(
-                    context.turn_id,
+                    None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_CANCEL_REQUESTED,
                     MCPTaskCancelRequestedPayload(context.call_id, task_ref),
                 )
@@ -137,7 +158,7 @@ class MCPTaskExecution:
                 await self._service.cancel_task(context.session_id, entry, task)
                 self._cancel_acknowledged = True
                 await self._journal.record(
-                    context.turn_id,
+                    None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_OBSERVED,
                     MCPTaskObservedPayload(context.call_id, task_ref, None, operation="cancel"),
                 )
@@ -146,7 +167,29 @@ class MCPTaskExecution:
                 self._task = snapshot.task
                 self.result_confirmed = snapshot.task.status in {"completed", "failed", "cancelled"}
                 self.final_result = snapshot.result
-        except (MCPFailure, TimeoutError, asyncio.CancelledError):
+        except (MCPFailure, TimeoutError, asyncio.CancelledError) as error:
+            self.control_failure = (
+                error
+                if isinstance(error, MCPFailure)
+                else MCPFailure(
+                    "cleanup_timeout" if isinstance(error, TimeoutError) else "interrupted"
+                )
+            )
+            if not self._cancel_acknowledged:
+                await self._journal.record(
+                    None if self._management else context.turn_id,
+                    RuntimeEventType.MCP_TASK_OBSERVED,
+                    MCPTaskObservedPayload(
+                        context.call_id,
+                        task_ref,
+                        None,
+                        response_confirmed=isinstance(error, MCPFailure)
+                        and error.rpc_code is not None,
+                        failure_kind=self.control_failure.kind,
+                        rpc_code=self.control_failure.rpc_code,
+                        operation="cancel",
+                    ),
+                )
             self._service.quarantine(context.session_id, entry)
 
     async def _query(
@@ -154,10 +197,12 @@ class MCPTaskExecution:
     ) -> MCPTaskSnapshot:
         for attempt in range(1, 4):
             try:
+                if task.timing.expired:
+                    raise MCPFailure("task_expired")
                 snapshot = await self._service.get_task(context.session_id, entry, task)
             except asyncio.CancelledError:
                 await self._journal.record(
-                    context.turn_id,
+                    None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_OBSERVED,
                     MCPTaskObservedPayload(
                         context.call_id, task_ref, None, attempt, False, "interrupted"
@@ -166,7 +211,7 @@ class MCPTaskExecution:
                 raise
             except MCPFailure as error:
                 await self._journal.record(
-                    context.turn_id,
+                    None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_OBSERVED,
                     MCPTaskObservedPayload(
                         context.call_id,
@@ -187,10 +232,14 @@ class MCPTaskExecution:
                 )
             else:
                 await self._journal.record(
-                    context.turn_id,
+                    None if self._management else context.turn_id,
                     RuntimeEventType.MCP_TASK_OBSERVED,
                     MCPTaskObservedPayload(
-                        context.call_id, task_ref, snapshot.task.status, attempt
+                        context.call_id,
+                        task_ref,
+                        snapshot.task.status,
+                        attempt,
+                        timing=snapshot.task.timing,
                     ),
                 )
                 return snapshot

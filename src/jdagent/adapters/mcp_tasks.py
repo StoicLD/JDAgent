@@ -7,6 +7,8 @@ from mcp import types
 from mcp.client import ClaimContext, ClientExtension, ClientSession, ResultClaim
 from pydantic import Field, model_validator
 
+from jdagent.domain.mcp import MCPFailure
+
 TASKS_EXTENSION = "io.modelcontextprotocol/tasks"
 TaskStatus = Literal["working", "input_required", "completed", "failed", "cancelled"]
 
@@ -101,7 +103,7 @@ async def get_task(
         request_read_timeout_seconds=timeout_seconds,
     )
     if state.task_id != task_id:
-        raise ValueError("Server returned a different Task identity")
+        raise MCPFailure("protocol")
     return state
 
 

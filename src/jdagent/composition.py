@@ -40,6 +40,7 @@ from jdagent.mcp_configuration import MCPServerConfiguration
 from jdagent.mcp_definitions import MCPDefinitionLimits
 from jdagent.mcp_execution import MCPExecution, MCPResultLimits
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_task_management import MCPTaskManagement
 from jdagent.mcp_tools import MCPTools
 from jdagent.memory_service import MemoryService
 from jdagent.memory_store import MemoryStore
@@ -504,6 +505,7 @@ def build_runtime(
         ),
         memory=memory,
         mcp=mcp,
+        mcp_task_management=MCPTaskManagement(mcp, objects, options.mcp_result_limits, workspace),
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

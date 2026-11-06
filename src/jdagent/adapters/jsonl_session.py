@@ -26,6 +26,7 @@ from jdagent.domain.events import (
     MCPTaskCancelRequestedPayload,
     MCPTaskObservedPayload,
     MCPTaskRegisteredPayload,
+    MCPTaskResultSavedPayload,
     ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
@@ -59,7 +60,7 @@ from jdagent.domain.json import (
     require_object,
     require_string,
 )
-from jdagent.domain.mcp import MCPOperation, MCPTaskStatus
+from jdagent.domain.mcp import MCPOperation, MCPTaskStatus, MCPTaskTiming
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -153,6 +154,15 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, MCPTaskResultSavedPayload):
+        return {
+            "task_ref": payload.task_ref,
+            "call_id": payload.call_id,
+            "origin_turn_id": payload.origin_turn_id,
+            "outcome": payload.outcome.to_data(),
+            "original_hash": payload.original_hash,
+            "original_bytes": payload.original_bytes,
+        }
     if isinstance(payload, MCPTaskCancelRequestedPayload):
         return {"call_id": payload.call_id, "task_ref": payload.task_ref}
     if isinstance(payload, MCPTaskRegisteredPayload):
@@ -165,6 +175,7 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "handle_hash": payload.handle_hash,
             "status": payload.status,
             "handle_bytes": payload.handle_bytes,
+            "timing": payload.timing.to_data() if payload.timing is not None else None,
         }
     if isinstance(payload, MCPTaskObservedPayload):
         return {
@@ -176,6 +187,7 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "failure_kind": payload.failure_kind,
             "rpc_code": payload.rpc_code,
             "operation": payload.operation,
+            "timing": payload.timing.to_data() if payload.timing is not None else None,
         }
     if isinstance(payload, MCPAttemptFinishedPayload):
         return {
@@ -431,26 +443,7 @@ def _evidence_record_from_data(data: JsonObject) -> RetrievalEvidenceRecord:
 def _tool_result(data: JsonObject) -> ToolResult:
     error_code = optional_string(data, "error_code")
     raw_outcome = data.get("outcome")
-    outcome = None
-    if raw_outcome is not None:
-        value = require_object(raw_outcome, "outcome")
-        for key in ("completed", "observed_failure", "cancelled", "requires_stop"):
-            if not isinstance(value.get(key), bool):
-                raise ValueError(f"{key} must be boolean")
-        if not isinstance(value.get("derived_from_mcp", False), bool):
-            raise ValueError("derived_from_mcp must be boolean")
-        code = optional_string(value, "error_code")
-        outcome = ToolOutcome(
-            data=require_object(value.get("data"), "data"),
-            completed=value["completed"] is True,
-            effect=require_string(value, "effect"),
-            observed_failure=value["observed_failure"] is True,
-            error_code=ToolErrorCode(code) if code else None,
-            message=require_string(value, "message"),
-            cancelled=value["cancelled"] is True,
-            requires_stop=value.get("requires_stop") is True,
-            derived_from_mcp=value.get("derived_from_mcp") is True,
-        )
+    outcome = None if raw_outcome is None else _tool_outcome(require_object(raw_outcome, "outcome"))
     return ToolResult(
         require_string(data, "call_id"),
         require_string(data, "tool_name"),
@@ -464,12 +457,46 @@ def _tool_result(data: JsonObject) -> ToolResult:
     )
 
 
+def _tool_outcome(value: JsonObject) -> ToolOutcome:
+    for key in ("completed", "observed_failure", "cancelled", "requires_stop"):
+        if not isinstance(value.get(key), bool):
+            raise ValueError(f"{key} must be boolean")
+    if not isinstance(value.get("derived_from_mcp", False), bool):
+        raise ValueError("derived_from_mcp must be boolean")
+    code = optional_string(value, "error_code")
+    return ToolOutcome(
+        data=require_object(value.get("data"), "data"),
+        completed=value["completed"] is True,
+        effect=require_string(value, "effect"),
+        observed_failure=value["observed_failure"] is True,
+        error_code=ToolErrorCode(code) if code else None,
+        message=require_string(value, "message"),
+        cancelled=value["cancelled"] is True,
+        requires_stop=value.get("requires_stop") is True,
+        derived_from_mcp=value.get("derived_from_mcp") is True,
+    )
+
+
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.MCP_TASK_RESULT_SAVED:
+        return MCPTaskResultSavedPayload(
+            require_string(data, "task_ref"),
+            require_string(data, "call_id"),
+            require_string(data, "origin_turn_id"),
+            _tool_outcome(require_object(data.get("outcome"), "outcome")),
+            require_string(data, "original_hash"),
+            require_integer(data, "original_bytes"),
+        )
     if event_type is RuntimeEventType.MCP_TASK_CANCEL_REQUESTED:
         return MCPTaskCancelRequestedPayload(
             require_string(data, "call_id"), require_string(data, "task_ref")
         )
     if event_type in {RuntimeEventType.MCP_TASK_REGISTERED, RuntimeEventType.MCP_TASK_OBSERVED}:
+        timing = (
+            None
+            if data.get("timing") is None
+            else MCPTaskTiming.from_data(require_object(data["timing"], "Task timing"))
+        )
         status = data.get("status")
         if status not in {None, "working", "input_required", "completed", "failed", "cancelled"}:
             raise ValueError("Invalid MCP task status")
@@ -488,6 +515,7 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
                 optional_string(data, "failure_kind"),
                 require_integer(data, "rpc_code") if data.get("rpc_code") is not None else None,
                 operation,
+                timing,
             )
         if status is None:
             raise ValueError("MCP Task registration must have a status")
@@ -500,6 +528,7 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
             require_string(data, "handle_hash"),
             cast(MCPTaskStatus, status),
             require_integer(data, "handle_bytes"),
+            timing,
         )
     if event_type is RuntimeEventType.MCP_ATTEMPT_FINISHED:
         if not isinstance(data.get("response_confirmed"), bool):

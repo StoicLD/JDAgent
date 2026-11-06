@@ -1,12 +1,14 @@
 """Session-scoped MCP discovery, kept independent of knowledge ingestion and RAG."""
 
 import asyncio
+import hmac
 import json
 import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from uuid import uuid4
 
 from jsonschema import Draft202012Validator, SchemaError
@@ -147,6 +149,32 @@ class MCPService:
         assert peer.information is not None
         return peer.information.identity_digest
 
+    async def bind_task(
+        self, session_id: str, entry: MCPCapability, identity_digest: str
+    ) -> MCPCapability:
+        """Reconnect only for explicit control; verify identity before sending a Task ID."""
+        server = self._sessions.get(session_id, {}).get(entry.server_id)
+        if server is None or not server.configuration.enabled:
+            raise MCPFailure("configuration")
+        if server.peer is not None and (server.quarantined or server.peer.state != "ready"):
+            if not await self._close_peer(server):
+                raise MCPFailure("connection")
+            self._definitions[session_id].invalidate(entry.server_id)
+            server.peer = None
+            server.generation = uuid4().hex
+            server.quarantined = False
+            _discard(server, "not_loaded", "task_reconnect")
+        if server.peer is None:
+            server.peer = self._connection_factory(server.configuration)
+        information = await server.peer.connect()
+        if not identity_digest or not hmac.compare_digest(
+            information.identity_digest, identity_digest
+        ):
+            raise MCPFailure("identity_mismatch")
+        if not information.tasks:
+            raise MCPFailure("unsupported")
+        return replace(entry, generation=server.generation)
+
     def supports_tasks(self, session_id: str, entry: MCPCapability) -> bool:
         peer = self._sessions[session_id][entry.server_id].peer
         return bool(
@@ -162,9 +190,14 @@ class MCPService:
         raw = await self._task_peer(session_id, entry).request(
             "tasks/get", {"taskId": task.task_id}
         )
-        result = raw.get("result")
+        observed = MCPTask.from_data(raw)
+        if datetime.fromisoformat(observed.created_at) != datetime.fromisoformat(task.created_at):
+            raise MCPFailure("protocol")
+        if task.status in {"completed", "failed", "cancelled"} and observed.status != task.status:
+            raise MCPFailure("protocol")
+        result = raw.get("result") if observed.status == "completed" else None
         return MCPTaskSnapshot(
-            MCPTask.from_data(raw),
+            observed,
             None if result is None else require_object(result, "Task result"),
         )
 
@@ -192,10 +225,17 @@ class MCPService:
             task.exception()
 
     def _task_peer(self, session_id: str, entry: MCPCapability) -> MCPConnectionPort:
-        if not self.tool_allowed(session_id, entry.server_id, entry.name, entry.generation):
+        server = self._sessions.get(session_id, {}).get(entry.server_id)
+        if (
+            server is None
+            or not server.configuration.enabled
+            or server.quarantined
+            or server.generation != entry.generation
+            or server.peer is None
+            or server.peer.state != "ready"
+        ):
             raise MCPFailure("configuration")
-        peer = self._sessions[session_id][entry.server_id].peer
-        assert peer is not None
+        peer = server.peer
         if peer.information is None or not peer.information.tasks:
             raise MCPFailure("unsupported")
         return peer

@@ -167,6 +167,9 @@ class SDKMCPConnection:
                             "server_timeout"
                             if request.method in {"tools/call", "tasks/get"}
                             and error.code == types.REQUEST_TIMEOUT
+                            else "task_unavailable"
+                            if request.method in {"tasks/get", "tasks/cancel"}
+                            and error.code == types.INVALID_PARAMS
                             else "remote"
                         )
                         result = MCPFailure(kind, rpc_code=error.code)

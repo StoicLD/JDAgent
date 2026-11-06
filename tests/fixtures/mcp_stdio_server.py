@@ -15,6 +15,7 @@ def main() -> None:
     task_polls = 0
     task_mode: str | None = None
     task_cancelled = False
+    task_created = False
     task_signal: str | None = None
     capabilities: dict[str, object] = {"tools": {}, "resources": {}, "prompts": {}}
     if len(sys.argv) > 2 and sys.argv[2] == "prompts_only":
@@ -31,6 +32,21 @@ def main() -> None:
         if "id" not in message:
             continue
         method = message["method"]
+        if method in {"tasks/get", "tasks/cancel"} and not task_created:
+            print(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": message["id"],
+                        "error": {
+                            "code": -32602,
+                            "message": "Task no longer exists in this process",
+                        },
+                    }
+                ),
+                flush=True,
+            )
+            continue
         result: dict[str, object]
         if method == "server/discover" and version == "2025-11-25":
             print(
@@ -258,6 +274,7 @@ def main() -> None:
                     {"type": "text", "text": "z" * message["params"]["arguments"]["fixture_size"]}
                 ]
             if name == "task" or message["params"].get("arguments", {}).get("fixture_task"):
+                task_created = True
                 task_mode = message["params"].get("arguments", {}).get("fixture_task")
                 task_signal = message["params"].get("arguments", {}).get("fixture_signal")
                 task_polls = 0

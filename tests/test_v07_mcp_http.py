@@ -6,6 +6,8 @@ import json
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx2
@@ -17,6 +19,31 @@ from mcp.types import CONNECTION_CLOSED
 from jdagent.adapters.mcp_transport import BoundedHttpTransport, ResponseLimitExceeded
 
 
+@dataclass
+class TaskPeerState:
+    """Independent remote state which survives individual client connections."""
+
+    status: str = "working"
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    ttl_ms: int | None = None
+    honor_cancel: bool = False
+    missing: bool = False
+    submissions: int = 0
+    queries: int = 0
+    cancellations: int = 0
+    task_id: str = "private-http-task"
+
+    def snapshot(self) -> dict[str, object]:
+        return {
+            "taskId": self.task_id,
+            "status": self.status,
+            "createdAt": self.created_at,
+            "lastUpdatedAt": self.created_at,
+            "ttlMs": self.ttl_ms,
+            "pollIntervalMs": 100,
+        }
+
+
 @contextmanager
 def wire_server(
     version: str,
@@ -26,6 +53,7 @@ def wire_server(
     expected_authorization: str | None = None,
     tool_error: str | None = None,
     requests: list[str] | None = None,
+    task_state: TaskPeerState | None = None,
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -60,6 +88,11 @@ def wire_server(
                     discover_gate[0].set()
                     discover_gate[1].wait(10)
                 result = {"supportedVersions": [version], "capabilities": {"tools": {}}}
+                if task_state is not None:
+                    result["capabilities"] = {
+                        "tools": {},
+                        "extensions": {"io.modelcontextprotocol/tasks": {}},
+                    }
                 if version == "2025-11-25":
                     response["error"] = {"code": -32601, "message": "Method not found"}
             elif method == "initialize":
@@ -75,7 +108,7 @@ def wire_server(
                     "ttlMs": 0,
                     "tools": [],
                 }
-                if tool_error is not None:
+                if tool_error is not None or task_state is not None:
                     result["tools"] = [{"name": "read", "inputSchema": {"type": "object"}}]
                 if message.get("params", {}).get("cursor") == "oversized":
                     length = 800_000 if encoding == "sse" else 2_000_000
@@ -86,6 +119,28 @@ def wire_server(
                             "inputSchema": {"type": "object"},
                         }
                     ]
+            elif method in {"tasks/get", "tasks/cancel"}:
+                assert task_state is not None
+                assert message["params"]["taskId"] == "private-http-task"
+                assert self.headers["Mcp-Name"] == "private-http-task"
+                assert self.headers["Mcp-Method"] == method
+                if method == "tasks/cancel":
+                    task_state.cancellations += 1
+                    if task_state.honor_cancel:
+                        task_state.status = "cancelled"
+                    result = {"resultType": "complete"}
+                else:
+                    task_state.queries += 1
+                    result = {**task_state.snapshot(), "resultType": "complete"}
+                    if task_state.status == "completed":
+                        result["result"] = {
+                            "resultType": "complete",
+                            "content": [{"type": "text", "text": "remote task result"}],
+                        }
+                    elif task_state.status == "failed":
+                        result["error"] = {"code": -32001, "message": "private-task-error"}
+                if task_state.missing:
+                    response["error"] = {"code": -32602, "message": "private-task-not-found"}
             else:
                 assert method == "tools/call"
                 length = 800_000 if encoding == "sse" else 2_000_000
@@ -93,6 +148,9 @@ def wire_server(
                 if tool_error is not None:
                     content = "timeout"
                 result = {"resultType": "complete", "content": [{"type": "text", "text": content}]}
+                if task_state is not None:
+                    task_state.submissions += 1
+                    result = {**task_state.snapshot(), "resultType": "task"}
                 if tool_error == "server_timeout":
                     response["error"] = {"code": -32001, "message": "private-timeout-text"}
             if "error" not in response:
