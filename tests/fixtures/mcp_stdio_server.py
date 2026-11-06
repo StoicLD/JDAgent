@@ -10,6 +10,9 @@ import time
 def main() -> None:
     version = sys.argv[1]
     list_calls = 0
+    capabilities: dict[str, object] = {"tools": {}, "resources": {}, "prompts": {}}
+    if len(sys.argv) > 2 and sys.argv[2] == "prompts_only":
+        capabilities = {"prompts": {}}
     task: dict[str, object] = {
         "taskId": "stdio-task",
         "status": "working",
@@ -42,20 +45,21 @@ def main() -> None:
             result = {
                 "supportedVersions": [version],
                 "capabilities": {
-                    "tools": {},
-                    "resources": {},
-                    "prompts": {},
+                    **capabilities,
                     "extensions": {"io.modelcontextprotocol/tasks": {}},
                 },
             }
         elif method == "initialize":
             result = {
                 "protocolVersion": version,
-                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+                "capabilities": capabilities,
                 "serverInfo": {"name": "independent-fixture", "version": "1"},
             }
         elif method == "tools/list":
+            assert "tools" in capabilities
             list_calls += 1
+            if len(sys.argv) > 2 and sys.argv[2] == "catalog_once" and list_calls > 2:
+                raise RuntimeError("Directory was fetched again without reconnecting")
             cursor = message.get("params", {}).get("cursor")
             if cursor == "remote-error":
                 print(
@@ -78,6 +82,60 @@ def main() -> None:
                 "ttlMs": 0,
                 "_meta": {"fixturePid": os.getpid(), "listCalls": list_calls},
             }
+            if len(sys.argv) > 2 and sys.argv[2].startswith("catalog"):
+                if cursor == "page2":
+                    result["tools"] = [
+                        {
+                            "name": "read",
+                            "description": "Read repository files 读取仓库文件",
+                            "inputSchema": {"type": "object"},
+                        }
+                    ]
+                else:
+                    catalog_tools: list[dict[str, object]] = [
+                        {
+                            "name": "search",
+                            "description": "Search repository code 搜索仓库代码",
+                            "inputSchema": {"type": "object"},
+                        },
+                        {
+                            "name": "write",
+                            "description": "Write repository files",
+                            "inputSchema": {"type": "object"},
+                        },
+                    ]
+                    result["tools"] = catalog_tools
+                    result["nextCursor"] = "page2"
+                    if sys.argv[2] == "catalog_invalid":
+                        catalog_tools.extend(
+                            [
+                                {
+                                    "name": "broken",
+                                    "description": "invalid schema",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {"x": {"type": "nonsense"}},
+                                    },
+                                },
+                                {
+                                    "name": "external_ref",
+                                    "description": "external schema",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "$ref": "https://must-not-fetch.invalid/schema",
+                                    },
+                                },
+                            ]
+                        )
+                        catalog_tools.extend(
+                            [
+                                {"name": "ambiguous", "inputSchema": {"type": "object"}},
+                                {
+                                    "name": "ambiguous",
+                                    "inputSchema": {"type": "object", "required": ["x"]},
+                                },
+                            ]
+                        )
             if cursor == "oversized":
                 result["tools"] = [
                     {
@@ -118,10 +176,10 @@ def main() -> None:
             result = {"resultType": "complete", "content": [{"type": "text", "text": "ok"}]}
             if name == "task":
                 assert version == "2026-07-28"
-                capabilities = message["params"]["_meta"][
+                client_capabilities = message["params"]["_meta"][
                     "io.modelcontextprotocol/clientCapabilities"
                 ]
-                assert "io.modelcontextprotocol/tasks" in capabilities["extensions"]
+                assert "io.modelcontextprotocol/tasks" in client_capabilities["extensions"]
                 result = {**task, "resultType": "task"}
             if name == "spawn_child":
                 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])

@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType, RuntimePayload
+from jdagent.domain.json import JsonObject
+from jdagent.domain.mcp import MCPConnectionState, MCPMethod, MCPPeerInformation
 from jdagent.domain.model import ModelCapabilities, ModelEvent, ModelRequest
 from jdagent.domain.tools import (
     ApprovalOutcome,
@@ -21,6 +23,22 @@ class ModelPort(Protocol):
     def capabilities(self) -> ModelCapabilities: ...
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]: ...
+
+
+class MCPConnectionPort(Protocol):
+    """A Session-owned peer; all protocol types and secrets remain in its adapter."""
+
+    @property
+    def state(self) -> MCPConnectionState: ...
+
+    @property
+    def information(self) -> MCPPeerInformation | None: ...
+
+    async def connect(self) -> MCPPeerInformation: ...
+
+    async def request(self, method: MCPMethod, params: JsonObject) -> JsonObject: ...
+
+    async def aclose(self) -> bool: ...
 
 
 class SessionPort(Protocol):

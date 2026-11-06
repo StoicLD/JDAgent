@@ -29,6 +29,7 @@ from jdagent.domain.events import (
     TurnRetrievalRecordedPayload,
     UserMessagePayload,
 )
+from jdagent.domain.mcp import MCPCapabilityKind, MCPCatalogView, MCPSearchResult, MCPServerStatus
 from jdagent.domain.tools import ToolExecutionContext
 from jdagent.eventing import EventJournal
 from jdagent.knowledge.catalog import KnowledgeCatalog
@@ -41,6 +42,8 @@ from jdagent.knowledge.ptk import (
     RetrievalOutcome,
     empty_prepared_knowledge,
 )
+from jdagent.mcp_configuration import MCPServerConfiguration
+from jdagent.mcp_service import MCPService
 from jdagent.memory_service import MemoryService
 from jdagent.observability import TraceProjection
 from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
@@ -54,6 +57,8 @@ class AgentLoopFactory(Protocol):
     def context_for(self, session_id: str) -> ContextService | None: ...
 
     def prepare_turn(self) -> None: ...
+
+    def mcp_configuration(self) -> tuple[MCPServerConfiguration, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +138,7 @@ class TurnCoordinator:
         knowledge_backups: Path | None = None,
         knowledge_index: Path | None = None,
         memory: MemoryService | None = None,
+        mcp: MCPService | None = None,
     ) -> None:
         self._session = session
         self._workspace = workspace
@@ -143,13 +149,17 @@ class TurnCoordinator:
         self._knowledge_backups = knowledge_backups
         self._knowledge_index = knowledge_index
         self.memory = memory
+        self._mcp = mcp
         self.after_output: Callable[[], None] = lambda: None
         self._owned_sessions: set[str] = set()
         self._running: set[str] = set()
         self._compacting: set[str] = set()
         self._pending_compactions: set[str] = set()
+        self._mcp_operations: set[str] = set()
 
     async def aclose(self) -> None:
+        if self._mcp is not None:
+            await self._mcp.aclose()
         for session_id in tuple(self._owned_sessions):
             await self._session.release(session_id)
             self._owned_sessions.discard(session_id)
@@ -167,6 +177,8 @@ class TurnCoordinator:
         return await service.preview_window()
 
     async def compact(self, session_id: str) -> str:
+        if session_id in self._mcp_operations:
+            raise SessionError(SessionErrorCode.BUSY, "session_busy: MCP operation running")
         if session_id in self._running or session_id in self._compacting:
             self._pending_compactions.add(session_id)
             service = self._loop_factory.context_for(session_id)
@@ -190,13 +202,75 @@ class TurnCoordinator:
             self._pending_compactions.discard(session_id)
 
     async def release_session(self, session_id: str) -> None:
-        if session_id in self._running or session_id in self._compacting:
+        if (
+            session_id in self._running
+            or session_id in self._compacting
+            or session_id in self._mcp_operations
+        ):
             raise ValueError("Cannot release a running session")
+        if self._mcp is not None:
+            await self._mcp.release_session(session_id)
         await self._session.release(session_id)
         self._owned_sessions.discard(session_id)
         if self.memory is not None:
             self.memory.active_sessions.discard(session_id)
             self.memory.views.pop(session_id, None)
+
+    def mcp_status(self, session_id: str = "") -> tuple[MCPServerStatus, ...]:
+        """Read only local state; never connect or reload configuration here."""
+        if self._mcp is None:
+            return ()
+        return self._mcp.status(session_id, self._loop_factory.mcp_configuration())
+
+    async def mcp_list(
+        self, session_id: str, *, server_id: str | None = None, refresh: bool = False
+    ) -> MCPCatalogView:
+        """Discover an existing Session's granted capabilities while it is idle."""
+        if self._mcp is None:
+            return MCPCatalogView((), ())
+        if (
+            session_id in self._running
+            or session_id in self._compacting
+            or session_id in self._mcp_operations
+        ):
+            raise SessionError(SessionErrorCode.BUSY, "session_busy: operation already running")
+        self._mcp_operations.add(session_id)
+        try:
+            await asyncio.to_thread(self._loop_factory.prepare_turn)
+            await self._session.acquire(session_id)
+            self._owned_sessions.add(session_id)
+            journal = await EventJournal.open(self._session, session_id, require_existing=True)
+            initial = journal.events[0].payload
+            if not isinstance(initial, SessionStartedPayload) or (
+                self._workspace_identity is not None
+                and initial.workspace_identity != self._workspace_identity
+            ):
+                raise ValueError("MCP Session belongs to a different workspace")
+            await self._mcp.configure(session_id, self._loop_factory.mcp_configuration())
+            if refresh:
+                await self._mcp.refresh(session_id, server_id=server_id)
+            return await self._mcp.capabilities(session_id, server_id=server_id)
+        finally:
+            self._mcp_operations.discard(session_id)
+
+    async def mcp_search(
+        self,
+        session_id: str,
+        query: str,
+        *,
+        kind: MCPCapabilityKind = "tool",
+        server_id: str | None = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> MCPSearchResult:
+        """Find granted capabilities through the same idle management boundary."""
+        MCPService.validate_search(query, offset=offset, limit=limit)
+        await self.mcp_list(session_id, server_id=server_id)
+        if self._mcp is None:
+            return MCPSearchResult((), (), None, "No MCP Servers configured")
+        return self._mcp.search(
+            session_id, query, kind=kind, server_id=server_id, offset=offset, limit=limit
+        )
 
     async def send(
         self,
@@ -209,7 +283,11 @@ class TurnCoordinator:
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
         identity = session_id or new_session_id or str(uuid4())
-        if identity in self._running or identity in self._compacting:
+        if (
+            identity in self._running
+            or identity in self._compacting
+            or identity in self._mcp_operations
+        ):
             raise SessionError(SessionErrorCode.BUSY, "session_busy: operation already running")
         self._running.add(identity)
         try:
@@ -271,6 +349,8 @@ class TurnCoordinator:
                     workspace_identity=self._workspace_identity,
                 ),
             )
+        if self._mcp is not None:
+            await self._mcp.configure(actual_session_id, self._loop_factory.mcp_configuration())
         user_event = await journal.record(
             turn_id,
             RuntimeEventType.USER_MESSAGE,

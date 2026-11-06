@@ -11,6 +11,7 @@ from jdagent.adapters.deepseek import DeepSeekModelPort
 from jdagent.adapters.fake import FakeModelPort
 from jdagent.adapters.jsonl_session import JsonlSession
 from jdagent.adapters.langchain_model import LangChainModelPort
+from jdagent.adapters.mcp_connection import SDKMCPConnection
 from jdagent.adapters.memory import InMemoryContextObjects
 from jdagent.application.coordinator import TurnCoordinator
 from jdagent.configuration import ResolvedConfiguration, resolve_configuration
@@ -22,6 +23,7 @@ from jdagent.core.contracts import LoopLimits, ModelEventObserver, TurnRunner
 from jdagent.core.loop import AgentLoop
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.json import JsonObject
+from jdagent.domain.mcp import MCPDirectoryLimits
 from jdagent.domain.model import (
     ModelRequest,
     ModelSettings,
@@ -34,6 +36,8 @@ from jdagent.instructions import TurnInstructions
 from jdagent.knowledge.context_references import KnowledgeReferences
 from jdagent.knowledge.embedding import OpenAICompatibleEmbedding
 from jdagent.maintenance import MemoryMaintenance, PrioritizedModel
+from jdagent.mcp_configuration import MCPServerConfiguration
+from jdagent.mcp_service import MCPService
 from jdagent.memory_service import MemoryService
 from jdagent.memory_store import MemoryStore
 from jdagent.model_profiles import model_window
@@ -95,6 +99,7 @@ class RuntimeOptions:
     include_tools: bool = True
     allow_local_index: bool = False
     provider_options: JsonObject = field(default_factory=_empty_json_object)
+    mcp_directory_limits: MCPDirectoryLimits = field(default_factory=MCPDirectoryLimits)
 
     def __post_init__(self) -> None:
         if self.max_model_calls <= 0:
@@ -165,6 +170,10 @@ class ConfiguredLoopFactory:
     maintenance: MemoryMaintenance | None = None
     model_adapter: str = "native"
     runtime_engine: str = "native"
+    mcp_servers: tuple[MCPServerConfiguration, ...] = ()
+
+    def mcp_configuration(self) -> tuple[MCPServerConfiguration, ...]:
+        return self.mcp_servers
 
     def prepare_turn(self) -> None:
         if self.reload_configuration is None:
@@ -208,6 +217,7 @@ class ConfiguredLoopFactory:
         )
         self.global_instructions = config.global_instructions
         self.instructions_max_tokens = config.instructions_max_tokens
+        self.mcp_servers = config.mcp_servers
         if self.maintenance is not None:
             self.maintenance.enabled = config.memory_auto_consolidation
             self.maintenance.budget = budget
@@ -446,6 +456,7 @@ def build_runtime(
         maintenance=maintenance,
         model_adapter=configuration.model_adapter,
         runtime_engine=configuration.runtime_engine,
+        mcp_servers=configuration.mcp_servers,
         runtime_limits=LoopLimits(options.max_model_calls, options.max_tool_calls)
         if runtime_options is not None
         else None,
@@ -464,6 +475,7 @@ def build_runtime(
             else None
         ),
         memory=memory,
+        mcp=MCPService(SDKMCPConnection, limits=options.mcp_directory_limits),
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

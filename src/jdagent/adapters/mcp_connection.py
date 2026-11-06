@@ -4,7 +4,7 @@ import asyncio
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import cast
 
 import httpx2
 from mcp import MCPError, types
@@ -25,16 +25,15 @@ from jdagent.domain.json import JsonObject, normalize_json, require_object
 from jdagent.domain.mcp import (
     MCPConnectionState,
     MCPFailure,
+    MCPMethod,
     MCPPeerInformation,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 
-MCPMethod = Literal["tools/list", "resources/list", "resources/templates/list", "prompts/list"]
-
 
 @dataclass(slots=True)
 class _Request:
-    method: MCPMethod
+    method: MCPMethod | None
     params: JsonObject
     result: asyncio.Future[JsonObject | MCPFailure]
 
@@ -66,6 +65,15 @@ class SDKMCPConnection:
 
     async def request(self, method: MCPMethod, params: JsonObject) -> JsonObject:
         """Return an SDK-validated result or a safe failure; never retry a send."""
+        return await self._request(method, params)
+
+    async def connect(self) -> MCPPeerInformation:
+        """Negotiate capabilities without assuming the peer offers Tools."""
+        await self._request(None, {})
+        assert self._information is not None
+        return self._information
+
+    async def _request(self, method: MCPMethod | None, params: JsonObject) -> JsonObject:
         if self._state in ("unavailable", "closed") or self._closing:
             raise MCPFailure("connection")
         if self._pending is not None:
@@ -250,6 +258,8 @@ class SDKMCPConnection:
     async def _send(self, session: ClientSession, request: _Request) -> JsonObject:
         # Avoid ClientSession.list_tools(): its unbounded schema cache would be
         # a third cache outside the host's directory/loaded-definition budgets.
+        if request.method is None:
+            return {}
         wire = {"method": request.method, "params": request.params}
         match request.method:
             case "tools/list":
