@@ -1,8 +1,27 @@
 """Narrow external previews without changing originals or execution facts."""
 
+import hashlib
 import json
 
-from jdagent.domain.json import normalize_json, require_object
+from jdagent.domain.json import JsonObject, JsonValue, normalize_json, require_object
+
+
+def source_preview(source: JsonValue) -> JsonValue:
+    """Bound displayed identities; full origins remain in durable invocation facts."""
+    if not isinstance(source, dict):
+        return source
+    projected: JsonObject = {}
+    shortened = False
+    for key, value in source.items():
+        if isinstance(value, str) and len(encoded := value.encode("utf-8")) > 256:
+            projected[f"{key}_prefix"] = encoded[:128].decode("utf-8", errors="ignore")
+            projected[f"{key}_sha256"] = hashlib.sha256(encoded).hexdigest()
+            shortened = True
+        else:
+            projected[key] = value
+    if shortened:
+        projected["details_in_history"] = True
+    return projected
 
 
 def narrow_preview(content: str) -> str:

@@ -30,6 +30,7 @@ from jdagent.domain.tools import (
 )
 from jdagent.mcp_content import MCPContent, project_content
 from jdagent.mcp_definitions import definition_digest, model_tool_name
+from jdagent.mcp_projection import source_preview
 from jdagent.mcp_service import MCPService
 from jdagent.mcp_task_execution import MCPTaskExecution
 from jdagent.ports import ContextObjects, RuntimeJournal
@@ -229,9 +230,11 @@ class MCPExecution:
         end = min(len(content), offset + limit)
         return ToolOutcome(
             data={
-                "source": record.result.metadata.get("tool_origin")
-                if isinstance(record, MCPInvocationFinishedPayload)
-                else record.outcome.data.get("source"),
+                "source": source_preview(
+                    record.result.metadata.get("tool_origin")
+                    if isinstance(record, MCPInvocationFinishedPayload)
+                    else record.outcome.data.get("source")
+                ),
                 "original": {
                     "session_id": context.session_id,
                     "sha256": digest,
@@ -686,7 +689,7 @@ class MCPExecution:
         encoded = _encode(raw)
         digest = await self._objects.put(encoded)
         data: JsonObject = {
-            "source": normalize_json(asdict(origin)),
+            "source": source_preview(normalize_json(asdict(origin))),
             "original": {"session_id": context.session_id, "sha256": digest, "bytes": len(encoded)},
             "preview": raw if content is None else content.preview,
             "preview_complete": True,
