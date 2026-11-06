@@ -179,6 +179,19 @@ class MCPTaskManagement:
                             error_code=ToolErrorCode.UNSUPPORTED,
                             message="MCP Task requires unsupported client input",
                         )
+        except asyncio.CancelledError:
+            if execution.final_result is None:
+                raise
+            # The reply may already be in hand while its observation is being
+            # committed. Keep that result before returning local cancellation.
+            interruption = ToolOutcome(
+                data=execution.details,
+                completed=False,
+                cancelled=True,
+                requires_stop=True,
+                error_code=ToolErrorCode.CANCELLED,
+                message="MCP management waiting cancelled; remote result was received",
+            )
         except (MCPFailure, TimeoutError) as error:
             reason = error.kind if isinstance(error, MCPFailure) else "client_timeout"
             interruption = ToolOutcome(

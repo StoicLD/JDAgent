@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+import os
 import sys
+import threading
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -95,6 +97,67 @@ async def leave_running_task(config: ResolvedConfiguration) -> tuple[str, str]:
         return turn.session_id, tasks[0].task_ref
     finally:
         await runtime.aclose()
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+def test_management_cancellation_after_terminal_receipt_preserves_result_across_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str
+) -> None:
+    state = TaskPeerState()
+    with wire_server("2026-07-28", "json", task_state=state) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            state.status = "completed"
+            arrived, release = threading.Event(), threading.Event()
+            original_fsync = os.fsync
+            path = config.session_directory / f"{session_id}.jsonl"
+
+            def delayed_fsync(descriptor: int) -> None:
+                original_fsync(descriptor)
+                last = json.loads(path.read_bytes().splitlines()[-1])
+                if (
+                    not arrived.is_set()
+                    and last["event_type"] == "mcp_task_observed"
+                    and last["payload"].get("status") == "completed"
+                ):
+                    arrived.set()
+                    assert release.wait(5)
+
+            monkeypatch.setattr(os, "fsync", delayed_fsync)
+            model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+            runtime = build_runtime(
+                config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+            )
+            querying = asyncio.create_task(runtime.coordinator.mcp_task(session_id, task_ref))
+            try:
+                assert await asyncio.to_thread(arrived.wait, 5)
+                querying.cancel()
+                await asyncio.sleep(0)
+                querying.cancel()
+                release.set()
+                outcome = await querying
+                assert outcome.cancelled and outcome.requires_stop
+                views = await runtime.coordinator.mcp_tasks(session_id)
+                assert views[0].status == "completed" and views[0].result_available
+            finally:
+                release.set()
+                await asyncio.gather(querying, return_exceptions=True)
+                await runtime.aclose()
+            requests = (state.queries, state.cancellations, state.submissions)
+            reopened = build_runtime(
+                config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+            )
+            try:
+                result = await reopened.coordinator.mcp_task(session_id, task_ref, action="result")
+                assert result.error_code is None and "remote task result" in json.dumps(result.data)
+                assert (state.queries, state.cancellations, state.submissions) == requests
+                assert not model.requests
+            finally:
+                await reopened.aclose()
+
+        asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
