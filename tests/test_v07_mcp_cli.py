@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -10,7 +11,8 @@ import pytest
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 
-from jdagent.adapters.fake import FakeModelPort
+from jdagent.adapters.fake import FakeApproval, FakeModelPort
+from jdagent.adapters.scripted_terminal import CapturePresenter, ScriptedTerminal
 from jdagent.adapters.terminal import PromptToolkitTerminal
 from jdagent.application.approval import ScopedApproval
 from jdagent.application.interactive import (
@@ -19,6 +21,7 @@ from jdagent.application.interactive import (
     InteractiveApplication,
     InteractiveContext,
     UiEvent,
+    parse_user_action,
 )
 from jdagent.application.session_catalog import SessionCatalog
 from jdagent.composition import build_runtime
@@ -30,7 +33,9 @@ from jdagent.domain.events import (
     RuntimeEventType,
 )
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
-from jdagent.domain.tools import ToolCall
+from jdagent.domain.tools import ApprovalDecision, ToolCall
+from tests.test_v07_mcp_http import TaskPeerState, wire_server
+from tests.test_v07_mcp_task_management import leave_running_task, task_configuration
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
@@ -149,6 +154,220 @@ def test_status_compaction_cancel_and_exit_do_not_consume_the_approval_answer(
                 await runtime.aclose()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("catalog_case", ["catalog_once", "catalog_invalid"])
+def test_cli_can_discover_and_refresh_three_capability_kinds_before_any_prompt(
+    tmp_path: Path, engine: str, catalog_case: str
+) -> None:
+    paths = DataPaths.for_workspace(
+        tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
+    )
+    paths.user_config_file.parent.mkdir(parents=True)
+    peer = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
+    paths.user_config_file.write_text(
+        "[memory]\nauto_consolidation = false\n"
+        '[mcp.servers.docs]\nenabled = true\ntransport = "stdio"\n'
+        f"command = {json.dumps(sys.executable)}\n"
+        f"args = {json.dumps([str(peer), '2026-07-28', catalog_case])}\n"
+        'tools = ["read", "broken"]\nresources = true\nprompts = true\n',
+        encoding="utf-8",
+    )
+    config = resolve_configuration(
+        tmp_path,
+        CliOverrides(provider="fake", runtime_engine=engine),
+        data_paths=paths,
+        environment={},
+    )
+    model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+
+    async def scenario() -> None:
+        runtime = build_runtime(
+            config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+        )
+        presenter = CapturePresenter()
+        terminal = ScriptedTerminal(
+            parse_user_action(command)
+            for command in (
+                "/mcp status",
+                "/mcp list",
+                "/mcp list docs",
+                "/mcp refresh docs",
+                "/mcp tasks",
+                "/exit",
+            )
+        )
+        catalog = SessionCatalog(
+            session=runtime.session,
+            discovery=runtime.session,
+            workspace_identity=workspace_identity(tmp_path),
+        )
+        app = InteractiveApplication(
+            terminal=terminal,
+            presenter=presenter,
+            coordinator=runtime.coordinator,
+            catalog=catalog,
+            session=runtime.session,
+            context=InteractiveContext("fake", "fake", tmp_path, "ask"),
+        )
+        try:
+            assert await app.run() == 0
+            text = "\n".join(event.message for event in presenter.events)
+            assert 'kind=tool server=docs name="read"' in text
+            assert 'kind=resource server=docs name="manual" uri="docs://manual"' in text
+            assert 'kind=prompt server=docs name="explain"' in text
+            assert "refreshed" in text and "No registered MCP Tasks" in text
+            assert 'name="write"' not in text and not model.requests
+            if catalog_case == "catalog_invalid":
+                assert 'rejected kind=tool name="broken" reason=unsupported_input_schema' in text
+            sessions = await catalog.list_sessions()
+            assert len(sessions) == 1
+            events = [e async for e in runtime.session.read(sessions[0].session_id)]
+            assert [e.event_type for e in events] == [RuntimeEventType.SESSION_STARTED]
+        finally:
+            await runtime.aclose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("action", ["query", "cancel"])
+def test_cli_manages_a_reopened_original_task_without_starting_an_agent_turn(
+    tmp_path: Path, engine: str, action: str
+) -> None:
+    state = TaskPeerState()
+    with wire_server("2026-07-28", "json", task_state=state) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            queries, cancellations = state.queries, state.cancellations
+            if action == "query":
+                state.status = "completed"
+            else:
+                state.honor_cancel = True
+            model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+            runtime = build_runtime(
+                config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+            )
+            commands = ["/mcp tasks", f"/mcp task {task_ref} {action}"]
+            if action == "query":
+                commands.append(f"/mcp task {task_ref} result")
+            commands += ["/mcp tasks", "/exit"]
+            presenter = CapturePresenter()
+            app = InteractiveApplication(
+                terminal=ScriptedTerminal(parse_user_action(command) for command in commands),
+                presenter=presenter,
+                coordinator=runtime.coordinator,
+                catalog=SessionCatalog(
+                    session=runtime.session,
+                    discovery=runtime.session,
+                    workspace_identity=workspace_identity(tmp_path),
+                ),
+                session=runtime.session,
+                context=InteractiveContext("fake", "fake", tmp_path, "ask"),
+                initial_session_id=session_id,
+            )
+            try:
+                assert await app.run() == 0
+                text = "\n".join(e.message for e in presenter.events)
+                assert f"task={task_ref}" in text
+                assert (
+                    "remote task result" in text
+                    if action == "query"
+                    else "status=cancelled" in text
+                )
+                assert state.submissions == 1 and state.queries == queries + 1
+                assert state.cancellations == cancellations + (action == "cancel")
+                assert "private-http-task" not in text and not model.requests
+                events = [e async for e in runtime.session.read(session_id)]
+                assert sum(e.event_type is RuntimeEventType.USER_MESSAGE for e in events) == 1
+            finally:
+                await runtime.aclose()
+
+        asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("finish", ["cancel", "exit"])
+def test_remote_task_management_itself_remains_controllable(
+    tmp_path: Path, engine: str, finish: str
+) -> None:
+    state = TaskPeerState()
+    arrived, release = threading.Event(), threading.Event()
+    release.set()
+    with wire_server(
+        "2026-07-28", "json", task_state=state, task_query_gate=(arrived, release)
+    ) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            arrived.clear()
+            release.clear()
+            cancellations, queries = state.cancellations, state.queries
+            model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+            updates: asyncio.Queue[UiEvent] = asyncio.Queue()
+
+            class Presenter:
+                async def publish(self, event: UiEvent) -> None:
+                    updates.put_nowait(event)
+
+            async def until(text: str) -> None:
+                async with asyncio.timeout(5):
+                    while text not in (await updates.get()).message:
+                        pass
+
+            with create_pipe_input() as pipe:
+                terminal = PromptToolkitTerminal(
+                    history_file=tmp_path / "history", input=pipe, output=DummyOutput()
+                )
+                runtime = build_runtime(
+                    config, ScopedApproval(terminal), model_wrapper=lambda _: model
+                )
+                catalog = SessionCatalog(
+                    session=runtime.session,
+                    discovery=runtime.session,
+                    workspace_identity=workspace_identity(tmp_path),
+                )
+                app = InteractiveApplication(
+                    terminal=terminal,
+                    presenter=Presenter(),
+                    coordinator=runtime.coordinator,
+                    catalog=catalog,
+                    session=runtime.session,
+                    context=InteractiveContext("fake", "fake", tmp_path, "ask"),
+                    initial_session_id=session_id,
+                )
+                running = asyncio.create_task(app.run())
+                try:
+                    await until(InteractionState.IDLE.value)
+                    pipe.send_text(f"/mcp task {task_ref} query\n")
+                    assert await asyncio.to_thread(arrived.wait, 5)
+                    for command, response in (
+                        ("/mcp status", "server=docs connection=ready"),
+                        ("/context-window", "input_budget="),
+                        ("/compact", "/compact requires an idle session"),
+                        (f"/mcp task {task_ref} cancel", "Session is busy"),
+                    ):
+                        pipe.send_text(command + "\n")
+                        await until(response)
+                    pipe.send_text("/" + finish + "\n")
+                    if finish == "cancel":
+                        await until(InteractionState.IDLE.value)
+                        pipe.send_text("/exit\n")
+                    assert await asyncio.wait_for(running, 5) == 0
+                    assert state.queries == queries + 1 and state.cancellations == cancellations
+                    assert state.submissions == 1 and not model.requests
+                finally:
+                    release.set()
+                    if not running.done():
+                        pipe.send_bytes(b"\x04")
+                    await asyncio.gather(running, return_exceptions=True)
+                    await runtime.aclose()
+
+        asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])

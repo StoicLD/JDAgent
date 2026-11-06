@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shlex
 from asyncio import CancelledError
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Protocol, TypeAlias, TypeVar, cast
 from uuid import uuid4
 
 from jdagent.application.coordinator import CoordinatedTurn, TurnCoordinator
@@ -24,8 +25,11 @@ from jdagent.core.loop import CancellationToken
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.errors import SessionError, StopReason
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType
+from jdagent.domain.json import normalize_json, require_object
+from jdagent.domain.mcp import MCPServerStatus
 from jdagent.knowledge.catalog import KnowledgeCatalog
 from jdagent.knowledge.errors import KnowledgeError
+from jdagent.mcp_task_management import MCPTaskAction
 from jdagent.observability import TraceProjection
 from jdagent.ports import SessionPort
 from jdagent.tools.command_output import CommandLogs
@@ -90,6 +94,7 @@ class InteractionState(StrEnum):
     RUNNING_TOOL = "running_tool"
     CANCELLING = "cancelling"
     COMPACTING = "compacting"
+    MCP_OPERATION = "mcp_operation"
     EXITING = "exiting"
 
 
@@ -182,7 +187,9 @@ _HELP = (
     "/help /status /new /sessions /resume <name|id> /rename <name> "
     "/permissions [revoke <rule-id>] /knowledge status|bindings|sources /trace /exit\n"
     "/logs clear (clear current session command output)\n"
-    "/compact /context-window /mcp status /cancel\n"
+    "/compact /context-window /cancel\n"
+    "/mcp status|list [server|*] [offset]|refresh [server]|tasks [offset]\n"
+    "/mcp task <task-ref> [query|result|cancel]\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
@@ -194,6 +201,19 @@ def _session_row(item: SessionSummary, workspace: Path) -> str:
     return (
         f"{item.name or '(unreadable)'} {item.short_id} {updated} "
         f"workspace={location} {item.status}"
+    )
+
+
+def _mcp_status_text(servers: Sequence[MCPServerStatus]) -> str:
+    return (
+        "\n".join(
+            f"server={server.server_id} connection={server.connection} "
+            f"directory={server.directory} protocol={server.protocol_version or 'unknown'} "
+            f"entries={server.entry_count} rejected={len(server.rejected)} "
+            f"reason={server.reason or 'none'}"
+            for server in servers
+        )
+        or "No MCP Servers configured"
     )
 
 
@@ -437,7 +457,7 @@ class InteractiveApplication:
                     await self._presenter.publish(
                         UiEvent(UiEventKind.INFO, "No history to compact")
                     )
-                elif self.turn_running or self._state is InteractionState.COMPACTING:
+                elif self._state is not InteractionState.IDLE:
                     await self._presenter.publish(
                         UiEvent(
                             UiEventKind.INFO,
@@ -497,20 +517,7 @@ class InteractiveApplication:
                         )
                     )
             elif action.name is CommandName.MCP:
-                if action.arguments not in {(), ("status",)}:
-                    raise CommandError("Usage: /mcp status")
-                servers = self._coordinator.mcp_status(self._session_id or "")
-                message = (
-                    "\n".join(
-                        f"server={server.server_id} connection={server.connection} "
-                        f"directory={server.directory} "
-                        f"protocol={server.protocol_version or 'unknown'} "
-                        f"entries={server.entry_count} reason={server.reason or 'none'}"
-                        for server in servers
-                    )
-                    or "No MCP Servers configured"
-                )
-                await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
+                await self._mcp_command(action.arguments)
             elif action.name is CommandName.HELP:
                 self._require_arity(action.arguments, 0, "/help")
                 await self._presenter.publish(UiEvent(UiEventKind.INFO, _HELP))
@@ -601,6 +608,141 @@ class InteractiveApplication:
         except (CommandError, KnowledgeError, OSError, SessionError, ValueError) as error:
             await self._presenter.publish(UiEvent(UiEventKind.ERROR, str(error)))
         return False
+
+    async def _mcp_command(self, arguments: tuple[str, ...]) -> None:
+        if arguments in {(), ("status",)}:
+            await self._presenter.publish(
+                UiEvent(
+                    UiEventKind.INFO,
+                    _mcp_status_text(self._coordinator.mcp_status(self._session_id or "")),
+                )
+            )
+            return
+        mode = arguments[0]
+        if not (
+            mode == "list"
+            and 1 <= len(arguments) <= 3
+            or mode == "refresh"
+            and 1 <= len(arguments) <= 2
+            or mode == "tasks"
+            and 1 <= len(arguments) <= 2
+            or mode == "task"
+            and 2 <= len(arguments) <= 3
+        ):
+            raise CommandError(
+                "Usage: /mcp status|list [server|*] [offset]|refresh [server]|tasks [offset]"
+                "|task <ref> [query|result|cancel]"
+            )
+        server = arguments[1] if len(arguments) >= 2 and arguments[1] != "*" else None
+        reference = arguments[1] if len(arguments) >= 2 else ""
+        task_action = arguments[2] if mode == "task" and len(arguments) == 3 else "query"
+        if task_action not in {"query", "result", "cancel"}:
+            raise CommandError("Usage: /mcp task <task-ref> [query|result|cancel]")
+        try:
+            offset = (
+                int(arguments[2])
+                if mode == "list" and len(arguments) == 3
+                else int(arguments[1])
+                if mode == "tasks" and len(arguments) == 2
+                else 0
+            )
+        except ValueError:
+            raise CommandError("MCP list offset must be a non-negative integer") from None
+        if offset < 0:
+            raise CommandError("MCP list offset must be a non-negative integer")
+
+        async def perform() -> str:
+            if mode == "task":
+                outcome = await self._coordinator.mcp_task(
+                    self._require_session(), reference, action=cast(MCPTaskAction, task_action)
+                )
+                return json.dumps(asdict(outcome), ensure_ascii=False, sort_keys=True)
+            if mode == "tasks":
+                tasks = (
+                    ()
+                    if self._session_id is None
+                    else await self._coordinator.mcp_tasks(self._session_id)
+                )
+                if not tasks:
+                    return "No registered MCP Tasks"
+                page = tasks[offset : offset + 50]
+                next_offset = offset + len(page) if offset + len(page) < len(tasks) else None
+                return (
+                    f"total={len(tasks)} offset={offset} next_offset={next_offset}\n"
+                    + "\n".join(
+                        f"task={task.task_ref} server={task.server_id} "
+                        f"name={json.dumps(task.raw_name[:512], ensure_ascii=False)} "
+                        f"status={task.status} result_available={task.result_available} "
+                        f"expired={task.reference_expired}"
+                        + (" name_truncated=true" if len(task.raw_name) > 512 else "")
+                        for task in page
+                    )
+                )
+            if self._session_id is None:
+                self._session_id = await self._coordinator.create_session()
+                self._session_name = f"session-{self._session_id[:8]}"
+            view = await self._coordinator.mcp_list(
+                self._session_id, server_id=server, refresh=mode == "refresh"
+            )
+            rejected = tuple(
+                (status.server_id, item) for status in view.servers for item in status.rejected
+            )
+            total = len(view.entries) + len(rejected)
+            page = view.entries[offset : offset + 50]
+            rejected_page = rejected[
+                max(0, offset - len(view.entries)) : max(0, offset + 50 - len(view.entries))
+            ]
+            next_offset = offset + 50 if offset + 50 < total else None
+            lines = [
+                ("refreshed; " if mode == "refresh" else "")
+                + f"complete={view.complete} total={total} "
+                f"offset={offset} next_offset={next_offset}",
+                _mcp_status_text(view.servers),
+            ]
+            for entry in page:
+                name = entry.name[:512]
+                definition = require_object(
+                    normalize_json(json.loads(entry.definition_json)), "MCP definition"
+                )
+                uri = (
+                    definition.get("uri")
+                    if entry.kind == "resource"
+                    else definition.get("uriTemplate")
+                )
+                lines.append(
+                    f"kind={entry.kind} server={entry.server_id} "
+                    f"name={json.dumps(name, ensure_ascii=False)}"
+                    + (
+                        f" uri={json.dumps(uri[:512], ensure_ascii=False)}"
+                        if isinstance(uri, str)
+                        else ""
+                    )
+                    + (" uri_truncated=true" if isinstance(uri, str) and len(uri) > 512 else "")
+                    + (" name_truncated=true" if len(name) < len(entry.name) else "")
+                )
+            for server_id, item in rejected_page:
+                lines.append(
+                    f"rejected kind={item.kind} "
+                    f"name={json.dumps(item.name[:512], ensure_ascii=False)} "
+                    f"reason={item.reason} server={server_id}"
+                    + (" name_truncated=true" if len(item.name) > 512 else "")
+                )
+            return "\n".join(lines)
+
+        await self._set_state(InteractionState.MCP_OPERATION)
+        operation = asyncio.create_task(perform())
+        try:
+            message = await self._wait_with_controls(operation)
+            await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
+        except CancelledError:
+            await self._presenter.publish(
+                UiEvent(
+                    UiEventKind.INFO,
+                    "MCP management wait cancelled; remote work may still be running",
+                )
+            )
+        finally:
+            await self._set_state(InteractionState.IDLE)
 
     async def _prepare_resume(self, session_id: str) -> str:
         if self._recovery is None:

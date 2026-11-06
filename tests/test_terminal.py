@@ -20,6 +20,16 @@ from jdagent.domain.model import TextDelta
 from jdagent.domain.tools import ApprovalDecision, ApprovalRequest, RiskLevel
 
 
+def test_status_output_preserves_literal_markup_from_external_mcp_names() -> None:
+    output = StringIO()
+    presenter = RichPresenter(
+        Console(file=output, force_terminal=False, color_system=None, width=200)
+    )
+    text = 'kind=prompt server=docs name="[red]external[/red]"'
+    asyncio.run(presenter.publish(UiEvent(UiEventKind.INFO, text)))
+    assert text in output.getvalue()
+
+
 def test_prompt_toolkit_terminal_returns_typed_command(tmp_path: Path) -> None:
     async def scenario() -> CommandAction:
         with create_pipe_input() as pipe_input:

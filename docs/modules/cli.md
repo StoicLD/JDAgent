@@ -38,12 +38,16 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 | `/compact` | 空闲时提前压缩；运行中拒绝，不排队 |
 | `/context-window` | 显示窗口、输入预算、最近完整占用与分类 |
 | `/mcp status` | 读取本地 MCP 状态，不连接或刷新 |
+| `/mcp list [server\|*] [offset]`、`/mcp refresh [server]` | 空闲时发现目录／显式刷新；含局部拒绝原因 |
+| `/mcp tasks [offset]`、`/mcp task <ref> [query\|result\|cancel]` | 查看原会话任务或显式管理原引用，不启动 Agent Turn |
 | `/cancel` | 取消当前操作；空闲时不退出 |
 | `/exit` | 先取消活动操作并等待收尾，再退出交互 |
 
 当前枚举为 15 条；没有 `/context` 或 `/memory`。终端只有一个输入读取者，运行中命令不会
 成为审批答案，普通输入也不会暗中启动另一 Turn。
 运行中及审批期间只允许本地状态、上下文窗口、取消和退出；其他操作要求空闲后重发。
+MCP 管理等待也使用同一控制入口；首次对话前发现目录可创建空 Session，不伪造模型调用或用户消息。
+命令分页、原引用和取消语义见[MCP 使用说明](../guides/mcp.md)。直接 Prompt 命令仍待实施。
 `jdagent maintain --pending --workspace <路径>` 续做已登记的后台整理。
 知识管理还提供 `jdagent knowledge ...` 独立命令树，负责连接、知识库、来源和 Binding 等操作；
 它的真实 RAG 配置限制见[知识模块](knowledge.md)。

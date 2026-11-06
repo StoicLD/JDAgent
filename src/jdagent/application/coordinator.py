@@ -12,6 +12,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from jdagent.application.session_recovery import LogicalRecovery, classify_logical_recovery
+from jdagent.cancellation import complete_before_cancel
 from jdagent.context_archive import encode_json
 from jdagent.context_runtime import ContextService, WindowSnapshot
 from jdagent.core.contracts import CancellationToken, TurnResult, TurnRunner
@@ -231,6 +232,27 @@ class TurnCoordinator:
         if self._mcp is None:
             return ()
         return self._mcp.status(session_id, self._loop_factory.mcp_configuration())
+
+    async def create_session(self) -> str:
+        """Create an owned empty Session for explicit commands without starting a Turn."""
+        session_id = str(uuid4())
+
+        async def create() -> None:
+            await self._session.acquire(session_id)
+            self._owned_sessions.add(session_id)
+            if self.memory is not None:
+                self.memory.active_sessions.add(session_id)
+            journal = await EventJournal.open(self._session, session_id)
+            await journal.record(
+                None,
+                RuntimeEventType.SESSION_STARTED,
+                SessionStartedPayload(
+                    name=f"session-{session_id[:8]}", workspace_identity=self._workspace_identity
+                ),
+            )
+
+        await complete_before_cancel(create())
+        return session_id
 
     async def mcp_list(
         self, session_id: str, *, server_id: str | None = None, refresh: bool = False

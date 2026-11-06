@@ -58,6 +58,7 @@ def wire_server(
     tool_error: str | None = None,
     requests: list[str] | None = None,
     task_state: TaskPeerState | None = None,
+    task_query_gate: tuple[threading.Event, threading.Event] | None = None,
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -138,6 +139,9 @@ def wire_server(
                 else:
                     task_state.queries += 1
                     task_state.query_times.append(time.monotonic())
+                    if task_query_gate is not None:
+                        task_query_gate[0].set()
+                        task_query_gate[1].wait(10)
                     result = {**task_state.snapshot(), "resultType": "complete"}
                     if task_state.status == "completed":
                         result["result"] = {
@@ -191,6 +195,8 @@ def wire_server(
     finally:
         if discover_gate is not None:
             discover_gate[1].set()
+        if task_query_gate is not None:
+            task_query_gate[1].set()
         server.shutdown()
         server.server_close()
         worker.join(2)

@@ -51,6 +51,10 @@ _COMMANDS = (
     "/compact",
     "/context-window",
     "/mcp status",
+    "/mcp list",
+    "/mcp refresh",
+    "/mcp tasks",
+    "/mcp task",
     "/cancel",
     "/trace",
     "/exit",
@@ -311,12 +315,12 @@ class RichPresenter:
             return
         if event.kind is UiEventKind.ERROR:
             self._stop_live(reset_text=True)
-            self._console.print(f"Error: {event.message}", style="bold red")
+            self._console.print(f"Error: {event.message}", style="bold red", markup=False)
         elif event.kind is UiEventKind.WARNING:
             self._stop_live(reset_text=True)
-            self._console.print(f"Warning: {event.message}", style="yellow")
+            self._console.print(f"Warning: {event.message}", style="yellow", markup=False)
         else:
-            self._console.print(event.message)
+            self._console.print(event.message, markup=False)
 
     async def close(self) -> None:
         self._stop_live(reset_text=True)
