@@ -170,7 +170,7 @@ def test_recovery_child_and_nested_child_keep_mcp_provenance_after_restart(
                         if isinstance(event.payload, ToolExecutionCompletedPayload)
                     )
                     assert result.metadata.get("derived_from_mcp") is True
-                if compact_parent and generation == 0:
+                if compact_parent:
                     events = [event async for event in runtime.session.read(turn.session_id)]
                     model.source_sequence = next(
                         event.sequence

@@ -20,6 +20,9 @@ from jdagent.context import project_messages
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    CompactionCommittedPayload,
+    CompactionFailedPayload,
+    ModelRequestPreparedPayload,
     RuntimeEvent,
     RuntimeEventType,
     SessionRenamedPayload,
@@ -31,6 +34,47 @@ from jdagent.domain.events import (
 )
 from jdagent.domain.tools import RiskLevel
 from jdagent.eventing import EventJournal
+
+
+@pytest.mark.parametrize("maintenance", ["unfinished", "committed", "failed"])
+def test_idle_compaction_never_opens_a_turn_or_confuses_a_later_interruption(
+    maintenance: str,
+) -> None:
+    async def scenario() -> None:
+        session = InMemorySession()
+        journal = await EventJournal.open(session, "compact-recovery")
+        await journal.record(None, RuntimeEventType.SESSION_STARTED, SessionStartedPayload())
+        await journal.record("old", RuntimeEventType.USER_MESSAGE, UserMessagePayload("Read only"))
+        await journal.record(
+            "old", RuntimeEventType.TURN_COMPLETED, TurnCompletedPayload(StopReason.COMPLETED, 1, 0)
+        )
+        await journal.record(
+            "old",
+            RuntimeEventType.MODEL_REQUEST_PREPARED,
+            ModelRequestPreparedPayload("maintenance", "a" * 64, "compaction", 100),
+        )
+        if maintenance == "committed":
+            await journal.record(
+                "old",
+                RuntimeEventType.COMPACTION_COMMITTED,
+                CompactionCommittedPayload(2, "b" * 64, "c" * 64),
+            )
+        elif maintenance == "failed":
+            await journal.record(
+                "old",
+                RuntimeEventType.COMPACTION_FAILED,
+                CompactionFailedPayload(2, "b" * 64, "CompactionError"),
+            )
+        assert classify_logical_recovery(tuple(journal.events)) is LogicalRecovery.CLEAN
+        await journal.record("new", RuntimeEventType.USER_MESSAGE, UserMessagePayload("Continue"))
+        assert classify_logical_recovery(tuple(journal.events)) is LogicalRecovery.INTERRUPTED_SAFE
+        closed = await close_interrupted_turn(session=session, events=tuple(journal.events))
+        assert closed.turn_id == "new" and isinstance(closed.payload, TurnFailedPayload)
+        restored = tuple([event async for event in session.read("compact-recovery")])
+        assert classify_logical_recovery(restored) is LogicalRecovery.CLEAN
+        assert sum(isinstance(event.payload, TurnFailedPayload) for event in restored) == 1
+
+    asyncio.run(scenario())
 
 
 def test_recovery_backs_up_and_truncates_only_partial_tail(tmp_path: Path) -> None:

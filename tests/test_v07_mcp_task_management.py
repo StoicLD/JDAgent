@@ -12,6 +12,7 @@ import pytest
 
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
 from jdagent.adapters.jsonl_recovery import JsonlRecoveryStore
+from jdagent.adapters.jsonl_session import JsonlSession
 from jdagent.application.session_recovery import (
     LogicalRecovery,
     SessionRecovery,
@@ -313,7 +314,9 @@ def test_explicit_cancel_distinguishes_remote_terminal_from_acknowledgement(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("fault", ["other_workspace", "missing_handle", "corrupt_handle"])
+@pytest.mark.parametrize(
+    "fault", ["other_workspace", "missing_handle", "corrupt_handle", "generation"]
+)
 def test_management_validates_workspace_and_private_object_before_any_task_request(
     tmp_path: Path, fault: str
 ) -> None:
@@ -334,6 +337,15 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
                 other = tmp_path / "other-workspace"
                 other.mkdir()
                 selected = replace(config, workspace=other)
+            elif fault == "generation":
+                (config.session_directory / f"{session_id}.jsonl").unlink()
+                altered = JsonlSession(config.session_directory)
+                for event in events:
+                    if isinstance(event.payload, MCPTaskRegisteredPayload):
+                        event = replace(
+                            event, payload=replace(event.payload, generation="different-generation")
+                        )
+                    await altered.append(event)
             else:
                 controlled = config.session_directory / "objects" / registration.handle_hash
                 if fault == "missing_handle":
@@ -343,7 +355,9 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
             before = (state.submissions, state.queries, state.cancellations)
             runtime = build_runtime(selected, FakeApproval(ApprovalDecision.APPROVE))
             try:
-                expected = ValueError if fault == "other_workspace" else SessionError
+                expected = (
+                    ValueError if fault in {"other_workspace", "generation"} else SessionError
+                )
                 with pytest.raises(expected):
                     await runtime.coordinator.mcp_task(session_id, task_ref)
                 assert (state.submissions, state.queries, state.cancellations) == before

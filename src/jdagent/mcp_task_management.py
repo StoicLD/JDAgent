@@ -116,6 +116,7 @@ class MCPTaskManagement:
             definition.get("kind") != "tool"
             or definition.get("server_id") != record.server_id
             or definition.get("name") != record.raw_name
+            or definition.get("generation") != record.generation
         ):
             raise ValueError("Task definition binding is inconsistent")
         entry = MCPCapability(

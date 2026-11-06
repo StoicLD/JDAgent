@@ -14,6 +14,9 @@ from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     CompactionCommittedPayload,
+    CompactionFailedPayload,
+    ModelRequestPreparedPayload,
+    ModelUsageRecordedPayload,
     RecoverySnapshotPayload,
     RuntimeEvent,
     RuntimeEventType,
@@ -78,6 +81,25 @@ class PreparedResume:
     warnings: tuple[str, ...] = ()
 
 
+def _turn_tail(events: tuple[RuntimeEvent, ...]) -> tuple[RuntimeEvent, ...]:
+    terminal_types = {RuntimeEventType.TURN_COMPLETED, RuntimeEventType.TURN_FAILED}
+    last_terminal = max(
+        (index for index, event in enumerate(events) if event.event_type in terminal_types),
+        default=-1,
+    )
+    # Idle compaction may retain the last Turn's ID for accounting. Its durable
+    # maintenance facts do not open a second foreground Turn or interrupt one.
+    return tuple(
+        event
+        for event in events[last_terminal + 1 :]
+        if not isinstance(event.payload, (CompactionCommittedPayload, CompactionFailedPayload))
+        and not (
+            isinstance(event.payload, (ModelRequestPreparedPayload, ModelUsageRecordedPayload))
+            and event.payload.call_kind == "compaction"
+        )
+    )
+
+
 def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecovery:
     """Classify a structurally valid prefix without guessing missing side effects."""
 
@@ -102,12 +124,7 @@ def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecove
         if call_id not in completed_all
     ):
         return LogicalRecovery.UNCERTAIN_SIDE_EFFECT
-    terminal_types = {RuntimeEventType.TURN_COMPLETED, RuntimeEventType.TURN_FAILED}
-    last_terminal = max(
-        (index for index, event in enumerate(events) if event.event_type in terminal_types),
-        default=-1,
-    )
-    tail = events[last_terminal + 1 :]
+    tail = _turn_tail(events)
     if not any(event.turn_id is not None for event in tail):
         return LogicalRecovery.CLEAN
     started = {
@@ -250,12 +267,7 @@ async def close_interrupted_turn(
 
     if classify_logical_recovery(events) is not LogicalRecovery.INTERRUPTED_SAFE:
         raise ValueError("Only a safely interrupted turn can be closed automatically")
-    terminal_types = {RuntimeEventType.TURN_COMPLETED, RuntimeEventType.TURN_FAILED}
-    last_terminal = max(
-        (index for index, event in enumerate(events) if event.event_type in terminal_types),
-        default=-1,
-    )
-    tail = events[last_terminal + 1 :]
+    tail = _turn_tail(events)
     turn_ids = [event.turn_id for event in tail if event.turn_id is not None]
     if not turn_ids:
         raise ValueError("Interrupted session has no active turn")
