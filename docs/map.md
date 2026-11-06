@@ -50,6 +50,7 @@
 | v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[A01–A13 覆盖映射](development/v0.6-acceptance-matrix.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
 | v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
 | v0.6 实现自审与实验 | [固定实现本地自审与修复](reviews/REV-20261105-002-v0.6-implementation-self-review.md)、[对照说明](development/v0.6-comparison-runbook.md)、[首轮失败与修复](reviews/v0.6-live-comparison-20261105.md)、[第二轮六次对照](reviews/v0.6-live-comparison-20261105-r2.md)；任务 6/6、目标比较 1/3，默认未切换，独立评审未完成 |
+| v0.7 MCP 已确认规格 | [通用 Client、BM25、两层缓存与顺序 Tasks](requirements/v0.7-mcp-client.md)：产品行为与验收方向已确认，含测试边界和待细化项；尚未开始产品实现 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
 ## 术语与学习资料
