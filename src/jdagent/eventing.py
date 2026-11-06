@@ -5,6 +5,8 @@ from collections.abc import AsyncIterator
 from jdagent.domain.errors import SessionError, SessionErrorCode
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    MCPInvocationFinishedPayload,
+    MCPInvocationStartedPayload,
     RuntimeEvent,
     RuntimeEventType,
     RuntimePayload,
@@ -111,6 +113,16 @@ async def close_pending_calls(
         if isinstance(event.payload, ToolExecutionStartedPayload)
         and event.payload.risk in {RiskLevel.WRITE, RiskLevel.EXECUTE}
     }
+    mcp_intents = {
+        event.payload.call_id: event.payload
+        for event in events
+        if isinstance(event.payload, MCPInvocationStartedPayload)
+    }
+    mcp_finished = {
+        event.payload.result.call_id: event.payload.result
+        for event in events
+        if isinstance(event.payload, MCPInvocationFinishedPayload)
+    }
     for event in events:
         if not isinstance(event.payload, AssistantMessageCompletedPayload):
             continue
@@ -118,24 +130,37 @@ async def close_pending_calls(
             if call.call_id in completed:
                 continue
             unknown = call.call_id in started
+            intent = mcp_intents.get(call.call_id)
             outcome = ToolOutcome(
                 completed=False,
                 effect="unknown" if unknown else "none",
-                error_code=ToolErrorCode.UNCERTAIN if unknown else ToolErrorCode.NOT_EXECUTED,
+                error_code=ToolErrorCode.UNCERTAIN
+                if unknown or intent
+                else ToolErrorCode.NOT_EXECUTED,
                 message=reason,
+                requires_stop=intent is not None,
+            )
+            result = mcp_finished.get(call.call_id) or ToolResult(
+                call.call_id,
+                call.name,
+                ToolResultStatus.ERROR,
+                error_code=outcome.error_code,
+                error_message=outcome.message,
+                outcome=outcome,
+                metadata={
+                    "tool_origin": {
+                        "kind": "mcp",
+                        "server_id": intent.server_id,
+                        "raw_name": intent.raw_name,
+                        "generation": intent.generation,
+                    }
+                }
+                if intent
+                else {},
             )
             await journal.record(
                 turn_id,
                 RuntimeEventType.TOOL_EXECUTION_COMPLETED,
-                ToolExecutionCompletedPayload(
-                    ToolResult(
-                        call.call_id,
-                        call.name,
-                        ToolResultStatus.ERROR,
-                        error_code=outcome.error_code,
-                        error_message=outcome.message,
-                        outcome=outcome,
-                    )
-                ),
+                ToolExecutionCompletedPayload(result),
             )
             completed.add(call.call_id)

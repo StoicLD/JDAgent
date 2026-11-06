@@ -149,6 +149,7 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
                     event.payload
                     for event in events
                     if isinstance(event.payload, ModelRequestPreparedPayload)
+                    and event.payload.call_kind == "task"
                 ]
                 assert len(manifests) == 2
                 for prepared, model, timeout, maximum in zip(
@@ -160,6 +161,7 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
                     assert archived.settings.max_output_tokens == maximum
                 selected_adapter = model_adapter
                 selected_engine = engine
+                sent_before_restart = len(requests)
                 if restart_field == "model_adapter":
                     selected_adapter = "native" if model_adapter == "langchain" else "langchain"
                 else:
@@ -171,13 +173,18 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
                 )
                 with pytest.raises(ValueError, match="changed; restart"):
                     await runtime.coordinator.send("third", session_id=first.session_id)
-                assert len(requests) == 2
+                assert len(requests) == sent_before_restart
             finally:
                 await runtime.aclose()
 
     asyncio.run(scenario())
-    assert [json.loads(request.content)["model"] for request in requests] == ["model-a", "model-b"]
-    assert [request.extensions["timeout"]["read"] for request in requests] == [4, 9]
+    # Additional tool definitions may trigger compaction in this deliberately small
+    # window. Task manifests above must remain exactly two; maintenance also uses
+    # the newly selected model and timeout, never stale configuration.
+    assert json.loads(requests[0].content)["model"] == "model-a"
+    assert all(json.loads(request.content)["model"] == "model-b" for request in requests[1:])
+    assert requests[0].extensions["timeout"]["read"] == 4
+    assert all(request.extensions["timeout"]["read"] == 9 for request in requests[1:])
 
 
 def _forbid_other_runner(monkeypatch: pytest.MonkeyPatch, engine: str) -> None:

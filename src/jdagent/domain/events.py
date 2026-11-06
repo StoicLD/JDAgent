@@ -41,6 +41,8 @@ class RuntimeEventType(StrEnum):
     PERMISSION_RULE_REVOKED = "permission_rule_revoked"
     TOOL_EXECUTION_STARTED = "tool_execution_started"
     TOOL_EXECUTION_COMPLETED = "tool_execution_completed"
+    MCP_INVOCATION_STARTED = "mcp_invocation_started"
+    MCP_INVOCATION_FINISHED = "mcp_invocation_finished"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
@@ -265,6 +267,30 @@ class ToolExecutionCompletedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPInvocationStartedPayload:
+    """Durable intent and storage reservation, committed before a possible send."""
+
+    call_id: str
+    server_id: str
+    raw_name: str
+    generation: str
+    request_id: str
+    arguments_sha256: str
+    reserved_bytes: int
+    attempt: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class MCPInvocationFinishedPayload:
+    """Observed business facts, separate from completing the model's call pairing."""
+
+    result: ToolResult
+    result_confirmed: bool
+    original_hash: str | None = None
+    original_bytes: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ModelUsageRecordedPayload:
     """Usage associated with one model call."""
 
@@ -319,6 +345,8 @@ RuntimePayload: TypeAlias = (
     | PermissionRuleRevokedPayload
     | ToolExecutionStartedPayload
     | ToolExecutionCompletedPayload
+    | MCPInvocationStartedPayload
+    | MCPInvocationFinishedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload
     | TurnFailedPayload

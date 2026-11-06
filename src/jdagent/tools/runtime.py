@@ -5,7 +5,8 @@ import hashlib
 import json
 import time
 from collections.abc import Iterable
-from dataclasses import replace
+from copy import deepcopy
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, ValidationError
@@ -17,7 +18,8 @@ from jdagent.domain.events import (
     RuntimeEventType,
     ToolExecutionStartedPayload,
 )
-from jdagent.domain.json import JsonObject
+from jdagent.domain.json import JsonObject, normalize_json
+from jdagent.domain.model import ModelRequest
 from jdagent.domain.tools import (
     ApprovalDecision,
     ApprovalRequest,
@@ -34,7 +36,7 @@ from jdagent.domain.tools import (
     ToolResultStatus,
 )
 from jdagent.instructions import TurnInstructions
-from jdagent.ports import ApprovalPort, RuntimeEventRecorder
+from jdagent.ports import ApprovalPort, DynamicToolsPort, RuntimeEventRecorder
 from jdagent.tools.permissions import PermissionPolicy, SessionPermissionPolicy
 from jdagent.tools.workspace import WorkspacePathError
 
@@ -65,20 +67,102 @@ def _approval_argument_summary(
 class ToolRegistry:
     """Own the unique definition for each registered tool name."""
 
-    def __init__(self, definitions: Iterable[ToolDefinition]) -> None:
+    def __init__(
+        self,
+        definitions: Iterable[ToolDefinition],
+        *,
+        dynamic: DynamicToolsPort | None = None,
+        exposure_capability: ToolCapability = ToolCapability.EXECUTE,
+    ) -> None:
         self._definitions: dict[str, ToolDefinition] = {}
         for definition in definitions:
             if definition.name in self._definitions:
                 raise ValueError(f"Duplicate tool name: {definition.name}")
             self._definitions[definition.name] = definition
+        self._dynamic = dynamic
+        self._exposure_capability = exposure_capability
+        self._dynamic_definitions: dict[str, ToolDefinition] = {}
+        self._request_id = ""
+        self._snapshot: dict[str, ToolDefinition] = {}
 
     def get(self, name: str) -> ToolDefinition | None:
         return self._definitions.get(name)
 
+    def for_request(self, name: str, request_id: str) -> ToolDefinition | None:
+        if self._dynamic is None:
+            return self.get(name)
+        if request_id != self._request_id:
+            return None
+        definition = self._snapshot.get(name)
+        if (
+            definition is not None
+            and definition.origin.kind != "builtin"
+            and not self._dynamic.allowed(definition)
+        ):
+            return None
+        return definition
+
+    def used(self, definition: ToolDefinition) -> None:
+        if self._dynamic is not None and definition.origin.kind != "builtin":
+            self._dynamic.used(definition)
+
+    async def prepare_request(self) -> tuple[ToolDefinition, ...]:
+        # Reached only after the previous response's complete tool batch.
+        self._snapshot, self._request_id = {}, ""
+        if self._dynamic is not None:
+            definitions = await self._dynamic.prepare_tools()
+            if len({item.name for item in definitions}) != len(definitions) or any(
+                item.name in self._definitions for item in definitions
+            ):
+                raise ValueError("Dynamic tool name collision")
+            self._dynamic_definitions = {item.name: item for item in definitions}
+        return self.definitions(self._exposure_capability)
+
+    def bind_request(self, request: ModelRequest) -> ModelRequest:
+        definitions = {item.name: item for item in self.definitions()}
+        snapshot: dict[str, ToolDefinition] = {}
+        for visible in request.tools:
+            definition = definitions.get(visible.name)
+            if (
+                definition is None
+                or definition.input_schema != visible.input_schema
+                or definition.description != visible.description
+            ):
+                raise ValueError("Tool definition changed while preparing request")
+            snapshot[visible.name] = replace(
+                definition, input_schema=deepcopy(visible.input_schema)
+            )
+        self._request_id = request.metadata["request_id"]
+        self._snapshot = snapshot
+        origins = {
+            name: asdict(item.origin)
+            for name, item in snapshot.items()
+            if item.origin.kind != "builtin"
+        }
+        return replace(
+            request,
+            metadata={
+                **request.metadata,
+                **(
+                    {
+                        "mcp_tool_snapshot": json.dumps(
+                            origins, sort_keys=True, separators=(",", ":")
+                        )
+                    }
+                    if origins
+                    else {}
+                ),
+            },
+        )
+
     def definitions(
         self, capability: ToolCapability = ToolCapability.EXECUTE
     ) -> tuple[ToolDefinition, ...]:
-        return tuple(tool for tool in self._definitions.values() if capability.allows(tool.risk))
+        return tuple(
+            tool
+            for tool in (*self._definitions.values(), *self._dynamic_definitions.values())
+            if capability.allows(tool.risk)
+        )
 
 
 class ToolRuntime:
@@ -112,7 +196,7 @@ class ToolRuntime:
         identity = (context.session_id, call.call_id)
         if identity in self._executed:
             return self._error(call, ToolErrorCode.NOT_EXECUTED, "Duplicate call ID", started)
-        definition = self._registry.get(call.name)
+        definition = self._registry.for_request(call.name, context.request_id)
         if definition is None:
             return self._error(call, ToolErrorCode.UNKNOWN_TOOL, "Unknown tool", started)
         if not self._capability.allows(definition.risk):
@@ -150,7 +234,7 @@ class ToolRuntime:
             )
 
         prepared_call = ToolCall(call.call_id, call.name, prepared_arguments)
-        if self._instructions is not None:
+        if self._instructions is not None and definition.origin.kind == "builtin":
             try:
                 await self._instructions.discover_arguments(prepared_arguments)
             except ValueError as error:
@@ -192,7 +276,7 @@ class ToolRuntime:
         if decision is PermissionDecision.ASK:
             prepared_path = prepared_arguments.get("path")
             target: str | None = None
-            if isinstance(prepared_path, str):
+            if isinstance(prepared_path, str) and definition.origin.kind == "builtin":
                 try:
                     target = (
                         Path(prepared_path)
@@ -270,6 +354,12 @@ class ToolRuntime:
                 RuntimeEventType.TOOL_EXECUTION_STARTED,
                 ToolExecutionStartedPayload(call.call_id, call.name, definition.risk),
             )
+        self._registry.used(definition)
+        metadata: JsonObject = {}
+        if definition.origin.kind != "builtin":
+            metadata["tool_origin"] = normalize_json(asdict(definition.origin))
+        if context.external_context:
+            metadata["derived_from_mcp"] = True
         side_effect = definition.risk in (RiskLevel.WRITE, RiskLevel.EXECUTE)
         task = asyncio.ensure_future(
             definition.handler(prepared_arguments, replace(context, call_id=call.call_id))
@@ -306,6 +396,7 @@ class ToolRuntime:
                 effect="unknown" if side_effect else "none",
                 error_code=ToolErrorCode.EXECUTION_FAILED,
                 message=f"{type(error).__name__}: tool handler failed",
+                requires_stop=definition.origin.kind == "mcp",
             )
         if isinstance(output, ToolOutcome):
             if definition.result_schema is not None and output.error_code is None:
@@ -326,6 +417,7 @@ class ToolRuntime:
                 error_code=output.error_code,
                 error_message=output.message or None,
                 duration_ms=self._duration_ms(started),
+                metadata=metadata,
                 outcome=output,
             )
         return ToolResult(
@@ -334,6 +426,7 @@ class ToolRuntime:
             ToolResultStatus.SUCCESS,
             output=output,
             duration_ms=self._duration_ms(started),
+            metadata=metadata,
         )
 
     async def _record_permission(

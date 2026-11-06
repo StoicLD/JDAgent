@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from jdagent.domain.json import JsonObject
 
@@ -172,10 +173,23 @@ class ToolExecutionContext:
     readable_log_sessions: tuple[str, ...] = ()
     call_id: str = ""
     memory_intent: str | None = None
+    request_id: str = ""
+    external_context: bool = False
 
 
 ToolHandler = Callable[[JsonObject, ToolExecutionContext], Awaitable[str | ToolOutcome]]
 ToolPreflight = Callable[[JsonObject, ToolExecutionContext], JsonObject]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolOrigin:
+    """Host-registered provenance; never read from model or Server arguments."""
+
+    kind: Literal["builtin", "mcp", "mcp_control"] = "builtin"
+    server_id: str | None = None
+    raw_name: str | None = None
+    generation: str | None = None
+    definition_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +205,7 @@ class ToolDefinition:
     result_schema: JsonObject | None = None
     manages_timeout: bool = False
     permission_target: PermissionTargetKind | None = None
+    origin: ToolOrigin = field(default_factory=ToolOrigin)
 
 
 @dataclass(frozen=True, slots=True)

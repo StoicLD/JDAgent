@@ -27,6 +27,11 @@ Loop 保存最终 `tool_execution_completed`，并决定继续还是停止。
 工具定义投影和实际执行使用同一范围，隐藏工具不能靠伪造调用获得执行。
 旧三工具工厂保留给既有合同回归，正常组合根使用上表八工具。
 
+v0.7 P2a 另接入 search_tools、read_mcp_result 和动态 MCP 定义。工具检索复用 Session 的 BM25 与两层缓存，
+新定义只在下一模型请求生效；ToolRuntime 通过请求快照核验曝光范围、Schema 和宿主来源。
+MCP 参数不进入本地目录规则。普通调用、原文引用与分段读回已接线，三类能力和完整故障合同仍在实施；
+范围、测试和未完成项见[v0.7 实施记录](../plans/v0.7-implementation.md)。
+
 ## 权限和审批
 
 Policy 返回 `ALLOW | ASK | DENY`，ApprovalPort 仅在 ASK 时收集决定。

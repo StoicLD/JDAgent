@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Protocol, TypedDict
 
 from langgraph.constants import END, START
@@ -485,7 +485,16 @@ class _Execution:
         await self.d.journal.record(
             state["turn_id"], RuntimeEventType.TOOL_CALL_REQUESTED, ToolCallRequestedPayload(call)
         )
-        result = await self.d.tools.execute(call, self.tool_context)
+        request = state["request"]
+        assert request is not None
+        result = await self.d.tools.execute(
+            call,
+            replace(
+                self.tool_context,
+                request_id=request.metadata.get("request_id", ""),
+                external_context=request.metadata.get("external_context") == "mcp",
+            ),
+        )
         state["tool_calls"] += 1
         await self.d.journal.record(
             state["turn_id"],

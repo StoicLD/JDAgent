@@ -284,6 +284,8 @@ class MemoryMaintenance:
             for event in events:
                 if isinstance(event.payload, UserMessagePayload) or (
                     isinstance(event.payload, ToolExecutionCompletedPayload)
+                    and not event.payload.result.metadata.get("tool_origin")
+                    and not event.payload.result.metadata.get("derived_from_mcp")
                     and event.payload.result.tool_name
                     not in {"search_history", "read_history", "search_memory", "update_memory"}
                     and event.payload.result.status is ToolResultStatus.SUCCESS

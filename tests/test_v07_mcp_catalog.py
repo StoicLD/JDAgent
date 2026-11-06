@@ -170,7 +170,8 @@ def test_invalid_tool_schemas_are_isolated_without_losing_the_other_capabilities
         '[mcp.servers.docs]\nenabled = true\ntransport = "stdio"\n'
         f"command = {json.dumps(sys.executable)}\n"
         f"args = {json.dumps([str(fixture), '2026-07-28', 'catalog_invalid'])}\n"
-        'tools = ["search", "read", "broken", "external_ref", "ambiguous"]\nresources = true\n',
+        'tools = ["search", "read", "broken", "external_ref", "output_external", "ambiguous"]\n'
+        "resources = true\n",
         encoding="utf-8",
     )
     config = resolve_configuration(
@@ -192,10 +193,12 @@ def test_invalid_tool_schemas_are_isolated_without_losing_the_other_capabilities
             assert {entry.name for entry in directory.servers[0].rejected} == {
                 "broken",
                 "external_ref",
+                "output_external",
                 "ambiguous",
             }
             assert {entry.reason for entry in directory.servers[0].rejected} == {
                 "unsupported_input_schema",
+                "unsupported_output_schema",
                 "duplicate_name",
             }
         finally:

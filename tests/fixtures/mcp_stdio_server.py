@@ -125,6 +125,13 @@ def main() -> None:
                                         "$ref": "https://must-not-fetch.invalid/schema",
                                     },
                                 },
+                                {
+                                    "name": "output_external",
+                                    "inputSchema": {"type": "object"},
+                                    "outputSchema": {
+                                        "$ref": "https://must-not-fetch.invalid/result"
+                                    },
+                                },
                             ]
                         )
                         catalog_tools.extend(
@@ -174,6 +181,10 @@ def main() -> None:
                 sys.stdout.buffer.flush()
                 continue
             result = {"resultType": "complete", "content": [{"type": "text", "text": "ok"}]}
+            if name == "read" and "fixture_size" in message["params"].get("arguments", {}):
+                result["content"] = [
+                    {"type": "text", "text": "z" * message["params"]["arguments"]["fixture_size"]}
+                ]
             if name == "task":
                 assert version == "2026-07-28"
                 client_capabilities = message["params"]["_meta"][

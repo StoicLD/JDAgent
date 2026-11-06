@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterable, Sequence
+from copy import deepcopy
 from dataclasses import replace
 
 from jdagent.domain.events import (
@@ -119,10 +120,12 @@ class ContextBuilder:
         allow_tools: bool = True,
         repair_message: str | None = None,
         enforce_budget: bool = True,
+        tools_override: tuple[ToolDefinition, ...] | None = None,
     ) -> ModelRequest:
         """Build and validate one deterministic provider-independent request."""
 
-        if allow_tools and self._tools and not capabilities.tool_calls:
+        definitions = self._tools if tools_override is None else tools_override
+        if allow_tools and definitions and not capabilities.tool_calls:
             raise UnsupportedModelCapabilityError("Selected model does not support tool calls")
 
         messages = project_messages(events)
@@ -131,8 +134,8 @@ class ContextBuilder:
         tools = ()
         if allow_tools:
             tools = tuple(
-                ModelToolDefinition(tool.name, tool.description, dict(tool.input_schema))
-                for tool in self._tools
+                ModelToolDefinition(tool.name, tool.description, deepcopy(tool.input_schema))
+                for tool in definitions
             )
         system_parts = self._system_parts
         if knowledge is not None:

@@ -37,7 +37,10 @@ from jdagent.knowledge.context_references import KnowledgeReferences
 from jdagent.knowledge.embedding import OpenAICompatibleEmbedding
 from jdagent.maintenance import MemoryMaintenance, PrioritizedModel
 from jdagent.mcp_configuration import MCPServerConfiguration
+from jdagent.mcp_definitions import MCPDefinitionLimits
+from jdagent.mcp_execution import MCPExecution, MCPResultLimits
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_tools import MCPTools
 from jdagent.memory_service import MemoryService
 from jdagent.memory_store import MemoryStore
 from jdagent.model_profiles import model_window
@@ -100,6 +103,8 @@ class RuntimeOptions:
     allow_local_index: bool = False
     provider_options: JsonObject = field(default_factory=_empty_json_object)
     mcp_directory_limits: MCPDirectoryLimits = field(default_factory=MCPDirectoryLimits)
+    mcp_definition_limits: MCPDefinitionLimits = field(default_factory=MCPDefinitionLimits)
+    mcp_result_limits: MCPResultLimits = field(default_factory=MCPResultLimits)
 
     def __post_init__(self) -> None:
         if self.max_model_calls <= 0:
@@ -171,6 +176,8 @@ class ConfiguredLoopFactory:
     model_adapter: str = "native"
     runtime_engine: str = "native"
     mcp_servers: tuple[MCPServerConfiguration, ...] = ()
+    mcp: MCPService | None = None
+    mcp_result_limits: MCPResultLimits = field(default_factory=MCPResultLimits)
 
     def mcp_configuration(self) -> tuple[MCPServerConfiguration, ...]:
         return self.mcp_servers
@@ -236,8 +243,21 @@ class ConfiguredLoopFactory:
             raise ValueError("Session journal must contain session_started before loop creation")
         session_id = journal.events[0].session_id
         instructions = TurnInstructions(self.workspace, global_file=self.global_instructions)
+        registry = (
+            self.registry
+            if self.mcp is None
+            else ToolRegistry(
+                self.registry.definitions(),
+                dynamic=MCPTools(
+                    self.mcp,
+                    session_id,
+                    MCPExecution(self.mcp, journal, self.objects, self.mcp_result_limits),
+                ),
+                exposure_capability=self.capability,
+            )
+        )
         tools = ToolRuntime(
-            self.registry,
+            registry,
             SessionPermissionPolicy(
                 workspace=self.workspace,
                 session_id=session_id,
@@ -254,7 +274,7 @@ class ConfiguredLoopFactory:
         context_builder = ContextBuilder(
             model=self.model_name,
             system_parts=self.system_parts,
-            tools=self.registry.definitions(self.capability),
+            tools=registry.definitions(self.capability),
             settings=self.model_settings,
             max_context_tokens=self.max_context_tokens,
             provider_options=self.provider_options,
@@ -277,6 +297,7 @@ class ConfiguredLoopFactory:
             session=self.session,
             memory=self.memory,
             instructions_max_tokens=self.instructions_max_tokens,
+            request_tools=registry if self.mcp is not None else None,
         )
         self.contexts[session_id] = context
         runner_type = LangGraphTurnRunner if self.runtime_engine == "langgraph" else AgentLoop
@@ -424,6 +445,11 @@ def build_runtime(
         output_limit=configuration.memory_output_token_limit,
         automatic_allowed=lambda: reload_configuration().memory_auto_consolidation,
     )
+    mcp = MCPService(
+        SDKMCPConnection,
+        limits=options.mcp_directory_limits,
+        definition_limits=options.mcp_definition_limits,
+    )
     loop_factory = ConfiguredLoopFactory(
         model=scheduled_model,
         model_name=configuration.model,
@@ -457,6 +483,8 @@ def build_runtime(
         model_adapter=configuration.model_adapter,
         runtime_engine=configuration.runtime_engine,
         mcp_servers=configuration.mcp_servers,
+        mcp=mcp if options.include_tools else None,
+        mcp_result_limits=options.mcp_result_limits,
         runtime_limits=LoopLimits(options.max_model_calls, options.max_tool_calls)
         if runtime_options is not None
         else None,
@@ -475,7 +503,7 @@ def build_runtime(
             else None
         ),
         memory=memory,
-        mcp=MCPService(SDKMCPConnection, limits=options.mcp_directory_limits),
+        mcp=mcp,
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

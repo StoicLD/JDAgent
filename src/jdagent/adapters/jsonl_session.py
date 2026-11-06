@@ -20,6 +20,8 @@ from jdagent.domain.events import (
     CompactionFailedPayload,
     ConstraintRevokedPayload,
     ContextWindowSelectedPayload,
+    MCPInvocationFinishedPayload,
+    MCPInvocationStartedPayload,
     ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
@@ -146,6 +148,24 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, MCPInvocationStartedPayload):
+        return {
+            "call_id": payload.call_id,
+            "server_id": payload.server_id,
+            "raw_name": payload.raw_name,
+            "generation": payload.generation,
+            "request_id": payload.request_id,
+            "arguments_sha256": payload.arguments_sha256,
+            "reserved_bytes": payload.reserved_bytes,
+            "attempt": payload.attempt,
+        }
+    if isinstance(payload, MCPInvocationFinishedPayload):
+        return {
+            "result": _tool_result_to_data(payload.result),
+            "result_confirmed": payload.result_confirmed,
+            "original_hash": payload.original_hash,
+            "original_bytes": payload.original_bytes,
+        }
     if isinstance(payload, SideEffectResolutionPayload):
         return {
             "parent_session_id": payload.parent_session_id,
@@ -404,6 +424,26 @@ def _tool_result(data: JsonObject) -> ToolResult:
 
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.MCP_INVOCATION_STARTED:
+        return MCPInvocationStartedPayload(
+            require_string(data, "call_id"),
+            require_string(data, "server_id"),
+            require_string(data, "raw_name"),
+            require_string(data, "generation"),
+            require_string(data, "request_id"),
+            require_string(data, "arguments_sha256"),
+            require_integer(data, "reserved_bytes"),
+            require_integer(data, "attempt"),
+        )
+    if event_type is RuntimeEventType.MCP_INVOCATION_FINISHED:
+        if not isinstance(data.get("result_confirmed"), bool):
+            raise ValueError("MCP result confirmation must be boolean")
+        return MCPInvocationFinishedPayload(
+            _tool_result(require_object(data.get("result"), "MCP result")),
+            data["result_confirmed"] is True,
+            optional_string(data, "original_hash"),
+            require_integer(data, "original_bytes"),
+        )
     if event_type is RuntimeEventType.SIDE_EFFECT_RESOLVED:
         return SideEffectResolutionPayload(
             require_string(data, "parent_session_id"),

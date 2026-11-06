@@ -1,6 +1,7 @@
 """The small state machine that drives one agent turn."""
 
 import asyncio
+from dataclasses import replace
 
 from jdagent.context import ContextBuilder, ContextLimitError
 from jdagent.context_runtime import CompactionError, ContextService
@@ -501,7 +502,14 @@ class AgentLoop:
                     ToolCallRequestedPayload(call),
                 )
                 try:
-                    result = await self._tools.execute(call, tool_context)
+                    result = await self._tools.execute(
+                        call,
+                        replace(
+                            tool_context,
+                            request_id=request.metadata.get("request_id", ""),
+                            external_context=request.metadata.get("external_context") == "mcp",
+                        ),
+                    )
                 except asyncio.CancelledError:
                     await self._record_failure(
                         turn_id,

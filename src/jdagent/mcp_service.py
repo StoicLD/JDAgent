@@ -26,6 +26,12 @@ from jdagent.domain.mcp import (
     MCPServerStatus,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
+from jdagent.mcp_definitions import (
+    MCPDefinitionCache,
+    MCPDefinitionLimits,
+    MCPSelection,
+    definition_digest,
+)
 from jdagent.ports import MCPConnectionPort
 
 
@@ -67,30 +73,55 @@ class MCPService:
         connection_factory: Callable[[MCPServerConfiguration], MCPConnectionPort],
         *,
         limits: MCPDirectoryLimits | None = None,
+        definition_limits: MCPDefinitionLimits | None = None,
     ) -> None:
         self._connection_factory = connection_factory
         self._limits = limits if limits is not None else MCPDirectoryLimits()
         self._tick = 0
         self._sessions: dict[str, dict[str, _Server]] = {}
         self._retired: list[MCPConnectionPort] = []
+        self._definition_limits = definition_limits or MCPDefinitionLimits()
+        self._definitions: dict[str, MCPDefinitionCache] = {}
 
     async def configure(
         self, session_id: str, configurations: tuple[MCPServerConfiguration, ...]
     ) -> None:
         current = self._sessions.setdefault(session_id, {})
+        definitions = self._definitions.setdefault(
+            session_id, MCPDefinitionCache(self._definition_limits)
+        )
         allowed = {item.server_id for item in configurations}
         for name in tuple(current):
             if name not in allowed:
+                definitions.invalidate(name)
                 await self._close_peer(current.pop(name))
         for configuration in configurations:
             old = current.get(configuration.server_id)
             if old is not None and old.configuration == configuration:
                 continue
             if old is not None:
+                definitions.invalidate(configuration.server_id)
                 if not await self._close_peer(old):
                     _discard(old, "failed", "cleanup_pending")
                     continue
             current[configuration.server_id] = _Server(configuration)
+
+    def execution_timeout(self, session_id: str, entry: MCPCapability) -> float:
+        config = self._sessions[session_id][entry.server_id].configuration
+        return next(
+            (item.timeout_seconds for item in config.tool_overrides if item.name == entry.name),
+            config.timeout_seconds,
+        )
+
+    async def call(
+        self, session_id: str, entry: MCPCapability, arguments: JsonObject
+    ) -> JsonObject:
+        """Use the previously exposed host route without reconnecting or replaying."""
+        if not self.tool_allowed(session_id, entry.server_id, entry.name, entry.generation):
+            raise MCPFailure("configuration")
+        server = self._sessions[session_id][entry.server_id]
+        assert server.peer is not None
+        return await server.peer.request("tools/call", {"name": entry.name, "arguments": arguments})
 
     async def refresh(self, session_id: str, *, server_id: str | None = None) -> None:
         """Replace idle peers and invalidate their old configuration generation."""
@@ -99,6 +130,7 @@ class MCPService:
             raise ValueError("Unknown MCP Server")
         for name in tuple(servers) if server_id is None else (server_id,):
             server = servers[name]
+            self._definitions[session_id].invalidate(name)
             if not await self._close_peer(server):
                 _discard(server, "failed", "cleanup_pending")
             else:
@@ -238,8 +270,52 @@ class MCPService:
             raise ValueError("MCP search requires a nonnegative offset and limit 1-20")
 
     async def release_session(self, session_id: str) -> None:
+        self._definitions.pop(session_id, None)
         for server in self._sessions.pop(session_id, {}).values():
             await self._close_peer(server)
+
+    def select_tool(self, session_id: str, entry: MCPCapability) -> str:
+        return self._definitions[session_id].stage(entry)
+
+    async def loaded_tools(self, session_id: str) -> tuple[MCPCapability, ...]:
+        async def resolve(selection: MCPSelection) -> MCPCapability | None:
+            server = self._sessions[session_id].get(selection.server_id)
+            if (
+                server is None
+                or server.generation != selection.generation
+                or not server.configuration.enabled
+            ):
+                return None
+            directory = await self.capabilities(session_id, server_id=selection.server_id)
+            return next(
+                (
+                    entry
+                    for entry in directory.entries
+                    if entry.kind == "tool"
+                    and entry.name == selection.name
+                    and definition_digest(entry) == selection.digest
+                ),
+                None,
+            )
+
+        cache = self._definitions.get(session_id)
+        return () if cache is None else await cache.prepare(resolve)
+
+    def tool_allowed(self, session_id: str, server_id: str, name: str, generation: str) -> bool:
+        server = self._sessions.get(session_id, {}).get(server_id)
+        return bool(
+            server
+            and server.configuration.enabled
+            and server.generation == generation
+            and name in server.configuration.tools
+            and server.peer is not None
+            and server.peer.state == "ready"
+        )
+
+    def tool_used(self, session_id: str, server_id: str, name: str) -> None:
+        cache = self._definitions.get(session_id)
+        if cache is not None:
+            cache.used(server_id, name)
 
     async def aclose(self) -> None:
         for session_id in tuple(self._sessions):
@@ -324,6 +400,15 @@ class MCPService:
                                     MCPRejectedCapability(name, "unsupported_input_schema")
                                 )
                                 continue
+                            if (
+                                kind == "tool"
+                                and "outputSchema" in item
+                                and not _valid_schema(item["outputSchema"])
+                            ):
+                                rejected.append(
+                                    MCPRejectedCapability(name, "unsupported_output_schema")
+                                )
+                                continue
                             terms, cost = _index(
                                 name + " " + description, self._limits.index_bytes - index_bytes
                             )
@@ -380,6 +465,12 @@ def _discard(server: _Server, state: MCPDirectoryState, reason: str) -> None:
 def _valid_input_schema(schema: JsonValue) -> bool:
     if not isinstance(schema, dict) or schema.get("type") != "object":
         return False
+    return _valid_schema(schema)
+
+
+def _valid_schema(schema: JsonValue) -> bool:
+    if not isinstance(schema, dict):
+        return isinstance(schema, bool)
     dialect = schema.get("$schema", "https://json-schema.org/draft/2020-12/schema")
     if dialect not in (
         "https://json-schema.org/draft/2020-12/schema",

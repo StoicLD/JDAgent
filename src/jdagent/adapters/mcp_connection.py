@@ -262,6 +262,10 @@ class SDKMCPConnection:
             return {}
         wire = {"method": request.method, "params": request.params}
         match request.method:
+            case "tools/call":
+                result = await session.send_request(
+                    types.CallToolRequest.model_validate(wire), types.CallToolResult
+                )
             case "tools/list":
                 result = await session.send_request(
                     types.ListToolsRequest.model_validate(wire), types.ListToolsResult
@@ -280,7 +284,7 @@ class SDKMCPConnection:
                     types.ListPromptsRequest.model_validate(wire), types.ListPromptsResult
                 )
         return require_object(
-            normalize_json(result.model_dump(by_alias=True, mode="json", exclude_none=True)),
+            normalize_json(result.model_dump(by_alias=True, mode="json", exclude_unset=True)),
             "MCP result",
         )
 

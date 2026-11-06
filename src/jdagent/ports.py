@@ -11,6 +11,7 @@ from jdagent.domain.tools import (
     ApprovalOutcome,
     ApprovalRequest,
     ToolCall,
+    ToolDefinition,
     ToolExecutionContext,
     ToolResult,
 )
@@ -71,6 +72,24 @@ class ToolRuntimePort(Protocol):
     """Validates, authorizes, and executes one complete tool call."""
 
     async def execute(self, call: ToolCall, context: ToolExecutionContext) -> ToolResult: ...
+
+
+class DynamicToolsPort(Protocol):
+    """Prepare definitions only between requests; check live host authorization at execution."""
+
+    async def prepare_tools(self) -> tuple[ToolDefinition, ...]: ...
+
+    def allowed(self, definition: ToolDefinition) -> bool: ...
+
+    def used(self, definition: ToolDefinition) -> None: ...
+
+
+class RequestToolsPort(Protocol):
+    """Freeze the exact definitions projected into an admitted model request."""
+
+    async def prepare_request(self) -> tuple[ToolDefinition, ...]: ...
+
+    def bind_request(self, request: ModelRequest) -> ModelRequest: ...
 
 
 class ApprovalPort(Protocol):
