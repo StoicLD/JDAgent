@@ -1,8 +1,6 @@
 """Sequential remote Task waiting with durable, non-model handle references."""
 
 import asyncio
-import json
-from dataclasses import asdict
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -18,6 +16,7 @@ from jdagent.domain.json import JsonObject
 from jdagent.domain.mcp import MCPCapability, MCPFailure, MCPTask, MCPTaskSnapshot
 from jdagent.domain.tools import ToolErrorCode, ToolExecutionContext, ToolOutcome
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_task_binding import MCPTaskBinding
 from jdagent.ports import ContextObjects, RuntimeJournal
 
 
@@ -95,18 +94,16 @@ class MCPTaskExecution:
         self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
     ) -> None:
         task_ref = uuid4().hex
-        control = {
-            "task": asdict(task),
-            "identity_digest": self._service.task_identity(context.session_id, entry),
-            "session_id": context.session_id,
-            "turn_id": context.turn_id,
-            "call_id": context.call_id,
-            "server_id": entry.server_id,
-            "workspace_identity": workspace_identity(context.workspace),
-            "task_ref": task_ref,
-            "definition": asdict(entry),
-        }
-        encoded = json.dumps(control, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        encoded = MCPTaskBinding(
+            task=task,
+            identity_digest=self._service.task_identity(context.session_id, entry),
+            session_id=context.session_id,
+            turn_id=context.turn_id,
+            call_id=context.call_id,
+            workspace_identity=workspace_identity(context.workspace),
+            task_ref=task_ref,
+            definition=entry,
+        ).to_bytes()
         if len(encoded) > self._max_control_bytes:
             raise MCPFailure("response_limit")
         digest = await self._objects.put(encoded)

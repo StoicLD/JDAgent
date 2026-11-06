@@ -315,7 +315,16 @@ def test_explicit_cancel_distinguishes_remote_terminal_from_acknowledgement(
 
 
 @pytest.mark.parametrize(
-    "fault", ["other_workspace", "missing_handle", "corrupt_handle", "generation"]
+    "fault",
+    [
+        "other_workspace",
+        "missing_handle",
+        "corrupt_handle",
+        "generation",
+        "call_id",
+        "server_id",
+        "raw_name",
+    ],
 )
 def test_management_validates_workspace_and_private_object_before_any_task_request(
     tmp_path: Path, fault: str
@@ -337,13 +346,13 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
                 other = tmp_path / "other-workspace"
                 other.mkdir()
                 selected = replace(config, workspace=other)
-            elif fault == "generation":
+            elif fault in {"generation", "call_id", "server_id", "raw_name"}:
                 (config.session_directory / f"{session_id}.jsonl").unlink()
                 altered = JsonlSession(config.session_directory)
                 for event in events:
                     if isinstance(event.payload, MCPTaskRegisteredPayload):
                         event = replace(
-                            event, payload=replace(event.payload, generation="different-generation")
+                            event, payload=replace(event.payload, **{fault: "different-value"})
                         )
                     await altered.append(event)
             else:
@@ -356,7 +365,7 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
             runtime = build_runtime(selected, FakeApproval(ApprovalDecision.APPROVE))
             try:
                 expected = (
-                    ValueError if fault in {"other_workspace", "generation"} else SessionError
+                    SessionError if fault in {"missing_handle", "corrupt_handle"} else ValueError
                 )
                 with pytest.raises(expected):
                     await runtime.coordinator.mcp_task(session_id, task_ref)

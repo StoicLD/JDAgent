@@ -1,7 +1,6 @@
 """Explicit management of durable tasks without resuming an Agent workflow."""
 
 import asyncio
-import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -15,11 +14,11 @@ from jdagent.domain.events import (
     MCPTaskResultSavedPayload,
     RuntimeEvent,
 )
-from jdagent.domain.json import normalize_json, require_object, require_string
-from jdagent.domain.mcp import MCPCapability, MCPFailure, MCPTask, MCPTaskView
+from jdagent.domain.mcp import MCPFailure, MCPTaskView
 from jdagent.domain.tools import ToolErrorCode, ToolExecutionContext, ToolOutcome
 from jdagent.mcp_execution import MCPExecution, MCPResultLimits
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_task_binding import MCPTaskBinding
 from jdagent.mcp_task_execution import MCPTaskExecution
 from jdagent.ports import ContextObjects, RuntimeJournal
 
@@ -96,47 +95,13 @@ class MCPTaskManagement:
             return saved
         assert isinstance(registration.payload, MCPTaskRegisteredPayload)
         record = registration.payload
-        control = require_object(
-            normalize_json(
-                json.loads((await self._objects.get(record.handle_hash)).decode("utf-8"))
-            ),
-            "Task control object",
+        binding = MCPTaskBinding.from_bytes(
+            await self._objects.get(record.handle_hash),
+            registration=registration,
+            session_id=session_id,
+            workspace_identity=workspace_identity(self._workspace),
         )
-        if (
-            control.get("session_id") != session_id
-            or control.get("task_ref") != task_ref
-            or control.get("turn_id") != registration.turn_id
-            or control.get("call_id") != record.call_id
-            or control.get("server_id") != record.server_id
-            or control.get("workspace_identity") != workspace_identity(self._workspace)
-        ):
-            raise ValueError("Task control binding is inconsistent")
-        definition = require_object(control.get("definition"), "Task definition")
-        if (
-            definition.get("kind") != "tool"
-            or definition.get("server_id") != record.server_id
-            or definition.get("name") != record.raw_name
-            or definition.get("generation") != record.generation
-        ):
-            raise ValueError("Task definition binding is inconsistent")
-        entry = MCPCapability(
-            record.server_id,
-            require_string(definition, "generation"),
-            "tool",
-            record.raw_name,
-            require_string(definition, "description"),
-            require_string(definition, "definition_json"),
-        )
-        raw_task = require_object(control.get("task"), "Task handle")
-        task = MCPTask.from_data(
-            {
-                "taskId": raw_task.get("task_id"),
-                "status": raw_task.get("status"),
-                "createdAt": raw_task.get("created_at"),
-                "ttlMs": raw_task.get("ttl_ms"),
-                "pollIntervalMs": raw_task.get("poll_interval_ms"),
-            }
-        )
+        entry, task = binding.definition, binding.task
         view = next(item for item in self.list_tasks(journal) if item.task_ref == task_ref)
         task = replace(task, status=view.status)
         for event in journal.events:
@@ -153,7 +118,7 @@ class MCPTaskManagement:
                     poll_interval_ms=update.timing.poll_interval_ms,
                 )
         context = ToolExecutionContext(
-            session_id, require_string(control, "turn_id"), self._workspace, call_id=record.call_id
+            session_id, binding.turn_id, self._workspace, call_id=record.call_id
         )
         execution = MCPTaskExecution(
             self._service,
@@ -169,9 +134,7 @@ class MCPTaskManagement:
         try:
             if task.timing.expired:
                 raise MCPFailure("task_expired")
-            entry = await self._service.bind_task(
-                session_id, entry, require_string(control, "identity_digest")
-            )
+            entry = await self._service.bind_task(session_id, entry, binding.identity_digest)
             can_fetch = await results.reserve_task_result(entry, task_ref, context)
             if not can_fetch and action != "cancel":
                 return ToolOutcome(
