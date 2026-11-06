@@ -16,12 +16,13 @@ from jdagent.application.session_recovery import (
     classify_logical_recovery,
     prepare_session_resume,
 )
-from jdagent.composition import build_runtime
+from jdagent.composition import RuntimeOptions, build_runtime
 from jdagent.configuration import CliOverrides, ResolvedConfiguration, resolve_configuration
 from jdagent.data_paths import DataPaths, workspace_identity
 from jdagent.domain.errors import SessionError
 from jdagent.domain.events import (
     MCPTaskRegisteredPayload,
+    MCPTaskResultSavedPayload,
     RuntimeEvent,
     ToolExecutionCompletedPayload,
     ToolExecutionStartedPayload,
@@ -29,6 +30,7 @@ from jdagent.domain.events import (
 from jdagent.domain.json import require_object, require_string
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode
+from jdagent.mcp_execution import MCPResultLimits
 from jdagent.mcp_task_management import MCPTaskAction
 from tests.test_v07_mcp_http import TaskPeerState, wire_server
 
@@ -93,6 +95,129 @@ async def leave_running_task(config: ResolvedConfiguration) -> tuple[str, str]:
         return turn.session_id, tasks[0].task_ref
     finally:
         await runtime.aclose()
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+def test_repeated_management_queries_respect_updated_poll_hint_across_restart(
+    tmp_path: Path, engine: str
+) -> None:
+    state = TaskPeerState()
+    with wire_server("2026-07-28", "json", task_state=state) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            state.poll_interval_ms = 300
+            model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+            # Each application instance has a fresh in-memory connection and
+            # must still honor the most recently persisted server interval.
+            for _ in range(3):
+                runtime = build_runtime(
+                    config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+                )
+                try:
+                    outcome = await runtime.coordinator.mcp_task(session_id, task_ref)
+                    assert outcome.error_code is None and outcome.data["task_status"] == "working"
+                finally:
+                    await runtime.aclose()
+            first, second, third = state.query_times[-3:]
+            assert second - first >= 0.28 and third - second >= 0.28
+            assert state.submissions == 1 and not model.requests
+
+        asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+def test_management_retains_result_when_unsupported_input_finishes_during_cancel(
+    tmp_path: Path, engine: str
+) -> None:
+    state = TaskPeerState()
+    with wire_server("2026-07-28", "json", task_state=state) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            state.status, state.complete_on_cancel = "input_required", True
+            model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
+            runtime = build_runtime(
+                config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+            )
+            try:
+                outcome = await runtime.coordinator.mcp_task(session_id, task_ref)
+                assert outcome.error_code is ToolErrorCode.UNSUPPORTED
+                events = [e async for e in runtime.session.read(session_id)]
+                saved = [
+                    e.payload for e in events if isinstance(e.payload, MCPTaskResultSavedPayload)
+                ]
+                assert len(saved) == 1 and saved[0].original_hash
+                assert "remote task result" in json.dumps(saved[0].outcome.data)
+                requests = (state.queries, state.cancellations, state.submissions)
+                result = await runtime.coordinator.mcp_task(session_id, task_ref, action="result")
+                assert result.error_code is None and "remote task result" in json.dumps(result.data)
+                assert (state.queries, state.cancellations, state.submissions) == requests
+                assert not model.requests
+            finally:
+                await runtime.aclose()
+
+        asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("terminal", ["failed", "cancelled", "working"])
+def test_only_confirmed_terminal_management_releases_unused_business_result_reservation(
+    tmp_path: Path, engine: str, terminal: str
+) -> None:
+    state = TaskPeerState()
+    with wire_server("2026-07-28", "json", task_state=state) as url:
+        config = task_configuration(tmp_path, url, engine)
+
+        async def scenario() -> None:
+            session_id, task_ref = await leave_running_task(config)
+            state.status = terminal
+            model = FakeModelPort(
+                scripts=(
+                    (
+                        ToolCallCompleted(ToolCall("find-next", "search_tools", {"query": "read"})),
+                        ResponseCompleted("tool_calls"),
+                    ),
+                    (
+                        ToolCallCompleted(ToolCall("next-read", "mcp__docs__read", {})),
+                        ResponseCompleted("tool_calls"),
+                    ),
+                    (TextDelta("The next operation completed."), ResponseCompleted("stop")),
+                )
+            )
+            runtime = build_runtime(
+                config,
+                FakeApproval(ApprovalDecision.APPROVE),
+                model_wrapper=lambda _: model,
+                runtime_options=RuntimeOptions(
+                    mcp_result_limits=MCPResultLimits(session_bytes=5 << 20)
+                ),
+            )
+            try:
+                terminal_result = await runtime.coordinator.mcp_task(session_id, task_ref)
+                assert terminal_result.data["task_status"] == terminal
+                state.status = "completed"
+                turn = await runtime.coordinator.send(
+                    "Read another document", session_id=session_id
+                )
+                events = [e async for e in runtime.session.read(session_id)]
+                outcome = next(
+                    e.payload.result
+                    for e in events
+                    if e.turn_id == turn.turn_id
+                    and isinstance(e.payload, ToolExecutionCompletedPayload)
+                    and e.payload.result.call_id == "next-read"
+                )
+                assert outcome.error_code is (
+                    ToolErrorCode.CAPACITY if terminal == "working" else None
+                )
+                assert state.submissions == (1 if terminal == "working" else 2)
+            finally:
+                await runtime.aclose()
+
+        asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])

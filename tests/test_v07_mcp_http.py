@@ -4,6 +4,7 @@ import asyncio
 import gzip
 import json
 import threading
+import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
@@ -27,11 +28,14 @@ class TaskPeerState:
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     ttl_ms: int | None = None
     honor_cancel: bool = False
+    complete_on_cancel: bool = False
     missing: bool = False
     submissions: int = 0
     queries: int = 0
     cancellations: int = 0
     task_id: str = "private-http-task"
+    poll_interval_ms: int = 100
+    query_times: list[float] = field(default_factory=lambda: list[float]())
 
     def snapshot(self) -> dict[str, object]:
         return {
@@ -40,7 +44,7 @@ class TaskPeerState:
             "createdAt": self.created_at,
             "lastUpdatedAt": self.created_at,
             "ttlMs": self.ttl_ms,
-            "pollIntervalMs": 100,
+            "pollIntervalMs": self.poll_interval_ms,
         }
 
 
@@ -126,11 +130,14 @@ def wire_server(
                 assert self.headers["Mcp-Method"] == method
                 if method == "tasks/cancel":
                     task_state.cancellations += 1
-                    if task_state.honor_cancel:
+                    if task_state.complete_on_cancel:
+                        task_state.status = "completed"
+                    elif task_state.honor_cancel:
                         task_state.status = "cancelled"
                     result = {"resultType": "complete"}
                 else:
                     task_state.queries += 1
+                    task_state.query_times.append(time.monotonic())
                     result = {**task_state.snapshot(), "resultType": "complete"}
                     if task_state.status == "completed":
                         result["result"] = {
@@ -139,6 +146,8 @@ def wire_server(
                         }
                     elif task_state.status == "failed":
                         result["error"] = {"code": -32001, "message": "private-task-error"}
+                    elif task_state.status == "input_required":
+                        result["inputRequests"] = {"ask": {"method": "roots/list"}}
                 if task_state.missing:
                     response["error"] = {"code": -32602, "message": "private-task-not-found"}
             else:

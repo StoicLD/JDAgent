@@ -12,6 +12,7 @@ from jdagent.domain.events import (
     MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
+    MCPTaskObservedPayload,
     MCPTaskRegisteredPayload,
     MCPTaskResultSavedPayload,
     RuntimeEventType,
@@ -70,6 +71,7 @@ class MCPExecution:
     def _has_capacity(self, required: int | None = None) -> bool:
         charges: dict[tuple[str | None, str], int] = {}
         controls: dict[str, int] = {}
+        tasks: dict[str, tuple[str | None, str]] = {}
         for event in self._journal.events:
             payload = event.payload
             if isinstance(payload, MCPInvocationStartedPayload):
@@ -78,6 +80,16 @@ class MCPExecution:
                 key = (event.turn_id, payload.call_id)
                 charges[key] = max(0, charges.get(key, 0) - payload.handle_bytes)
                 controls[payload.task_ref] = payload.handle_bytes
+                tasks[payload.task_ref] = key
+            elif (
+                isinstance(payload, MCPTaskObservedPayload)
+                and payload.response_confirmed
+                and payload.status in {"failed", "cancelled"}
+                and payload.task_ref in tasks
+            ):
+                # These terminal states have no business result to fetch. Keep
+                # the control object charged, but release its unused reservation.
+                charges[tasks[payload.task_ref]] = 0
             elif isinstance(payload, MCPInvocationFinishedPayload) and payload.result_confirmed:
                 charges[event.turn_id, payload.result.call_id] = payload.original_bytes
             elif isinstance(payload, MCPTaskResultSavedPayload):

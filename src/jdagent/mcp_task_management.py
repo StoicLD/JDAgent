@@ -157,6 +157,7 @@ class MCPTaskManagement:
         )
         execution.attach(task_ref, task)
         original_entry = entry
+        interruption: ToolOutcome | None = None
         try:
             if task.timing.expired:
                 raise MCPFailure("task_expired")
@@ -172,7 +173,7 @@ class MCPTaskManagement:
                     snapshot = await execution.query(entry, context)
                     if snapshot.task.status == "input_required":
                         await execution.cancel(entry, context)
-                        return ToolOutcome(
+                        interruption = ToolOutcome(
                             data=execution.details,
                             completed=False,
                             error_code=ToolErrorCode.UNSUPPORTED,
@@ -180,18 +181,34 @@ class MCPTaskManagement:
                         )
         except (MCPFailure, TimeoutError) as error:
             reason = error.kind if isinstance(error, MCPFailure) else "client_timeout"
-            return ToolOutcome(
+            interruption = ToolOutcome(
                 data={**execution.details, "reason": reason},
                 completed=False,
                 error_code=ToolErrorCode.TOOL_UNAVAILABLE,
                 message=f"Original MCP Task could not be queried: {reason}",
             )
         if execution.final_result is not None:
-            return await MCPExecution(
+            saved = await MCPExecution(
                 self._service, journal, self._objects, self._limits
             ).publish_task_result(
                 original_entry, execution.final_result, context, execution.details
             )
+            # Keep the business result separately from this management action's
+            # unsupported-input or cleanup failure, so later result reads work.
+            return (
+                saved
+                if interruption is None
+                else replace(
+                    interruption,
+                    data={
+                        **saved.data,
+                        **interruption.data,
+                        "result_received_during_cleanup": True,
+                    },
+                )
+            )
+        if interruption is not None:
+            return interruption
         status = execution.details.get("task_status")
         return ToolOutcome(
             data=execution.details,

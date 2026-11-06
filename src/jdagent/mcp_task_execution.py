@@ -3,6 +3,7 @@
 import asyncio
 import json
 from dataclasses import asdict
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from jdagent.cancellation import complete_before_cancel
@@ -50,6 +51,21 @@ class MCPTaskExecution:
     async def query(self, entry: MCPCapability, context: ToolExecutionContext) -> MCPTaskSnapshot:
         if self._task_ref is None or self._task is None:
             raise MCPFailure("configuration")
+        previous = next(
+            (
+                event.timestamp
+                for event in reversed(self._journal.events)
+                if isinstance(event.payload, (MCPTaskRegisteredPayload, MCPTaskObservedPayload))
+                and event.payload.task_ref == self._task_ref
+            ),
+            None,
+        )
+        interval = max(0.1, (self._task.poll_interval_ms or 0) / 1000)
+        # Explicit management also obeys the latest durable hint after restart.
+        # A backwards wall clock delays at most one full interval.
+        elapsed = 0 if previous is None else max(0, (datetime.now(UTC) - previous).total_seconds())
+        if elapsed < interval:
+            await asyncio.sleep(interval - elapsed)
         snapshot = await self._query(entry, self._task, self._task_ref, context)
         self._task = snapshot.task
         self.result_confirmed = snapshot.task.status in {"completed", "failed", "cancelled"}
