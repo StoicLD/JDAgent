@@ -82,6 +82,29 @@ def test_workspace_resolver_rejects_parent_escape(tmp_path: Path) -> None:
         resolver.resolve_write("../outside.txt")
 
 
+def test_unresolvable_schema_is_a_local_tool_failure_without_running_handler(
+    tmp_path: Path,
+) -> None:
+    async def handler(arguments: JsonObject, context: ToolExecutionContext) -> str:
+        pytest.fail("Schema validation must precede handler execution")
+
+    tool = ToolDefinition(
+        name="broken",
+        description="Unresolvable schema.",
+        input_schema={"type": "object", "properties": {"value": {"$ref": "#/$defs/missing"}}},
+        risk=RiskLevel.PURE,
+        handler=handler,
+    )
+    runtime = ToolRuntime(
+        ToolRegistry((tool,)), DefaultPermissionPolicy(), FakeApproval(ApprovalDecision.APPROVE)
+    )
+    result = asyncio.run(
+        runtime.execute(ToolCall("call-1", "broken", {"value": "x"}), _context(tmp_path))
+    )
+    assert result.status is ToolResultStatus.ERROR
+    assert result.error_code is ToolErrorCode.TOOL_UNAVAILABLE
+
+
 def test_workspace_resolver_rejects_symlink_escape(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     outside = tmp_path / "outside"

@@ -13,6 +13,9 @@ from datetime import datetime
 from uuid import uuid4
 
 from jsonschema import Draft202012Validator, SchemaError
+from referencing import Registry, Resource
+from referencing.exceptions import Unresolvable
+from referencing.jsonschema import DRAFT202012, Schema
 
 from jdagent.domain.json import (
     JsonObject,
@@ -762,21 +765,34 @@ def _valid_schema(schema: JsonValue) -> bool:
         "https://json-schema.org/draft/2020-12/schema#",
     ):
         return False
-    pending: list[JsonValue] = [schema]
-    while pending:
-        node = pending.pop()
-        if isinstance(node, dict):
-            for key in ("$ref", "$dynamicRef"):
-                if key in node:
-                    reference = node[key]
-                    if not isinstance(reference, str) or not reference.startswith("#"):
-                        return False
-            pending.extend(node.values())
-        elif isinstance(node, list):
-            pending.extend(node)
     try:
         Draft202012Validator.check_schema(schema)  # pyright: ignore[reportUnknownMemberType]
-    except (SchemaError, RecursionError):
+        root = Resource(schema, DRAFT202012)
+        resolver = Registry[Schema]().resolver_with_root(root)
+        pending = [(root, resolver)]
+        seen: set[int] = set()
+        while pending:
+            resource, current = pending.pop()
+            node = resource.contents
+            if not isinstance(node, dict) or id(node) in seen:
+                continue
+            seen.add(id(node))
+            for key in ("$ref", "$dynamicRef"):
+                if key not in node:
+                    continue
+                reference = node[key]
+                if not isinstance(reference, str) or not reference.startswith("#"):
+                    return False
+                resolved = current.lookup(reference)
+                target = resolved.contents
+                if not isinstance(target, (dict, bool)):
+                    return False
+                Draft202012Validator.check_schema(target)  # pyright: ignore[reportUnknownMemberType]
+                pending.append((Resource(target, DRAFT202012), resolved.resolver))
+            pending.extend(
+                (child, current.in_subresource(child)) for child in resource.subresources()
+            )
+    except (SchemaError, Unresolvable, RecursionError):
         return False
     return True
 

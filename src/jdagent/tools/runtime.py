@@ -9,7 +9,8 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from jsonschema import Draft202012Validator, ValidationError
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
+from referencing.exceptions import Unresolvable
 
 from jdagent.domain.events import (
     PermissionRequestedPayload,
@@ -238,6 +239,13 @@ class ToolRuntime:
                 call,
                 ToolErrorCode.INVALID_ARGUMENTS,
                 "Arguments do not match the tool schema",
+                started,
+            )
+        except (SchemaError, Unresolvable, RecursionError):
+            return self._error(
+                call,
+                ToolErrorCode.TOOL_UNAVAILABLE,
+                "Tool schema cannot be validated",
                 started,
             )
 
