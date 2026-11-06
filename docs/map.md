@@ -50,7 +50,8 @@
 | v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[A01–A13 覆盖映射](development/v0.6-acceptance-matrix.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
 | v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
 | v0.6 实现自审与实验 | [固定实现本地自审与修复](reviews/REV-20261105-002-v0.6-implementation-self-review.md)、[对照说明](development/v0.6-comparison-runbook.md)、[首轮失败与修复](reviews/v0.6-live-comparison-20261105.md)、[第二轮六次对照](reviews/v0.6-live-comparison-20261105-r2.md)；任务 6/6、目标比较 1/3，默认未切换，独立评审未完成 |
-| v0.7 MCP 已确认规格 | [通用 Client、BM25、两层缓存与顺序 Tasks](requirements/v0.7-mcp-client.md)：产品行为与验收方向已确认，含测试边界和待细化项；尚未开始产品实现 |
+| v0.7 MCP 已确认规格 | [通用 Client、BM25、两层缓存与顺序 Tasks](requirements/v0.7-mcp-client.md)、[R1 运行时衔接设计](architecture/v0.7-mcp-client.md)：已按用户授权修订，尚未开始产品实现 |
+| v0.7 Cursor 审查处置 | [F01–F09 逐项判断与文档验证](reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)；[原始审查](reviews/REV-20261106-001-v0.7-mcp-client-design-review.md)的 fail 保留，R1 独立复审与 F08 SDK 实验未完成 |
 | 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
 
 ## 术语与学习资料
@@ -92,6 +93,7 @@
 | v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
 | v0.5 | [设计初审与 R1 逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)、[R1 文件指纹](reviews/REV-20261021-001-v0.5-design-revision.sha256) |
 | v0.6 | [原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)、[R1 处置](reviews/REV-20261105-001-v0.6-design-disposition.md)、[设计快照](reviews/evidence/v0.6-20261105/README.md)；后续分段实现和离线验证见[实施记录](plans/v0.6-implementation.md)，真实比较使用[记录模板](development/v0.6-comparison-template.md) |
+| v0.7 | [Cursor 原始审查](reviews/REV-20261106-001-v0.7-mcp-client-design-review.md)、[R1 处置](reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)、[R1 文档指纹](reviews/REV-20261106-001-v0.7-design-r1.sha256)；仅文档核验，SDK／运行验证与独立复审待执行 |
 | Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
 
 ## 实现参考

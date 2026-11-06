@@ -1,0 +1,7 @@
+5914ffca5b37ee230af615dacddbae8a9e243705c614b08a9b6defb56a05db31  docs/requirements/v0.7-mcp-client.md
+75c2def9102cc77b1e23a6960ce260a9dc4e2bbc170e3af78908c208e8f178b8  docs/architecture/v0.7-mcp-client.md
+591b9354dce22fa2864602b0519b00102c59faf9584e087aa32775f7b81ef35f  docs/reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md
+907fcf1b76119127b4e3d59a6583e44e6a73a6da597aa61b140fe1e1dd5040a6  docs/reviews/REV-20261106-001-v0.7-mcp-client-design-review.md
+78d57ef21a06cb88541b45c28b70e442bf9544b10ec1982a69f517c4da4b5002  docs/map.md
+8743f28e973b16d550f3cff282580a09bf4bda7cd7ce716b241f1262d720a721  docs/context/current.md
+a3b8162a7b03c0e1fb864339f7db57b199bf8e81bbc24d4a90dc6c95152250eb  docs/decisions/ADR-0008-langchain-langgraph-boundaries.md

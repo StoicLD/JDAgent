@@ -2,7 +2,7 @@
 
 状态：`Implemented`（状态记录）
 
-更新日期：2026-11-06（v0.7 MCP 设计共识已确认并整理规格，以下既有实现与验收状态未变）。
+更新日期：2026-11-06（v0.7 MCP 按 Cursor 审查分析完成 R1 设计修订，以下既有实现与验收状态未变）。
 v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 此前 R1 文档修订与本次实现是不同授权阶段；固定快照和运行证据见
 [实现记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
@@ -46,8 +46,10 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
    [学习路线](../plans/post-v0.2-learning-roadmap.md)不替代实施授权，既有工程和学习门禁保持原状态。
 5. v0.7：用户已确认[通用 MCP Client 规格](../requirements/v0.7-mcp-client.md)，包含三类能力、
    BM25、两层有界缓存、结果读回与新版 Tasks 的顺序等待。并行编排留到后续版本，MCP 与 RAG
-   完全分离。本次仅整理规格并按 to-spec 发布 [Issue #2](https://github.com/StoicLD/JDAgent/issues/2)；SDK 锁版、事件合同、容量校准、实施计划和
-   学习检查表等细化见规格末尾，尚未开始产品实现。
+   完全分离。[Issue #2](https://github.com/StoicLD/JDAgent/issues/2) 为发布快照；权威方案在仓库。
+   用户已授权按 Cursor 审查分析完成 [R1 衔接设计](../architecture/v0.7-mcp-client.md)及本地 Git 提交，
+   [F01–F09 处置](../reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)保留原报告 fail。
+   F08 SDK 接收硬限实验、R1 独立复审、具体事件编码、容量校准、实施计划和学习检查表仍待完成，尚未开始产品实现。
 
 ## 授权与证据边界
 
@@ -82,6 +84,9 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 - 2026-11-06：用户通过 Q38 确认 v0.7 最终设计，随后显式调用 to-spec。此次授权覆盖规格文档、
   导航／状态同步及 GitHub Issue 发布与 ready-for-agent 标签；不包含产品代码、Git 提交／推送或
   付费 Live。该标签按项目约定表示规格已整理，不改变既有工程与学习门禁。
+- 同日用户在阅读 Cursor 审查分析后要求“按照你的建议修订设计方案，完成后git提交”。本轮据此
+  修订规格、补运行时衔接设计、记录审查处置并同步导航／ADR，原报告保持原文纳入提交。
+  此次为设计文档与本地 Git 提交授权，不包含产品实现或 push；F08 实验与独立复审不记为通过。
 
 ## 恢复入口
 
