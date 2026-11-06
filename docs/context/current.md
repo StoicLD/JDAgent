@@ -2,7 +2,7 @@
 
 状态：`Implemented`（状态记录）
 
-更新日期：2026-11-06（v0.7 MCP 按 Cursor 审查分析完成 R1 设计修订，以下既有实现与验收状态未变）。
+更新日期：2026-11-06（v0.7 完成 R1 设计修订，随后进入 P0 适配接入实施；既有版本验收状态未变）。
 v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 此前 R1 文档修订与本次实现是不同授权阶段；固定快照和运行证据见
 [实现记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
@@ -49,7 +49,10 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
    完全分离。[Issue #2](https://github.com/StoicLD/JDAgent/issues/2) 为发布快照；权威方案在仓库。
    用户已授权按 Cursor 审查分析完成 [R1 衔接设计](../architecture/v0.7-mcp-client.md)及本地 Git 提交，
    [F01–F09 处置](../reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)保留原报告 fail。
-   F08 SDK 接收硬限实验、R1 独立复审、具体事件编码、容量校准、实施计划和学习检查表仍待完成，尚未开始产品实现。
+   随后用户显式调用 implement 要求实现、审查修复与分段提交；P0 已实现有界传输和现代 Tasks 公开扩展，
+   F08 的锁版接入实验见 [P0 证据](../reviews/REV-20261106-002-v0.7-p0-sdk-validation.md)。
+   [实施记录](../plans/v0.7-implementation.md)和[学习清单](../learning/v0.7-mcp-client-learning-checklist.md)已建立。
+   配置／检索、运行时接线、结果持久化、恢复和 CLI 仍待实施；R1 独立复审与完整 v0.7 验收尚未完成。
 
 ## 授权与证据边界
 
@@ -87,6 +90,10 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 - 同日用户在阅读 Cursor 审查分析后要求“按照你的建议修订设计方案，完成后git提交”。本轮据此
   修订规格、补运行时衔接设计、记录审查处置并同步导航／ADR，原报告保持原文纳入提交。
   此次为设计文档与本地 Git 提交授权，不包含产品实现或 push；F08 实验与独立复审不记为通过。
+
+- 用户最新实施授权：2026-11-06，显式调用 implement 实现 v0.7，完成后 code review 并修复发现，
+  每个完成步骤 Git 提交。授权覆盖按已批准规格实施及必要验证，取代 v0.7 前期仅文档限制；不包含 push、
+  付费 Live 或代填学习出口。已有失败与未完成门禁按实际依赖跟踪，不改写历史通过状态。
 
 ## 恢复入口
 

@@ -13,10 +13,17 @@ from typing import BinaryIO, cast
 # -I -S prevents workspace imports, environment Python paths and site startup.
 # Only after the host assigns this waiting bootstrap to a Job is argv supplied.
 _BOOTSTRAP = """
-import json, sys, subprocess
-a = json.loads(sys.stdin.buffer.readline())
+import json, os, sys, subprocess
+# Do not read ahead into protocol bytes that the child must inherit.
+line = bytearray()
+while not line.endswith(b'\\n'):
+    byte = os.read(0, 1)
+    if not byte:
+        sys.exit(125)
+    line.extend(byte)
+a = json.loads(line)
 try:
-    p = subprocess.Popen(a['argv'], stdin=subprocess.DEVNULL)
+    p = subprocess.Popen(a['argv'], stdin=sys.stdin if a['keep_stdin'] else subprocess.DEVNULL)
 except OSError as error:
     with open(a['status_file'], 'w', encoding='utf-8') as stream:
         json.dump({'started': False, 'error': type(error).__name__}, stream)
@@ -71,6 +78,8 @@ class WindowsCommand:
         cwd: Path,
         environment: dict[str, str],
         status_file: Path | None = None,
+        *,
+        keep_stdin: bool = False,
     ) -> None:
         if os.name != "nt":
             raise OSError("Command execution requires Windows")
@@ -126,6 +135,7 @@ class WindowsCommand:
                 stderr=subprocess.PIPE,
                 creationflags=subprocess.CREATE_NO_WINDOW,
                 close_fds=True,
+                bufsize=0,
             )
             process_handle = self._kernel.OpenProcess(0x0101, False, self._process.pid)
             if not process_handle:
@@ -138,14 +148,21 @@ class WindowsCommand:
             assert self._process.stdin is not None
             self._process.stdin.write(
                 json.dumps(
-                    {"argv": argv, "status_file": str(self._status_file)}, ensure_ascii=True
+                    {"argv": argv, "status_file": str(self._status_file), "keep_stdin": keep_stdin},
+                    ensure_ascii=True,
                 ).encode()
                 + b"\n"
             )
-            self._process.stdin.close()
+            if not keep_stdin:
+                self._process.stdin.close()
         except BaseException:
             self.close()
             raise
+
+    @property
+    def stdin(self) -> BinaryIO:
+        assert self._process is not None and self._process.stdin is not None
+        return cast(BinaryIO, self._process.stdin)
 
     @property
     def stdout(self) -> BinaryIO:
