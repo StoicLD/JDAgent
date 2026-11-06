@@ -60,6 +60,7 @@ def wire_server(
     requests: list[str] | None = None,
     task_state: TaskPeerState | None = None,
     task_query_gate: tuple[threading.Event, threading.Event] | None = None,
+    tool_gate: tuple[threading.Event, threading.Event] | None = None,
     progress_values: tuple[float, float | None] | None = None,
 ) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
@@ -166,6 +167,9 @@ def wire_server(
                 if task_state is not None:
                     task_state.submissions += 1
                     result = {**task_state.snapshot(), "resultType": "task"}
+                if tool_gate is not None:
+                    tool_gate[0].set()
+                    tool_gate[1].wait(15)
                 if tool_error == "server_timeout":
                     response["error"] = {"code": -32001, "message": "private-timeout-text"}
             if "error" not in response:
@@ -222,6 +226,8 @@ def wire_server(
             discover_gate[1].set()
         if task_query_gate is not None:
             task_query_gate[1].set()
+        if tool_gate is not None:
+            tool_gate[1].set()
         server.shutdown()
         server.server_close()
         worker.join(2)
