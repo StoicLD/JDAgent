@@ -197,6 +197,7 @@ def main() -> None:
                 )
         elif method == "prompts/get":
             assert message["params"]["name"] == "explain"
+            topic = message["params"]["arguments"]["topic"]
             result = {
                 "resultType": "complete",
                 "messages": [
@@ -204,8 +205,9 @@ def main() -> None:
                         "role": "user",
                         "content": {
                             "type": "text",
-                            "text": "External template for: "
-                            + message["params"]["arguments"]["topic"],
+                            "text": "remote-only " * 2000
+                            if topic == "fixture_large"
+                            else "External template for: " + topic,
                         },
                     }
                 ],

@@ -401,6 +401,8 @@ def _tool_result(data: JsonObject) -> ToolResult:
         for key in ("completed", "observed_failure", "cancelled", "requires_stop"):
             if not isinstance(value.get(key), bool):
                 raise ValueError(f"{key} must be boolean")
+        if not isinstance(value.get("derived_from_mcp", False), bool):
+            raise ValueError("derived_from_mcp must be boolean")
         code = optional_string(value, "error_code")
         outcome = ToolOutcome(
             data=require_object(value.get("data"), "data"),
@@ -411,6 +413,7 @@ def _tool_result(data: JsonObject) -> ToolResult:
             message=require_string(value, "message"),
             cancelled=value["cancelled"] is True,
             requires_stop=value.get("requires_stop") is True,
+            derived_from_mcp=value.get("derived_from_mcp") is True,
         )
     return ToolResult(
         require_string(data, "call_id"),

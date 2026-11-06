@@ -132,6 +132,7 @@ class ToolOutcome:
     message: str = ""
     cancelled: bool = False
     requires_stop: bool = False
+    derived_from_mcp: bool = False
 
     def __post_init__(self) -> None:
         if self.effect not in {"none", "committed", "unknown", "possible"}:
@@ -151,6 +152,7 @@ class ToolOutcome:
             "message": self.message,
             "cancelled": self.cancelled,
             "requires_stop": self.requires_stop,
+            **({"derived_from_mcp": True} if self.derived_from_mcp else {}),
         }
 
 

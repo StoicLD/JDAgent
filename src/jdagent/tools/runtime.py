@@ -430,6 +430,8 @@ class ToolRuntime:
                 requires_stop=definition.origin.kind == "mcp",
             )
         if isinstance(output, ToolOutcome):
+            if output.derived_from_mcp:
+                metadata["derived_from_mcp"] = True
             if definition.result_schema is not None and output.error_code is None:
                 try:
                     Draft202012Validator(definition.result_schema).validate(output.data)  # pyright: ignore[reportUnknownMemberType]

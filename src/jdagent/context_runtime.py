@@ -39,6 +39,7 @@ from jdagent.domain.tools import ToolResultStatus
 from jdagent.instructions import TurnInstructions
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.mcp_projection import narrow_preview
+from jdagent.mcp_provenance import external_provenance
 from jdagent.memory_service import MemoryService, terms
 from jdagent.model_profiles import maintenance_options
 from jdagent.model_stream import closing_model_stream
@@ -770,6 +771,11 @@ class ContextService:
                 for ref in require_array(require_object(fact, "fact").get("sources"), "sources")
                 if isinstance(ref, int) and not isinstance(ref, bool)
             }
+            for item in (summary, require_object(next_summary, "summary")):
+                for value in require_array(item.get("external_sources", []), "external sources"):
+                    reference = require_object(value, "external source").get("sequence")
+                    if isinstance(reference, int) and not isinstance(reference, bool):
+                        merge_sources.add(reference)
             summary = await self._summarize(
                 template,
                 encode_json([summary, next_summary]).decode("utf-8"),
@@ -879,6 +885,7 @@ class ContextService:
         if not finished:
             raise CompactionError("Maintenance response was not completed")
         result = decode_object("".join(parts).encode("utf-8"))
+        provenance = external_provenance(sources.values())
         require_string(result, "goal")
         for key in ("pending", "decisions", "paths"):
             if not all(isinstance(value, str) for value in require_array(result.get(key), key)):
@@ -901,4 +908,16 @@ class ContextService:
                     )
             if status == "completed" and not verified:
                 raise CompactionError("Summary promoted a plan to completed work")
+            external = [
+                provenance[ref] for ref in refs if isinstance(ref, int) and ref in provenance
+            ]
+            fact.pop("external_sources", None)
+            if external:
+                fact["external_sources"] = list[JsonValue](external)
+        # Even fields without per-fact citations may mix material from the input.
+        # These references come from the journal, never the summarizer's declarations.
+        result.pop("external_sources", None)
+        inherited = [provenance[ref] for ref in source_sequences if ref in provenance]
+        if inherited:
+            result["external_sources"] = list[JsonValue](inherited)
         return result
