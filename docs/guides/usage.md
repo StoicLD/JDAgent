@@ -189,6 +189,7 @@ uv run jdagent --workspace 'E:\Projects\Example' --session-id '实际SESSION_ID'
 | `/mcp status` | 查看 MCP 本地状态，不连接或刷新 |
 | `/mcp list [server\|*] [offset]`、`/mcp refresh [server]` | 空闲时查看目录或显式刷新；分页与拒绝原因见输出 |
 | `/mcp tasks [offset]`、`/mcp task <ref> [query\|result\|cancel]` | 查看登记任务或按原引用管理，不重新提交业务工作 |
+| `/mcp prompt <server> <name> [key=value ...]` | 直接使用外部 Prompt；缺参数时正常对话澄清 |
 | `/cancel` | 取消当前操作并保留交互；空闲时不退出 |
 | `/exit` | 运行中先取消并收尾，再退出并保留会话 |
 

@@ -6,7 +6,7 @@
 模型现在可通过 search_tools 检索已启用工具，并从下一请求开始调用选中的定义；两个 Runner 共用此路径。
 完整定义还须装得进本次输入窗口；空间不足时在请求之间移除较少使用的定义，保留检索入口，不截断参数约束。
 结果预览有界，完整原文可通过 read_mcp_result 按引用分页读回。
-开启相应能力后，模型也可发现／读取 Resources，以及检索／获取 Prompts；直接 Prompt 命令仍待接通。
+开启相应能力后，模型也可发现／读取 Resources，以及检索／获取 Prompts；用户也可直接用命令触发 Prompt。
 新版 Tasks 已接入当前调用的顺序等待；CLI 支持重开会话后显式管理原任务。
 TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；两种 Runner 共用同一会话服务。
 目录与索引的容量单位、默认值和固定检索样例见[实施记录](../plans/v0.7-implementation.md)。
@@ -20,6 +20,7 @@ TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；�
 | `/mcp refresh [server]` | 空闲时显式重连并刷新指定或全部 Server 的目录 |
 | `/mcp tasks [offset]` | 分页显示当前 Session 已登记的本地任务引用和最后已知状态 |
 | `/mcp task <task-ref> [query\|result\|cancel]` | 默认 query；按原身份查询、取回结果或取消，不重新提交业务工具 |
+| `/mcp prompt <server> <name> [key=value ...]` | 获取明确指定的模板并交给当前任务；参数值含空格时加引号 |
 
 目录和任务列表每页最多 50 项，按输出的 next_offset 继续读取；目录跨 Server 翻页时使用 `/mcp list * <offset>`。
 长名称和 URI 显示截断标记，外部名称按字面显示。目录中的 rejected 项不能执行，并给出局部拒绝原因。
@@ -28,6 +29,18 @@ Task 操作使用列表中的本地引用，不接受远端私有句柄；先 `/
 管理等待期间仍可查看本地状态和上下文窗口，使用 `/cancel` 停止本地等待，或 `/exit` 收尾退出。
 `/mcp task <ref> cancel` 才是显式请求取消原远端 Task；停止本地管理等待不代表远端工作已停止。
 其他管理操作与 `/compact` 均需空闲后重发，不排队。
+
+直接触发示例：`/mcp prompt docs explain topic="MCP sessions"`。也可作为一次性输入：
+
+```powershell
+uv run jdagent --output json '/mcp prompt docs explain topic="MCP sessions"'
+```
+
+直接命令与模型的 get_mcp_prompt 共用目录、参数检查、获取和原文处理。交互时缺少必填参数，由正常对话
+询问后再获取；Headless 返回退出码 4 和 mcp_prompt_invalid_arguments，并在回答字段列出缺失名称，不等待输入。
+远端获取失败返回 tool_error 停止原因和具体 mcp_prompt_* 类别；用户取消仍返回 130。
+用户的原始命令保留为用户事实，展开模板单独保存为外部材料，不伪造模型工具调用。
+模板预览、压缩和历史读回继续保留来源，原文可用 read_mcp_result 分页读取；自动长期记忆排除模板及其派生内容。
 
 ## 用户定义 Server
 

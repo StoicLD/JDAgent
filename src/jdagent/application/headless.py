@@ -131,7 +131,7 @@ async def run_headless(
 ) -> HeadlessResult:
     """Run one prompt without binding the application to terminal output."""
 
-    turn = await coordinator.send(prompt, session_id=session_id)
+    turn = await coordinator.send(prompt, session_id=session_id, allow_prompt_clarification=False)
     summary = turn.trace.summary
     return HeadlessResult(
         session_id=turn.session_id,

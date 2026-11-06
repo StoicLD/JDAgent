@@ -39,6 +39,7 @@ from jdagent.maintenance import MemoryMaintenance, PrioritizedModel
 from jdagent.mcp_configuration import MCPServerConfiguration
 from jdagent.mcp_definitions import MCPDefinitionLimits
 from jdagent.mcp_execution import MCPExecution, MCPResultLimits
+from jdagent.mcp_material_tools import MCPDirectPrompts
 from jdagent.mcp_service import MCPService
 from jdagent.mcp_task_management import MCPTaskManagement
 from jdagent.mcp_tools import MCPTools
@@ -506,6 +507,7 @@ def build_runtime(
         memory=memory,
         mcp=mcp,
         mcp_task_management=MCPTaskManagement(mcp, objects, options.mcp_result_limits, workspace),
+        mcp_prompts=MCPDirectPrompts(mcp, objects, options.mcp_result_limits),
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

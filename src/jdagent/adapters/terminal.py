@@ -55,6 +55,7 @@ _COMMANDS = (
     "/mcp refresh",
     "/mcp tasks",
     "/mcp task",
+    "/mcp prompt",
     "/cancel",
     "/trace",
     "/exit",

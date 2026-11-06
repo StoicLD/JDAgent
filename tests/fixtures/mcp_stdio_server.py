@@ -220,6 +220,12 @@ def main() -> None:
         elif method == "prompts/get":
             assert message["params"]["name"] == "explain"
             topic = message["params"]["arguments"]["topic"]
+            if topic.startswith("fixture_gate:"):
+                prompt_gate = topic.removeprefix("fixture_gate:")
+                Path(prompt_gate + ".started").touch()
+                stop_at = time.monotonic() + 30
+                while not Path(prompt_gate + ".release").exists() and time.monotonic() < stop_at:
+                    time.sleep(0.01)
             result = {
                 "resultType": "complete",
                 "messages": [

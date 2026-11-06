@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    MCPPromptPreparedPayload,
     RuntimeEvent,
     ToolExecutionCompletedPayload,
 )
@@ -18,7 +19,15 @@ def external_provenance(events: Iterable[RuntimeEvent]) -> dict[int, JsonObject]
         payload = event.payload
         source: JsonObject = {"kind": "mcp_derived"}
         original: JsonObject | None = None
-        if isinstance(payload, ToolExecutionCompletedPayload):
+        if isinstance(payload, MCPPromptPreparedPayload):
+            actual = payload.outcome.data.get("source")
+            if isinstance(actual, dict):
+                source = actual
+            stored = payload.outcome.data.get("original")
+            if isinstance(stored, dict):
+                original = stored
+            external_seen = True
+        elif isinstance(payload, ToolExecutionCompletedPayload):
             result = payload.result
             if not (result.metadata.get("tool_origin") or result.metadata.get("derived_from_mcp")):
                 continue

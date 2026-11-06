@@ -13,6 +13,7 @@ from jdagent.context_archive import decode_object, encode_json, prefix_hash
 from jdagent.domain.errors import SessionError
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
+    MCPPromptPreparedPayload,
     RecoverySnapshotPayload,
     RuntimeEvent,
     SessionStartedPayload,
@@ -301,6 +302,7 @@ class MemoryService:
                         UserMessagePayload,
                         AssistantMessageCompletedPayload,
                         ToolExecutionCompletedPayload,
+                        MCPPromptPreparedPayload,
                     ),
                 ):
                     turns.setdefault(event.turn_id, []).append(event)
@@ -353,6 +355,7 @@ class MemoryService:
                     UserMessagePayload,
                     AssistantMessageCompletedPayload,
                     ToolExecutionCompletedPayload,
+                    MCPPromptPreparedPayload,
                 ),
             )
         ]

@@ -50,6 +50,7 @@ class RuntimeEventType(StrEnum):
     MCP_TASK_OBSERVED = "mcp_task_observed"
     MCP_TASK_CANCEL_REQUESTED = "mcp_task_cancel_requested"
     MCP_TASK_RESULT_SAVED = "mcp_task_result_saved"
+    MCP_PROMPT_PREPARED = "mcp_prompt_prepared"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
@@ -360,6 +361,14 @@ class MCPTaskResultSavedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPPromptPreparedPayload:
+    """Host-fetched external material, never a user statement or model tool call."""
+
+    call_id: str
+    outcome: ToolOutcome
+
+
+@dataclass(frozen=True, slots=True)
 class ModelUsageRecordedPayload:
     """Usage associated with one model call."""
 
@@ -421,6 +430,7 @@ RuntimePayload: TypeAlias = (
     | MCPTaskObservedPayload
     | MCPTaskCancelRequestedPayload
     | MCPTaskResultSavedPayload
+    | MCPPromptPreparedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload
     | TurnFailedPayload

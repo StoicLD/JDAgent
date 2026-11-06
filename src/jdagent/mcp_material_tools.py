@@ -1,8 +1,9 @@
 """Model-selected external resource and Prompt material, without user-role promotion."""
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
+from jdagent.domain.events import MCPPromptPreparedPayload, RuntimeEventType
 from jdagent.domain.json import (
     JsonObject,
     normalize_json,
@@ -19,8 +20,9 @@ from jdagent.domain.tools import (
     ToolOrigin,
     ToolOutcome,
 )
-from jdagent.mcp_execution import MCPExecution
+from jdagent.mcp_execution import MCPExecution, MCPResultLimits
 from jdagent.mcp_service import MCPService
+from jdagent.ports import ContextObjects, RuntimeJournal
 
 
 class MCPMaterialTools:
@@ -119,7 +121,7 @@ class MCPMaterialTools:
                             "additionalProperties": False,
                         },
                         RiskLevel.READ,
-                        self._get_prompt,
+                        self.get_prompt,
                         manages_timeout=True,
                         origin=ToolOrigin("mcp_control"),
                     ),
@@ -224,9 +226,8 @@ class MCPMaterialTools:
             )
         return await self._execution.invoke(entry, {}, context)
 
-    async def _get_prompt(
-        self, arguments: JsonObject, context: ToolExecutionContext
-    ) -> ToolOutcome:
+    async def get_prompt(self, arguments: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
+        """Fetch explicit material with the same required-argument and source contract."""
         try:
             entry = await self._service.resolve_material(
                 self._session_id,
@@ -253,8 +254,44 @@ class MCPMaterialTools:
                 completed=False,
                 error_code=ToolErrorCode.INVALID_ARGUMENTS,
                 message=(
-                    "Required Prompt arguments are missing; clarify through normal conversation"
+                    "Required Prompt arguments are missing; clarify through normal conversation: "
+                    + json.dumps([name[:128] for name in missing[:20]], ensure_ascii=False)
+                    + (
+                        " (names truncated)"
+                        if len(missing) > 20 or any(len(name) > 128 for name in missing)
+                        else ""
+                    )
                 ),
                 data={"missing_arguments": normalize_json(missing)},
             )
         return await self._execution.invoke(entry, supplied, context)
+
+
+class MCPDirectPrompts:
+    """Prepare material for a user command, without fabricating a model call pair."""
+
+    def __init__(
+        self, service: MCPService, objects: ContextObjects, limits: MCPResultLimits
+    ) -> None:
+        self._service, self._objects, self._limits = service, objects, limits
+
+    async def prepare(
+        self, journal: RuntimeJournal, arguments: JsonObject, context: ToolExecutionContext
+    ) -> ToolOutcome:
+        execution = MCPExecution(self._service, journal, self._objects, self._limits)
+        outcome = await MCPMaterialTools(self._service, execution, context.session_id).get_prompt(
+            arguments, context
+        )
+        source = outcome.data.get("source") or {
+            "kind": "mcp",
+            "server_id": require_string(arguments, "server_id"),
+            "raw_name": require_string(arguments, "name"),
+            "capability_kind": "prompt",
+        }
+        outcome = replace(outcome, data={**outcome.data, "source": source})
+        await journal.record(
+            context.turn_id,
+            RuntimeEventType.MCP_PROMPT_PREPARED,
+            MCPPromptPreparedPayload(context.call_id, outcome),
+        )
+        return outcome

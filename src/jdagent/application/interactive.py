@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from jdagent.application.coordinator import CoordinatedTurn, TurnCoordinator
 from jdagent.application.headless import ExitStatus
+from jdagent.application.mcp_prompt import parse_mcp_prompt
 from jdagent.application.permissions import revoke_session_rule
 from jdagent.application.session_catalog import SessionCatalog, SessionSummary
 from jdagent.application.session_recovery import (
@@ -164,7 +165,7 @@ class TerminalStatus:
 
 
 def parse_user_action(raw: str) -> UserAction:
-    """Parse one submitted line without sending command text to the model."""
+    """Route controls separately, retaining explicit Prompt triggers as user input."""
 
     stripped = raw.strip()
     if not stripped:
@@ -172,6 +173,8 @@ def parse_user_action(raw: str) -> UserAction:
     if not stripped.startswith("/"):
         return PromptAction(raw)
     try:
+        if parse_mcp_prompt(raw) is not None:
+            return PromptAction(raw)
         parts = shlex.split(stripped)
     except ValueError as error:
         raise CommandError(f"Invalid command syntax: {error}") from error
@@ -190,6 +193,7 @@ _HELP = (
     "/compact /context-window /cancel\n"
     "/mcp status|list [server|*] [offset]|refresh [server]|tasks [offset]\n"
     "/mcp task <task-ref> [query|result|cancel]\n"
+    "/mcp prompt <server> <name> [key=value ...]\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )

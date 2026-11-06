@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from jdagent.application.mcp_prompt import parse_mcp_prompt
 from jdagent.application.session_recovery import LogicalRecovery, classify_logical_recovery
 from jdagent.cancellation import complete_before_cancel
 from jdagent.context_archive import encode_json
@@ -51,6 +52,7 @@ from jdagent.knowledge.ptk import (
     empty_prepared_knowledge,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
+from jdagent.mcp_material_tools import MCPDirectPrompts
 from jdagent.mcp_service import MCPService
 from jdagent.mcp_task_management import MCPTaskAction, MCPTaskManagement
 from jdagent.memory_service import MemoryService
@@ -149,6 +151,7 @@ class TurnCoordinator:
         memory: MemoryService | None = None,
         mcp: MCPService | None = None,
         mcp_task_management: MCPTaskManagement | None = None,
+        mcp_prompts: MCPDirectPrompts | None = None,
     ) -> None:
         self._session = session
         self._workspace = workspace
@@ -161,6 +164,7 @@ class TurnCoordinator:
         self.memory = memory
         self._mcp = mcp
         self._mcp_task_management = mcp_task_management
+        self._mcp_prompts = mcp_prompts
         self.after_output: Callable[[], None] = lambda: None
         self._owned_sessions: set[str] = set()
         self._running: set[str] = set()
@@ -338,6 +342,7 @@ class TurnCoordinator:
         session_id: str | None = None,
         new_session_id: str | None = None,
         cancellation: CancellationToken | None = None,
+        allow_prompt_clarification: bool = True,
     ) -> CoordinatedTurn:
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
@@ -355,6 +360,7 @@ class TurnCoordinator:
                 session_id=session_id,
                 new_session_id=identity if session_id is None else None,
                 cancellation=cancellation,
+                allow_prompt_clarification=allow_prompt_clarification,
             )
         finally:
             self._running.discard(identity)
@@ -367,11 +373,15 @@ class TurnCoordinator:
         session_id: str | None = None,
         new_session_id: str | None = None,
         cancellation: CancellationToken | None = None,
+        allow_prompt_clarification: bool = True,
     ) -> CoordinatedTurn:
         """Append a user message and drive exactly one agent turn."""
 
         if not user_text.strip():
             raise ValueError("user_text must not be empty")
+        direct_prompt = parse_mcp_prompt(user_text)
+        if direct_prompt is not None and self._mcp_prompts is None:
+            raise ValueError("MCP Prompt commands are unavailable")
         await asyncio.to_thread(self._loop_factory.prepare_turn)
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
@@ -526,7 +536,13 @@ class TurnCoordinator:
             empty = empty_prepared_knowledge(turn_id, turn_token, "")
             return CoordinatedTurn(actual_session_id, turn_id, result, trace, empty)
 
-        knowledge = await self._prepare(turn_id, turn_token, user_text)
+        knowledge = (
+            await self._prepare(turn_id, turn_token, user_text)
+            if direct_prompt is None
+            else empty_prepared_knowledge(
+                turn_id, turn_token, sha256(user_text.encode()).hexdigest()
+            )
+        )
         await journal.record(
             turn_id,
             RuntimeEventType.TURN_RETRIEVAL_RECORDED,
@@ -540,6 +556,40 @@ class TurnCoordinator:
             )
             return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
 
+        if direct_prompt is not None:
+            assert self._mcp_prompts is not None
+            try:
+                prepared = await self._mcp_prompts.prepare(
+                    journal,
+                    direct_prompt,
+                    ToolExecutionContext(
+                        actual_session_id,
+                        turn_id,
+                        self._workspace,
+                        call_id=f"prompt-{uuid4().hex}",
+                        tool_name="get_mcp_prompt",
+                    ),
+                )
+            except asyncio.CancelledError:
+                result = await self._fail_before_loop(journal, turn_id, "mcp_prompt_cancelled")
+                return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
+            clarify = (
+                allow_prompt_clarification
+                and prepared.error_code is ToolErrorCode.INVALID_ARGUMENTS
+                and bool(prepared.data.get("missing_arguments"))
+            )
+            if prepared.stop_turn or prepared.error_code is not None and not clarify:
+                reason = StopReason.CANCELLED if prepared.cancelled else StopReason.TOOL_ERROR
+                category = (
+                    f"mcp_prompt_{prepared.error_code.value if prepared.error_code else 'stopped'}"
+                )
+                await journal.record(
+                    turn_id,
+                    RuntimeEventType.TURN_FAILED,
+                    TurnFailedPayload(reason, category, prepared.message, 0, 0),
+                )
+                result = TurnResult(reason, prepared.message, 0, 0, category)
+                return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
         loop = self._loop_factory.create(journal)
         if actual_session_id in self._pending_compactions:
             service = self._loop_factory.context_for(actual_session_id)
@@ -592,7 +642,7 @@ class TurnCoordinator:
             TurnFailedPayload(
                 StopReason.CANCELLED,
                 error_category,
-                "Turn was cancelled during knowledge preparation",
+                "Turn was cancelled before model execution",
                 0,
                 0,
             ),

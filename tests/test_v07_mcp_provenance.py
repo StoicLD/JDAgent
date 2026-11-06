@@ -12,7 +12,7 @@ from jdagent.adapters.fake import FakeApproval
 from jdagent.composition import build_runtime
 from jdagent.configuration import CliOverrides, resolve_configuration
 from jdagent.data_paths import DataPaths
-from jdagent.domain.events import ToolExecutionCompletedPayload
+from jdagent.domain.events import MCPPromptPreparedPayload, ToolExecutionCompletedPayload
 from jdagent.domain.model import (
     ModelCapabilities,
     ModelEvent,
@@ -27,8 +27,9 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("history_turn", ["original", "derived_assistant"])
 @pytest.mark.parametrize("history_entry", ["read_history", "search_history"])
+@pytest.mark.parametrize("prompt_entry", ["model", "direct"])
 def test_host_source_survives_prompt_compaction_and_session_reopen(
-    tmp_path: Path, engine: str, history_turn: str, history_entry: str
+    tmp_path: Path, engine: str, history_turn: str, history_entry: str, prompt_entry: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -56,7 +57,7 @@ def test_host_source_survives_prompt_compaction_and_session_reopen(
         def __init__(self) -> None:
             self.requests: list[ModelRequest] = []
             self.sequence = 0
-            self.task_calls = 0
+            self.task_calls = 1 if prompt_entry == "direct" else 0
             self.source_session = ""
             self.source_turn = ""
 
@@ -131,21 +132,34 @@ def test_host_source_survives_prompt_compaction_and_session_reopen(
             config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
         )
         try:
-            turn = await runtime.coordinator.send(
-                "User-owned project fact: use pytest. Inspect the template."
+            trigger = (
+                "/mcp prompt docs explain topic=fixture_large"
+                if prompt_entry == "direct"
+                else "User-owned project fact: use pytest. Inspect the template."
             )
+            turn = await runtime.coordinator.send(trigger)
             assert turn.result.stop_reason.value == "completed"
             model.source_session, model.source_turn = turn.session_id, turn.turn_id
             event = await anext(
                 event
                 async for event in runtime.session.read(turn.session_id)
-                if isinstance(event.payload, ToolExecutionCompletedPayload)
+                if isinstance(
+                    event.payload,
+                    MCPPromptPreparedPayload
+                    if prompt_entry == "direct"
+                    else ToolExecutionCompletedPayload,
+                )
             )
             model.sequence = event.sequence
             result = event.payload
-            assert isinstance(result, ToolExecutionCompletedPayload)
-            assert result.result.outcome is not None
-            original = result.result.outcome.data["original"]
+            assert isinstance(result, (ToolExecutionCompletedPayload, MCPPromptPreparedPayload))
+            outcome = (
+                result.outcome
+                if isinstance(result, MCPPromptPreparedPayload)
+                else result.result.outcome
+            )
+            assert outcome is not None
+            original = outcome.data["original"]
             compacted = await runtime.coordinator.compact(turn.session_id)
             assert "failed" not in compacted
             maintenance_inputs = [
@@ -184,7 +198,7 @@ def test_host_source_survives_prompt_compaction_and_session_reopen(
             protected = "".join(
                 part.content for part in request.system_parts if part.source == "protected_user"
             )
-            assert "User-owned project fact: use pytest" in protected
+            assert trigger in protected
             assert "remote-only" not in protected
             assert "remote-only " * 100 not in "".join(
                 part.content for part in request.system_parts
@@ -209,7 +223,7 @@ def test_host_source_survives_prompt_compaction_and_session_reopen(
                 for request in model.requests
                 if request.metadata.get("call_kind") == "memory"
             ]
-            assert any("User-owned project fact: use pytest" in text for text in extraction)
+            assert any(trigger in text for text in extraction)
             assert all("remote-only" not in text for text in extraction)
             assert all("tool_execution_completed" not in text for text in extraction)
         finally:

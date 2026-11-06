@@ -9,6 +9,7 @@ class StopReason(StrEnum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     MODEL_ERROR = "model_error"
+    TOOL_ERROR = "tool_error"
     CONTEXT_LIMIT = "context_limit"
     LIMIT_REACHED = "limit_reached"
     SESSION_ERROR = "session_error"

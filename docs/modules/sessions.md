@@ -22,6 +22,8 @@ Task 登记、状态观察和取消意图分别使用 mcp_task_registered、mcp_
 恢复截断前缀会保留已登记任务的引用，未登记时不声称可查回；两种情况都不自动重提工具。
 显式管理使用原 Session 的 task_ref，先核验工作区、受控对象与原连接身份，再查询或取消。
 管理事件不带 Turn ID；mcp_task_result_saved 单独保存取回结果，不重复结束旧模型调用。
+直接 Prompt 使用 mcp_prompt_prepared 保存带来源的有界材料和原文引用。只有触发命令写入 user_message；
+获取事实沿用 MCP 意图／结果链，不生成虚构的 assistant 工具调用或 tool_execution_completed 配对。
 结果来源保留原调用定义，普通原文入口可分页读取；更新后的 TTL 跨重启保留，过期不意味着远端已停止。
 本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令与完整故障矩阵待交付，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
 

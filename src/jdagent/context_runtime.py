@@ -16,6 +16,7 @@ from jdagent.domain.events import (
     CompactionCommittedPayload,
     CompactionFailedPayload,
     ConstraintRevokedPayload,
+    MCPPromptPreparedPayload,
     ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
     RecoverySnapshotPayload,
@@ -58,6 +59,7 @@ _CONVERSATION = (
     UserMessagePayload,
     AssistantMessageCompletedPayload,
     ToolExecutionCompletedPayload,
+    MCPPromptPreparedPayload,
 )
 
 
@@ -515,7 +517,8 @@ class ContextService:
             metadata={**request.metadata, "request_id": uuid4().hex, "call_kind": call_kind},
         )
         if any(
-            isinstance(event.payload, ToolExecutionCompletedPayload)
+            isinstance(event.payload, MCPPromptPreparedPayload)
+            or isinstance(event.payload, ToolExecutionCompletedPayload)
             and (
                 event.payload.result.metadata.get("tool_origin")
                 or event.payload.result.metadata.get("derived_from_mcp")
@@ -577,11 +580,17 @@ class ContextService:
             if isinstance(event.payload, ToolExecutionCompletedPayload)
             and event.payload.result.metadata.get("tool_origin")
         }
+        has_material = any(
+            isinstance(event.payload, MCPPromptPreparedPayload) for event in self._journal.events
+        )
         target = int(self._budget.input_limit * self._budget.trigger_ratio) - 1
         candidates = {
             index
             for index, message in enumerate(request.messages)
-            if message.role is MessageRole.TOOL and (message.tool_call_id, message.name) in external
+            if message.role is MessageRole.TOOL
+            and (message.tool_call_id, message.name) in external
+            or has_material
+            and message.name == "mcp_material"
         }
         while candidates and self._estimator.measure(request).input_tokens > target:
             index = max(candidates, key=lambda item: len(request.messages[item].content))
