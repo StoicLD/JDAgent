@@ -15,7 +15,7 @@ from uuid import uuid4
 from jdagent.application.coordinator import CoordinatedTurn, TurnCoordinator
 from jdagent.application.headless import ExitStatus
 from jdagent.application.permissions import revoke_session_rule
-from jdagent.application.session_catalog import SessionCatalog
+from jdagent.application.session_catalog import SessionCatalog, SessionSummary
 from jdagent.application.session_recovery import (
     SessionRecovery,
     prepare_session_resume,
@@ -184,6 +184,15 @@ _HELP = (
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
+
+
+def _session_row(item: SessionSummary, workspace: Path) -> str:
+    updated = item.updated_at.isoformat() if item.updated_at is not None else "updated_at=unknown"
+    location = str(workspace) if item.workspace_identity is not None else "unknown"
+    return (
+        f"{item.name or '(unreadable)'} {item.short_id} {updated} "
+        f"workspace={location} {item.status}"
+    )
 
 
 class InteractiveApplication:
@@ -492,11 +501,7 @@ class InteractiveApplication:
                 self._require_arity(action.arguments, 0, "/sessions")
                 sessions = await self._catalog.list_sessions()
                 message = (
-                    "\n".join(
-                        f"{item.name} {item.short_id} {item.updated_at.isoformat()} "
-                        f"workspace={self._context.workspace} {item.status}"
-                        for item in sessions
-                    )
+                    "\n".join(_session_row(item, self._context.workspace) for item in sessions)
                     or "no sessions"
                 )
                 await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
@@ -509,7 +514,7 @@ class InteractiveApplication:
                     await self._coordinator.release_session(previous_session)
                 self._last_trace = await self._trace_for_session(self._session_id)
                 display_name = (
-                    selected.name
+                    selected.name or selected.short_id
                     if self._session_id == selected.session_id
                     else f"recovery-{selected.session_id[:8]}"
                 )
@@ -525,7 +530,7 @@ class InteractiveApplication:
                     raise CommandError("usage: /rename <name>")
                 session_id = self._require_session()
                 renamed = await self._catalog.rename(session_id, " ".join(action.arguments))
-                self._session_name = renamed.name
+                self._session_name = renamed.name or renamed.short_id
                 await self._presenter.publish(
                     UiEvent(UiEventKind.INFO, f"renamed session to {renamed.name}")
                 )

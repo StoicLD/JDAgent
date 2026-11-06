@@ -33,6 +33,8 @@ Task 登记、状态观察和取消意图分别使用 mcp_task_registered、mcp_
 
 正常组合根使用 append-only JSONL；测试可用 InMemory Adapter。
 JSONL 每行一个事件，追加完成包含 flush/fsync；读取校验 schema、Session ID 和严格序号。
+目录按会话隔离读取错误：问题项显示 ID 和错误类别，未验证的名称、时间、工作区保持未知；其余项继续列出。
+选择不可读项会拒绝恢复，不跳过未知执行事件；再次选择会重新读取，问题状态不是永久缓存。
 当前事件 `schema_version=4`，默认数据分区为 `sessions-v5`。显式读取旧格式会被拒绝，
 不自动导入、迁移或删除；仓库里的 legacy Adapter 不等于正常启动仍会调用它。
 

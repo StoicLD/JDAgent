@@ -1,6 +1,6 @@
 """Rebuildable session discovery, selection, and naming use cases."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from jdagent.application.session_recovery import (
@@ -30,11 +30,12 @@ class SessionSummary:
     """Catalog projection rebuilt from canonical session facts."""
 
     session_id: str
-    name: str
-    workspace_identity: str
-    updated_at: datetime
+    name: str | None
+    workspace_identity: str | None
+    updated_at: datetime | None
     status: str
     recovery_message: str | None = None
+    read_error: SessionErrorCode | None = None
 
     @property
     def short_id(self) -> str:
@@ -94,44 +95,58 @@ class SessionCatalog:
     async def list_sessions(self) -> tuple[SessionSummary, ...]:
         summaries: list[SessionSummary] = []
         for session_id in await self._discovery.list_session_ids():
-            recovery_message: str | None = None
-            logical: LogicalRecovery | None = None
-            if self._recovery is not None:
-                result = await self._recovery.recover(session_id)
-                if result.physical is PhysicalRecovery.UNRECOVERABLE:
-                    raise SessionError(
-                        SessionErrorCode.CORRUPT_EVENT,
-                        result.message or f"Session cannot be recovered: {session_id}",
-                    )
-                events = list(result.events)
-                logical = result.logical
-                recovery_message = result.message
-            else:
-                events = [event async for event in self._session.read(session_id)]
-            summary = _summary(session_id, events, self._workspace_identity)
-            if logical is LogicalRecovery.INTERRUPTED_SAFE or logical is (
-                LogicalRecovery.UNCERTAIN_SIDE_EFFECT
-            ):
+            try:
+                summary = await self._read_summary(session_id)
+            except SessionError as error:
                 summary = SessionSummary(
-                    session_id=summary.session_id,
-                    name=summary.name,
-                    workspace_identity=summary.workspace_identity,
-                    updated_at=summary.updated_at,
-                    status=logical.value,
-                    recovery_message=recovery_message,
-                )
-            elif recovery_message is not None:
-                summary = SessionSummary(
-                    session_id=summary.session_id,
-                    name=summary.name,
-                    workspace_identity=summary.workspace_identity,
-                    updated_at=summary.updated_at,
-                    status=summary.status,
-                    recovery_message=recovery_message,
+                    session_id=session_id,
+                    name=None,
+                    workspace_identity=None,
+                    updated_at=None,
+                    status=error.code.value,
+                    read_error=error.code,
+                    recovery_message=f"Session is unavailable: {error.code.value}",
                 )
             summaries.append(summary)
-        summaries.sort(key=lambda item: item.updated_at, reverse=True)
+        summaries.sort(
+            key=lambda item: (
+                item.updated_at is not None,
+                item.updated_at.timestamp() if item.updated_at is not None else 0,
+                item.session_id,
+            ),
+            reverse=True,
+        )
         return tuple(summaries)
+
+    async def _read_summary(self, session_id: str) -> SessionSummary:
+        recovery_message: str | None = None
+        logical: LogicalRecovery | None = None
+        if self._recovery is not None:
+            result = await self._recovery.recover(session_id)
+            if result.physical is PhysicalRecovery.UNRECOVERABLE:
+                raise SessionError(SessionErrorCode.CORRUPT_EVENT, "Session cannot be recovered")
+            events = list(result.events)
+            logical = result.logical
+            recovery_message = result.message
+        else:
+            events = [event async for event in self._session.read(session_id)]
+        summary = _summary(session_id, events, self._workspace_identity)
+        return replace(
+            summary,
+            status=logical.value
+            if logical is LogicalRecovery.INTERRUPTED_SAFE
+            or logical is LogicalRecovery.UNCERTAIN_SIDE_EFFECT
+            else summary.status,
+            recovery_message=recovery_message,
+        )
+
+    @staticmethod
+    def _readable(summary: SessionSummary) -> SessionSummary:
+        if summary.read_error is not None:
+            raise SessionError(
+                summary.read_error, f"Session {summary.session_id} is unavailable: {summary.status}"
+            )
+        return summary
 
     async def resolve(self, selector: str) -> SessionSummary:
         normalized = selector.strip()
@@ -140,7 +155,7 @@ class SessionCatalog:
         sessions = await self.list_sessions()
         exact = [item for item in sessions if item.session_id == normalized]
         if exact:
-            return exact[0]
+            return self._readable(exact[0])
         matches = [
             item
             for item in sessions
@@ -150,7 +165,7 @@ class SessionCatalog:
             raise SessionSelectionError(f"Session not found: {normalized}")
         if len(matches) > 1:
             raise SessionSelectionError(f"Session selector is ambiguous: {normalized}")
-        return matches[0]
+        return self._readable(matches[0])
 
     async def rename(self, session_id: str, name: str) -> SessionSummary:
         normalized = name.strip()
@@ -161,6 +176,7 @@ class SessionCatalog:
         ):
             raise ValueError("Session name must be 1-80 printable characters")
         journal = await EventJournal.open(self._session, session_id, require_existing=True)
+        _summary(session_id, list(journal.events), self._workspace_identity)
         await journal.record(
             None,
             RuntimeEventType.SESSION_RENAMED,

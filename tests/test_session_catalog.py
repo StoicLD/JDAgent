@@ -41,6 +41,7 @@ def test_catalog_rebuilds_names_from_session_facts(tmp_path: Path) -> None:
             workspace_identity="workspace-1",
         )
         renamed = (await rebuilt.list_sessions())[0]
+        assert initial.name is not None and renamed.name is not None
         return initial.name, renamed.name, renamed.session_id
 
     initial_name, renamed_name, session_id = asyncio.run(scenario())
