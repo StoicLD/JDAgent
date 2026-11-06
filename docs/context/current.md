@@ -52,7 +52,8 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
    随后用户显式调用 implement 要求实现、审查修复与分段提交；P0 已实现有界传输和现代 Tasks 公开扩展，
    F08 的锁版接入实验见 [P0 证据](../reviews/REV-20261106-002-v0.7-p0-sdk-validation.md)。
    [实施记录](../plans/v0.7-implementation.md)和[学习清单](../learning/v0.7-mcp-client-learning-checklist.md)已建立。
-   配置／检索、运行时接线、结果持久化、恢复和 CLI 仍待实施；R1 独立复审与完整 v0.7 验收尚未完成。
+   用户／项目 MCP 配置已接入原有 CLI 启动校验，见[配置说明](../guides/mcp.md)。连接／检索、运行时接线、
+   结果持久化、恢复和管理命令仍待实施；R1 独立复审与完整 v0.7 验收尚未完成。
 
 ## 授权与证据边界
 

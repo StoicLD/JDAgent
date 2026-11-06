@@ -10,6 +10,11 @@ from typing import cast
 
 from jdagent.data_paths import DataPaths
 from jdagent.knowledge.types import EmbeddingProfile
+from jdagent.mcp_configuration import (
+    MCPConfigurationError,
+    MCPServerConfiguration,
+    resolve_mcp_configuration,
+)
 
 _CONTEXT_FIELDS = frozenset(
     {
@@ -42,6 +47,7 @@ _USER_FIELDS = _CONTEXT_FIELDS | frozenset(
         "write_permission",
         "command_permission",
         "tool_scope",
+        "mcp",
     }
 )
 _PROJECT_FIELDS = _CONTEXT_FIELDS | frozenset(
@@ -54,6 +60,7 @@ _PROJECT_FIELDS = _CONTEXT_FIELDS | frozenset(
         "write_permission",
         "command_permission",
         "tool_scope",
+        "mcp",
     }
 )
 
@@ -123,6 +130,7 @@ class ResolvedConfiguration:
     cli_overrides: CliOverrides = field(default_factory=CliOverrides, repr=False)
     model_adapter: str = "native"
     runtime_engine: str = "native"
+    mcp_servers: tuple[MCPServerConfiguration, ...] = ()
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -265,6 +273,15 @@ def resolve_configuration(
     }
     user = _read_layer(paths.user_config_file, layer="user", allowed=_USER_FIELDS)
     project = _read_layer(paths.project_config_file, layer="project", allowed=_PROJECT_FIELDS)
+    try:
+        mcp_servers = resolve_mcp_configuration(
+            user.pop("mcp", {}),
+            project.pop("mcp", {}),
+            workspace=paths.workspace,
+            user_directory=paths.user_config_file.parent,
+        )
+    except MCPConfigurationError as error:
+        raise ConfigurationError(str(error)) from None
     api_key_file_value = user.pop("api_key_file", None)
     user_permission = (
         _non_empty_string(user, "write_permission") if "write_permission" in user else None
@@ -398,4 +415,5 @@ def resolve_configuration(
         total_output_token_limit=cast(int, total_output),
         memory_embedding=embedding,
         cli_overrides=overrides,
+        mcp_servers=mcp_servers,
     )
