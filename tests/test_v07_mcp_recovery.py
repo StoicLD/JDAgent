@@ -16,6 +16,7 @@ from jdagent.data_paths import DataPaths, workspace_identity
 from jdagent.domain.events import (
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
+    MCPTaskRegisteredPayload,
     ToolExecutionCompletedPayload,
 )
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
@@ -23,7 +24,16 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode, Tool
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
-@pytest.mark.parametrize("cut", ["before_intent", "after_intent", "after_result"])
+@pytest.mark.parametrize(
+    "cut",
+    [
+        "before_intent",
+        "after_intent",
+        "after_result",
+        "before_task_registration",
+        "after_task_registration",
+    ],
+)
 def test_resume_uses_durable_mcp_evidence_without_replaying_business(
     tmp_path: Path, engine: str, cut: str
 ) -> None:
@@ -53,7 +63,13 @@ def test_resume_uses_durable_mcp_evidence_without_replaying_business(
                 ResponseCompleted("tool_calls"),
             ),
             (
-                ToolCallCompleted(ToolCall("remote", "mcp__docs__read", {})),
+                ToolCallCompleted(
+                    ToolCall(
+                        "remote",
+                        "mcp__docs__read",
+                        {"fixture_task": "normal"} if "task_registration" in cut else {},
+                    )
+                ),
                 ResponseCompleted("tool_calls"),
             ),
             (TextDelta("done"), ResponseCompleted("stop")),
@@ -89,6 +105,14 @@ def test_resume_uses_durable_mcp_evidence_without_replaying_business(
             if cut == "after_intent"
             else finished.sequence
         )
+        task_ref: str | None = None
+        if "task_registration" in cut:
+            registration = next(
+                e for e in events if isinstance(e.payload, MCPTaskRegisteredPayload)
+            )
+            assert isinstance(registration.payload, MCPTaskRegisteredPayload)
+            cutoff = registration.sequence - (1 if cut == "before_task_registration" else 0)
+            task_ref = registration.payload.task_ref
         path = runtime.session.path_for(turn.session_id)
         path.write_bytes(b"".join(path.read_bytes().splitlines(keepends=True)[:cutoff]))
         resumed = await prepare_session_resume(
@@ -111,9 +135,14 @@ def test_resume_uses_durable_mcp_evidence_without_replaying_business(
         assert result.outcome is not None
         if cut == "before_intent":
             assert result.error_code is ToolErrorCode.NOT_EXECUTED
-        elif cut == "after_intent":
+        elif cut in {"after_intent", "before_task_registration", "after_task_registration"}:
             assert result.error_code is ToolErrorCode.UNCERTAIN
             assert result.outcome.effect == "none" and result.stop_turn
+            if cut == "after_task_registration":
+                assert result.outcome.data["task_ref"] == task_ref
+                assert result.outcome.data["task_status"] == "working"
+            elif cut == "before_task_registration":
+                assert "task_ref" not in result.outcome.data
         else:
             assert result.status is ToolResultStatus.SUCCESS
             assert result.outcome.data["preview"] == {

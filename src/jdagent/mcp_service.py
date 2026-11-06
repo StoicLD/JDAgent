@@ -24,6 +24,8 @@ from jdagent.domain.mcp import (
     MCPSearchHit,
     MCPSearchResult,
     MCPServerStatus,
+    MCPTask,
+    MCPTaskSnapshot,
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 from jdagent.mcp_definitions import (
@@ -48,6 +50,7 @@ class _Server:
     index_bytes: int = 0
     touched: int = 0
     rejected: tuple[MCPRejectedCapability, ...] = ()
+    quarantined: bool = False
 
     def status(self) -> MCPServerStatus:
         information = None if self.peer is None else self.peer.information
@@ -80,6 +83,7 @@ class MCPService:
         self._tick = 0
         self._sessions: dict[str, dict[str, _Server]] = {}
         self._retired: list[MCPConnectionPort] = []
+        self._cleanup: set[asyncio.Task[bool]] = set()
         self._definition_limits = definition_limits or MCPDefinitionLimits()
         self._definitions: dict[str, MCPDefinitionCache] = {}
 
@@ -123,7 +127,7 @@ class MCPService:
 
     async def call(
         self, session_id: str, entry: MCPCapability, arguments: JsonObject
-    ) -> JsonObject:
+    ) -> JsonObject | MCPTask:
         """Use the previously exposed host route without reconnecting or replaying."""
         if not self.capability_allowed(session_id, entry):
             raise MCPFailure("configuration")
@@ -135,7 +139,66 @@ class MCPService:
             return await server.peer.request(
                 "prompts/get", {"name": entry.name, "arguments": arguments}
             )
-        return await server.peer.request("tools/call", {"name": entry.name, "arguments": arguments})
+        raw = await server.peer.request("tools/call", {"name": entry.name, "arguments": arguments})
+        return MCPTask.from_data(raw) if raw.get("resultType") == "task" else raw
+
+    def task_identity(self, session_id: str, entry: MCPCapability) -> str:
+        peer = self._task_peer(session_id, entry)
+        assert peer.information is not None
+        return peer.information.identity_digest
+
+    def supports_tasks(self, session_id: str, entry: MCPCapability) -> bool:
+        peer = self._sessions[session_id][entry.server_id].peer
+        return bool(
+            entry.kind == "tool"
+            and peer is not None
+            and peer.information is not None
+            and peer.information.tasks
+        )
+
+    async def get_task(
+        self, session_id: str, entry: MCPCapability, task: MCPTask
+    ) -> MCPTaskSnapshot:
+        raw = await self._task_peer(session_id, entry).request(
+            "tasks/get", {"taskId": task.task_id}
+        )
+        result = raw.get("result")
+        return MCPTaskSnapshot(
+            MCPTask.from_data(raw),
+            None if result is None else require_object(result, "Task result"),
+        )
+
+    async def cancel_task(self, session_id: str, entry: MCPCapability, task: MCPTask) -> None:
+        await self._task_peer(session_id, entry).request("tasks/cancel", {"taskId": task.task_id})
+
+    def quarantine(self, session_id: str, entry: MCPCapability) -> None:
+        """Forbid reuse immediately while retaining bounded resource-close ownership."""
+        server = self._sessions[session_id][entry.server_id]
+        if server.generation != entry.generation:
+            return
+        server.quarantined = True
+        _discard(server, "failed", "cleanup_pending")
+        self._definitions[session_id].invalidate(entry.server_id)
+        if server.peer is not None:
+            if server.peer not in self._retired:
+                self._retired.append(server.peer)
+            closing = asyncio.create_task(server.peer.aclose(), name="mcp-quarantined-close")
+            self._cleanup.add(closing)
+            closing.add_done_callback(self._cleanup_finished)
+
+    def _cleanup_finished(self, task: asyncio.Task[bool]) -> None:
+        self._cleanup.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    def _task_peer(self, session_id: str, entry: MCPCapability) -> MCPConnectionPort:
+        if not self.tool_allowed(session_id, entry.server_id, entry.name, entry.generation):
+            raise MCPFailure("configuration")
+        peer = self._sessions[session_id][entry.server_id].peer
+        assert peer is not None
+        if peer.information is None or not peer.information.tasks:
+            raise MCPFailure("unsupported")
+        return peer
 
     def material_enabled(self, session_id: str, kind: MCPCapabilityKind) -> bool:
         """Inspect only host configuration; exposing controls must not connect a peer."""
@@ -156,6 +219,7 @@ class MCPService:
             or not server.configuration.enabled
             or server.generation != entry.generation
             or server.peer is None
+            or server.quarantined
             or server.peer.state != "ready"
             or server.peer.information is None
         ):
@@ -381,6 +445,7 @@ class MCPService:
         return bool(
             server
             and server.configuration.enabled
+            and not server.quarantined
             and server.generation == generation
             and name in server.configuration.tools
             and server.peer is not None

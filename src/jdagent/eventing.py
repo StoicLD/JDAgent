@@ -7,6 +7,8 @@ from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
+    MCPTaskObservedPayload,
+    MCPTaskRegisteredPayload,
     RuntimeEvent,
     RuntimeEventType,
     RuntimePayload,
@@ -123,6 +125,16 @@ async def close_pending_calls(
         for event in events
         if isinstance(event.payload, MCPInvocationFinishedPayload)
     }
+    task_references = {
+        event.payload.call_id: event.payload
+        for event in events
+        if isinstance(event.payload, MCPTaskRegisteredPayload)
+    }
+    task_statuses = {
+        event.payload.task_ref: event.payload.status
+        for event in events
+        if isinstance(event.payload, MCPTaskObservedPayload) and event.payload.status is not None
+    }
     for event in events:
         if not isinstance(event.payload, AssistantMessageCompletedPayload):
             continue
@@ -131,7 +143,14 @@ async def close_pending_calls(
                 continue
             unknown = call.call_id in started
             intent = mcp_intents.get(call.call_id)
+            task = task_references.get(call.call_id)
             outcome = ToolOutcome(
+                data={
+                    "task_ref": task.task_ref,
+                    "task_status": task_statuses.get(task.task_ref, task.status),
+                }
+                if task is not None
+                else {},
                 completed=False,
                 effect="unknown" if unknown else "none",
                 error_code=ToolErrorCode.UNCERTAIN

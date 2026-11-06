@@ -23,6 +23,9 @@ from jdagent.domain.events import (
     MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
+    MCPTaskCancelRequestedPayload,
+    MCPTaskObservedPayload,
+    MCPTaskRegisteredPayload,
     ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
     PermissionRequestedPayload,
@@ -56,7 +59,7 @@ from jdagent.domain.json import (
     require_object,
     require_string,
 )
-from jdagent.domain.mcp import MCPOperation
+from jdagent.domain.mcp import MCPOperation, MCPTaskStatus
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -150,6 +153,30 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, MCPTaskCancelRequestedPayload):
+        return {"call_id": payload.call_id, "task_ref": payload.task_ref}
+    if isinstance(payload, MCPTaskRegisteredPayload):
+        return {
+            "call_id": payload.call_id,
+            "task_ref": payload.task_ref,
+            "server_id": payload.server_id,
+            "raw_name": payload.raw_name,
+            "generation": payload.generation,
+            "handle_hash": payload.handle_hash,
+            "status": payload.status,
+            "handle_bytes": payload.handle_bytes,
+        }
+    if isinstance(payload, MCPTaskObservedPayload):
+        return {
+            "call_id": payload.call_id,
+            "task_ref": payload.task_ref,
+            "status": payload.status,
+            "attempt": payload.attempt,
+            "response_confirmed": payload.response_confirmed,
+            "failure_kind": payload.failure_kind,
+            "rpc_code": payload.rpc_code,
+            "operation": payload.operation,
+        }
     if isinstance(payload, MCPAttemptFinishedPayload):
         return {
             "call_id": payload.call_id,
@@ -438,6 +465,42 @@ def _tool_result(data: JsonObject) -> ToolResult:
 
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.MCP_TASK_CANCEL_REQUESTED:
+        return MCPTaskCancelRequestedPayload(
+            require_string(data, "call_id"), require_string(data, "task_ref")
+        )
+    if event_type in {RuntimeEventType.MCP_TASK_REGISTERED, RuntimeEventType.MCP_TASK_OBSERVED}:
+        status = data.get("status")
+        if status not in {None, "working", "input_required", "completed", "failed", "cancelled"}:
+            raise ValueError("Invalid MCP task status")
+        if event_type is RuntimeEventType.MCP_TASK_OBSERVED:
+            if not isinstance(data.get("response_confirmed"), bool):
+                raise ValueError("MCP Task response confirmation must be boolean")
+            operation = data.get("operation")
+            if operation not in ("get", "cancel"):
+                raise ValueError("Invalid MCP Task control operation")
+            return MCPTaskObservedPayload(
+                require_string(data, "call_id"),
+                require_string(data, "task_ref"),
+                cast(MCPTaskStatus | None, status),
+                require_integer(data, "attempt"),
+                data["response_confirmed"] is True,
+                optional_string(data, "failure_kind"),
+                require_integer(data, "rpc_code") if data.get("rpc_code") is not None else None,
+                operation,
+            )
+        if status is None:
+            raise ValueError("MCP Task registration must have a status")
+        return MCPTaskRegisteredPayload(
+            require_string(data, "call_id"),
+            require_string(data, "task_ref"),
+            require_string(data, "server_id"),
+            require_string(data, "raw_name"),
+            require_string(data, "generation"),
+            require_string(data, "handle_hash"),
+            cast(MCPTaskStatus, status),
+            require_integer(data, "handle_bytes"),
+        )
     if event_type is RuntimeEventType.MCP_ATTEMPT_FINISHED:
         if not isinstance(data.get("response_confirmed"), bool):
             raise ValueError("response_confirmed must be boolean")

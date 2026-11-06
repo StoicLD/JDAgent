@@ -1,7 +1,9 @@
 """Host-owned MCP connection state, without SDK objects or credential values."""
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import Literal, cast
+
+from jdagent.domain.json import JsonObject, require_string
 
 MCPConnectionState = Literal["not_connected", "connecting", "ready", "unavailable", "closed"]
 MCPMethod = Literal[
@@ -12,10 +14,13 @@ MCPMethod = Literal[
     "tools/call",
     "resources/read",
     "prompts/get",
+    "tasks/get",
+    "tasks/cancel",
 ]
 MCPOperation = Literal["tools/call", "resources/read", "prompts/get", "discovery"]
 MCPCapabilityKind = Literal["tool", "resource", "resource_template", "prompt"]
 MCPDirectoryState = Literal["not_loaded", "ready", "partial", "failed", "evicted", "disabled"]
+MCPTaskStatus = Literal["working", "input_required", "completed", "failed", "cancelled"]
 MCPFailureKind = Literal[
     "configuration",
     "unsupported",
@@ -37,6 +42,42 @@ class MCPPeerInformation:
     resources: bool
     prompts: bool
     tasks: bool
+    identity_digest: str = field(default="", repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTask:
+    """A validated remote handle, never serialized as ordinary model material."""
+
+    task_id: str = field(repr=False)
+    status: MCPTaskStatus
+    created_at: str
+    ttl_ms: int | None
+    poll_interval_ms: int | None
+
+    @classmethod
+    def from_data(cls, data: JsonObject) -> "MCPTask":
+        status = data.get("status")
+        if status not in ("working", "input_required", "completed", "failed", "cancelled"):
+            raise MCPFailure("protocol")
+        ttl, interval = data.get("ttlMs"), data.get("pollIntervalMs")
+        if any(
+            type(value) is not int or value < 0 for value in (ttl, interval) if value is not None
+        ):
+            raise MCPFailure("protocol")
+        return cls(
+            require_string(data, "taskId"),
+            status,
+            require_string(data, "createdAt"),
+            cast(int | None, ttl),
+            cast(int | None, interval),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskSnapshot:
+    task: MCPTask
+    result: JsonObject | None
 
 
 class MCPFailure(Exception):

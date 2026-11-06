@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from jsonschema import Draft202012Validator, ValidationError
 
@@ -11,10 +11,11 @@ from jdagent.domain.events import (
     MCPAttemptFinishedPayload,
     MCPInvocationFinishedPayload,
     MCPInvocationStartedPayload,
+    MCPTaskRegisteredPayload,
     RuntimeEventType,
 )
 from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
-from jdagent.domain.mcp import MCPCapability, MCPFailure, MCPOperation
+from jdagent.domain.mcp import MCPCapability, MCPFailure, MCPOperation, MCPTask
 from jdagent.domain.tools import (
     ToolErrorCode,
     ToolExecutionContext,
@@ -26,6 +27,7 @@ from jdagent.domain.tools import (
 from jdagent.mcp_content import MCPContent, project_content
 from jdagent.mcp_definitions import definition_digest, model_tool_name
 from jdagent.mcp_service import MCPService
+from jdagent.mcp_task_execution import MCPTaskExecution
 from jdagent.ports import ContextObjects, RuntimeJournal
 
 
@@ -65,14 +67,21 @@ class MCPExecution:
 
     def _has_capacity(self, required: int | None = None) -> bool:
         charges: dict[tuple[str | None, str], int] = {}
+        controls: dict[str, int] = {}
         for event in self._journal.events:
             payload = event.payload
             if isinstance(payload, MCPInvocationStartedPayload):
                 charges[event.turn_id, payload.call_id] = payload.reserved_bytes
+            elif isinstance(payload, MCPTaskRegisteredPayload):
+                key = (event.turn_id, payload.call_id)
+                charges[key] = max(0, charges.get(key, 0) - payload.handle_bytes)
+                controls[payload.task_ref] = payload.handle_bytes
             elif isinstance(payload, MCPInvocationFinishedPayload) and payload.result_confirmed:
                 charges[event.turn_id, payload.result.call_id] = payload.original_bytes
         reserve = self._limits.reservation_bytes if required is None else required
-        return sum(charges.values()) + reserve <= self._limits.session_bytes
+        return (
+            sum(charges.values()) + sum(controls.values()) + reserve <= self._limits.session_bytes
+        )
 
     async def publish_discovery(
         self,
@@ -247,7 +256,10 @@ class MCPExecution:
                 message="MCP automatic replay is forbidden or its attempt allowance is exhausted",
                 requires_stop=True,
             )
-        if not self._has_capacity():
+        reservation = self._limits.reservation_bytes * (
+            2 if self._service.supports_tasks(context.session_id, entry) else 1
+        )
+        if not self._has_capacity(reservation):
             return ToolOutcome(
                 completed=False,
                 error_code=ToolErrorCode.CAPACITY,
@@ -261,57 +273,131 @@ class MCPExecution:
             definition_digest(entry),
             entry.kind,
         )
+        waiting_task = False
+        task_execution = MCPTaskExecution(
+            self._service,
+            self._journal,
+            self._objects,
+            max_control_bytes=self._limits.reservation_bytes,
+        )
         try:
             async with asyncio.timeout(self._service.execution_timeout(context.session_id, entry)):
                 raw = await self._call_with_retries(
-                    entry, arguments, context, operation, fingerprint, attempted, safe_repeat
+                    entry,
+                    arguments,
+                    context,
+                    operation,
+                    fingerprint,
+                    attempted,
+                    safe_repeat,
+                    reservation,
                 )
+                if isinstance(raw, MCPTask):
+                    waiting_task = True
+                    final = await task_execution.wait(entry, raw, context)
+                    if isinstance(final, ToolOutcome):
+                        if task_execution.final_result is not None:
+                            return await self._complete(
+                                entry,
+                                task_execution.final_result,
+                                context,
+                                origin,
+                                task_execution.details,
+                                interruption=final,
+                            )
+                        await self._finish(
+                            context, origin, final, confirmed=task_execution.result_confirmed
+                        )
+                        return final
+                    raw = final
         except (MCPFailure, TimeoutError) as error:
+            if isinstance(error, TimeoutError):
+                await task_execution.cancel(entry, context)
             server_timeout = isinstance(error, MCPFailure) and error.kind == "server_timeout"
-            confirmed_timeout = server_timeout or self._last_attempt_timed_out_remotely(context)
+            confirmed_timeout = (
+                server_timeout and not waiting_task
+            ) or self._last_attempt_timed_out_remotely(context)
             message = (
                 "MCP local waiting deadline expired"
                 if isinstance(error, TimeoutError)
                 else str(error)
             )
             outcome = ToolOutcome(
-                data={"timeout_source": "server" if server_timeout else "client"}
+                data={
+                    **task_execution.details,
+                    "timeout_source": "server" if server_timeout else "client",
+                }
                 if server_timeout or isinstance(error, TimeoutError)
-                else {},
+                else task_execution.details,
                 completed=False,
                 error_code=ToolErrorCode.TIMEOUT
                 if server_timeout or isinstance(error, TimeoutError)
                 else ToolErrorCode.UNCERTAIN,
                 message=message,
                 observed_failure=confirmed_timeout,
-                requires_stop=not server_timeout,
+                requires_stop=not server_timeout or waiting_task,
             )
+            if task_execution.final_result is not None:
+                return await self._complete(
+                    entry,
+                    task_execution.final_result,
+                    context,
+                    origin,
+                    task_execution.details,
+                    interruption=outcome,
+                )
             await self._finish(
                 context,
                 origin,
                 outcome,
-                confirmed=confirmed_timeout,
+                confirmed=confirmed_timeout or task_execution.result_confirmed,
             )
             return outcome
         except asyncio.CancelledError:
+            await task_execution.cancel(entry, context)
             confirmed_timeout = self._last_attempt_timed_out_remotely(context)
             outcome = ToolOutcome(
+                data=task_execution.details,
                 completed=False,
                 cancelled=True,
                 error_code=ToolErrorCode.CANCELLED,
-                message="MCP waiting cancelled after a confirmed server timeout"
+                message="MCP waiting cancelled; remote Task termination confirmed"
+                if task_execution.result_confirmed
+                else "MCP waiting cancelled after a confirmed server timeout"
                 if confirmed_timeout
                 else "MCP waiting cancelled; remote completion is unconfirmed",
                 observed_failure=confirmed_timeout,
                 requires_stop=True,
             )
+            if task_execution.final_result is not None:
+                return await self._complete(
+                    entry,
+                    task_execution.final_result,
+                    context,
+                    origin,
+                    task_execution.details,
+                    interruption=outcome,
+                )
             await self._finish(
                 context,
                 origin,
                 outcome,
-                confirmed=confirmed_timeout,
+                confirmed=confirmed_timeout or task_execution.result_confirmed,
             )
             return outcome
+        return await self._complete(entry, raw, context, origin, task_execution.details)
+
+    async def _complete(
+        self,
+        entry: MCPCapability,
+        raw: JsonObject,
+        context: ToolExecutionContext,
+        origin: ToolOrigin,
+        task_details: JsonObject,
+        *,
+        interruption: ToolOutcome | None = None,
+    ) -> ToolOutcome:
+        """Retain a received result even when completion races local cancellation."""
         if len(_encode(raw)) > self._limits.reservation_bytes:
             raise MCPFailure("response_limit")
         content = project_content(raw, entry.kind)
@@ -337,6 +423,7 @@ class MCPExecution:
             content=content,
             schema_valid=(not invalid if validate_output else None),
         )
+        data.update(task_details)
         outcome = ToolOutcome(
             data=data,
             observed_failure=failed or invalid,
@@ -353,6 +440,12 @@ class MCPExecution:
             if unsupported_only
             else "",
         )
+        if interruption is not None:
+            outcome = replace(
+                interruption,
+                data={**data, **interruption.data, "result_received_during_cleanup": True},
+                observed_failure=interruption.observed_failure or failed or invalid,
+            )
         await self._finish(context, origin, outcome, confirmed=True, digest=digest, size=size)
         return outcome
 
@@ -380,7 +473,8 @@ class MCPExecution:
         fingerprint: str,
         attempted: int,
         safe_repeat: bool,
-    ) -> JsonObject:
+        reservation: int,
+    ) -> JsonObject | MCPTask:
         for attempt in range(attempted + 1, 4):
             await self._journal.record(
                 context.turn_id,
@@ -392,7 +486,7 @@ class MCPExecution:
                     entry.generation,
                     context.request_id,
                     fingerprint,
-                    self._limits.reservation_bytes,
+                    reservation,
                     attempt=attempt,
                     operation=operation,
                 ),

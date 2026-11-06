@@ -3,11 +3,11 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 from uuid import uuid4
 
 from jdagent.domain.errors import StopReason
-from jdagent.domain.mcp import MCPOperation
+from jdagent.domain.mcp import MCPOperation, MCPTaskStatus
 from jdagent.domain.model import Usage
 from jdagent.domain.tools import (
     ApprovalDecision,
@@ -45,6 +45,9 @@ class RuntimeEventType(StrEnum):
     MCP_INVOCATION_STARTED = "mcp_invocation_started"
     MCP_INVOCATION_FINISHED = "mcp_invocation_finished"
     MCP_ATTEMPT_FINISHED = "mcp_attempt_finished"
+    MCP_TASK_REGISTERED = "mcp_task_registered"
+    MCP_TASK_OBSERVED = "mcp_task_observed"
+    MCP_TASK_CANCEL_REQUESTED = "mcp_task_cancel_requested"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
     TURN_FAILED = "turn_failed"
@@ -305,6 +308,42 @@ class MCPAttemptFinishedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPTaskRegisteredPayload:
+    """A private handle object is durable before the first query may be sent."""
+
+    call_id: str
+    task_ref: str
+    server_id: str
+    raw_name: str
+    generation: str
+    handle_hash: str
+    status: MCPTaskStatus
+    handle_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskObservedPayload:
+    """A sanitized task observation, distinct from final model call pairing."""
+
+    call_id: str
+    task_ref: str
+    status: MCPTaskStatus | None
+    attempt: int = 1
+    response_confirmed: bool = True
+    failure_kind: str | None = None
+    rpc_code: int | None = None
+    operation: Literal["get", "cancel"] = "get"
+
+
+@dataclass(frozen=True, slots=True)
+class MCPTaskCancelRequestedPayload:
+    """Cancellation intent, never evidence that remote work has stopped."""
+
+    call_id: str
+    task_ref: str
+
+
+@dataclass(frozen=True, slots=True)
 class ModelUsageRecordedPayload:
     """Usage associated with one model call."""
 
@@ -362,6 +401,9 @@ RuntimePayload: TypeAlias = (
     | MCPInvocationStartedPayload
     | MCPInvocationFinishedPayload
     | MCPAttemptFinishedPayload
+    | MCPTaskRegisteredPayload
+    | MCPTaskObservedPayload
+    | MCPTaskCancelRequestedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload
     | TurnFailedPayload

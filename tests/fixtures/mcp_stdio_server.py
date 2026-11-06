@@ -5,12 +5,17 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 def main() -> None:
     version = sys.argv[1]
     list_calls = 0
     tool_calls: dict[str, int] = {}
+    task_polls = 0
+    task_mode: str | None = None
+    task_cancelled = False
+    task_signal: str | None = None
     capabilities: dict[str, object] = {"tools": {}, "resources": {}, "prompts": {}}
     if len(sys.argv) > 2 and sys.argv[2] == "prompts_only":
         capabilities = {"prompts": {}}
@@ -252,7 +257,11 @@ def main() -> None:
                 result["content"] = [
                     {"type": "text", "text": "z" * message["params"]["arguments"]["fixture_size"]}
                 ]
-            if name == "task":
+            if name == "task" or message["params"].get("arguments", {}).get("fixture_task"):
+                task_mode = message["params"].get("arguments", {}).get("fixture_task")
+                task_signal = message["params"].get("arguments", {}).get("fixture_signal")
+                task_polls = 0
+                task_cancelled = False
                 assert version == "2026-07-28"
                 client_capabilities = message["params"]["_meta"][
                     "io.modelcontextprotocol/clientCapabilities"
@@ -274,6 +283,28 @@ def main() -> None:
                 continue
         elif method == "tasks/get":
             assert message["params"]["taskId"] == "stdio-task"
+            task_polls += 1
+            if (
+                task_mode in {"query_hang", "cancel_race", "cancel_ignored", "cancel_stalls"}
+                and not task_cancelled
+            ):
+                if task_signal is not None:
+                    Path(task_signal).touch()
+                continue
+            if task_mode in {"query_timeout", "query_exhausted"} and (
+                task_polls <= 2 or task_mode == "query_exhausted"
+            ):
+                print(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": message["id"],
+                            "error": {"code": -32001, "message": "private-task-query-error"},
+                        }
+                    ),
+                    flush=True,
+                )
+                continue
             result = {
                 **task,
                 "resultType": "complete",
@@ -283,6 +314,51 @@ def main() -> None:
                     "content": [{"type": "text", "text": "done"}],
                 },
             }
+            if task_mode is not None:
+                result["result"] = {
+                    "resultType": "complete",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"done; calls={tool_calls['read']}; polls={task_polls}",
+                        }
+                    ],
+                }
+                if task_cancelled:
+                    if task_mode == "cancel_race":
+                        result["status"] = "completed"
+                    else:
+                        result.pop("result")
+                        result["status"] = (
+                            "working" if task_mode == "cancel_ignored" else "cancelled"
+                        )
+                elif task_polls == 1:
+                    result.pop("result")
+                    result["status"] = (
+                        "input_required" if task_mode == "input_required" else "working"
+                    )
+                    result["pollIntervalMs"] = 1
+                    if task_mode == "input_required":
+                        result["inputRequests"] = {"ask": {"method": "roots/list"}}
+                elif task_mode == "failed":
+                    result.pop("result")
+                    result["status"] = "failed"
+                    result["error"] = {"code": -32001, "message": "private-task-failure"}
+                elif task_mode == "cancelled":
+                    result.pop("result")
+                    result["status"] = "cancelled"
+                elif task_mode == "business_error":
+                    result["result"] = {
+                        "resultType": "complete",
+                        "content": [{"type": "text", "text": "business failed; calls=1"}],
+                        "isError": True,
+                    }
+        elif method == "tasks/cancel":
+            assert message["params"]["taskId"] == "stdio-task"
+            if task_mode == "cancel_stalls":
+                continue
+            task_cancelled = True
+            result = {"resultType": "complete"}
         else:
             result = {}
         print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": result}), flush=True)

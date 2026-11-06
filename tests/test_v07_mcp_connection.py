@@ -13,6 +13,82 @@ from jdagent.mcp_configuration import MCPServerConfiguration
 from tests.test_v07_mcp_http import wire_server
 
 
+def test_connection_returns_modern_task_handle_without_treating_it_as_a_final_result() -> None:
+    async def scenario() -> None:
+        fixture = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
+        peer = SDKMCPConnection(
+            MCPServerConfiguration(
+                server_id="docs",
+                transport="stdio",
+                enabled=True,
+                tools=("task",),
+                resources=False,
+                prompts=False,
+                command=sys.executable,
+                args=(str(fixture), "2026-07-28"),
+                cwd=fixture.parent,
+            )
+        )
+        try:
+            created = await peer.request("tools/call", {"name": "task", "arguments": {}})
+            assert created["resultType"] == "task"
+            assert created["status"] == "working"
+            assert "result" not in created and "content" not in created
+            state = await peer.request("tasks/get", {"taskId": created["taskId"]})
+            assert state["status"] == "completed"
+            result = require_object(state["result"], "result")
+            assert result["content"] == [{"type": "text", "text": "done"}]
+        finally:
+            assert await peer.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_abandoning_a_task_query_keeps_the_peer_available_for_explicit_task_cancel(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        fixture = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
+        signal = tmp_path / "query-started"
+        peer = SDKMCPConnection(
+            MCPServerConfiguration(
+                server_id="docs",
+                transport="stdio",
+                enabled=True,
+                tools=("read",),
+                resources=False,
+                prompts=False,
+                command=sys.executable,
+                args=(str(fixture), "2026-07-28"),
+                cwd=fixture.parent,
+            )
+        )
+        try:
+            handle = await peer.request(
+                "tools/call",
+                {
+                    "name": "read",
+                    "arguments": {"fixture_task": "query_hang", "fixture_signal": str(signal)},
+                },
+            )
+            query = asyncio.create_task(peer.request("tasks/get", {"taskId": handle["taskId"]}))
+            async with asyncio.timeout(5):
+                # The independent child exposes this wire boundary through a file.
+                while not signal.exists():  # noqa: ASYNC110
+                    await asyncio.sleep(0.01)
+            query.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await query
+            assert peer.state == "ready"
+            await peer.request("tasks/cancel", {"taskId": handle["taskId"]})
+            state = await peer.request("tasks/get", {"taskId": handle["taskId"]})
+            assert state["status"] == "cancelled"
+        finally:
+            assert await peer.aclose()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
 def test_connection_reuses_sdk_session_across_caller_tasks_and_closes(version: str) -> None:
     async def scenario() -> None:

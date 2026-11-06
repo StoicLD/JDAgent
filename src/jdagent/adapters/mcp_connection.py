@@ -1,10 +1,12 @@
 """One lazy, sequential SDK session owned and closed by the same asyncio task."""
 
 import asyncio
+import hashlib
+import json
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import cast
+from typing import TypeAlias, cast
 
 import httpx2
 from mcp import MCPError, types
@@ -12,16 +14,22 @@ from mcp.client import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.jsonrpc_dispatcher import JSONRPCDispatcher
 from mcp.shared.transport_context import TransportContext
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from jdagent.adapters.mcp_stdio import bounded_stdio_client
-from jdagent.adapters.mcp_tasks import TASKS_EXTENSION, TasksExtension
+from jdagent.adapters.mcp_tasks import (
+    TASKS_EXTENSION,
+    TaskHandle,
+    TasksExtension,
+    cancel_task,
+    get_task,
+)
 from jdagent.adapters.mcp_transport import (
     BoundedHttpTransport,
     ResponseEncodingError,
     ResponseLimitExceeded,
 )
-from jdagent.domain.json import JsonObject, normalize_json, require_object
+from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
 from jdagent.domain.mcp import (
     MCPConnectionState,
     MCPFailure,
@@ -30,12 +38,19 @@ from jdagent.domain.mcp import (
 )
 from jdagent.mcp_configuration import MCPServerConfiguration
 
+_TaskCallResult: TypeAlias = types.CallToolResult | TaskHandle
+# The runtime union is supported by Pydantic; pinned Pyright does not yet accept
+# this TypeForm argument. The adapter's result remains explicitly typed.
+_TASK_CALL_RESULT = TypeAdapter[_TaskCallResult](_TaskCallResult)  # pyright: ignore[reportArgumentType]
+
 
 @dataclass(slots=True)
 class _Request:
     method: MCPMethod | None
     params: JsonObject
     result: asyncio.Future[JsonObject | MCPFailure]
+    operation: asyncio.Task[JsonObject] | None = None
+    abandoned: bool = False
 
 
 class SDKMCPConnection:
@@ -80,17 +95,24 @@ class SDKMCPConnection:
             raise MCPFailure("busy")
         request = _Request(method, params, asyncio.get_running_loop().create_future())
         self._pending = request
-        self._queue.put_nowait(request)
         if self._owner is None:
             self._state = "connecting"
             self._owner = asyncio.create_task(self._run(), name="mcp-connection-owner")
         try:
+            await self._queue.put(request)
             result = await asyncio.shield(request.result)
             if isinstance(result, MCPFailure):
                 raise result
             return result
         except asyncio.CancelledError:
-            await self.aclose()
+            request.abandoned = True
+            if method in {"tasks/get", "tasks/cancel"}:
+                # Abandon only this read. The same connection must remain usable
+                # for tasks/cancel; the owner retains and settles its RPC task.
+                if request.operation is not None:
+                    request.operation.cancel()
+            else:
+                await self.aclose()
             raise
         finally:
             self._pending = None
@@ -121,8 +143,19 @@ class SDKMCPConnection:
                 self._state = "ready"
                 while True:
                     request = await self._queue.get()
+                    if request.abandoned:
+                        continue
+                    request.operation = asyncio.create_task(
+                        self._send(session, request), name="mcp-owned-rpc"
+                    )
                     try:
-                        result = await self._send(session, request)
+                        result = await request.operation
+                    except asyncio.CancelledError:
+                        if self._closing or self._owner is not None and self._owner.cancelling():
+                            raise
+                        # A cancelled child query does not cancel the context
+                        # owner. No next RPC starts until the child has settled.
+                        result = MCPFailure("connection")
                     except MCPError as error:
                         if error.code == types.CONNECTION_CLOSED:
                             raise
@@ -132,7 +165,7 @@ class SDKMCPConnection:
                         # the request and never pass through this exception branch.
                         kind = (
                             "server_timeout"
-                            if request.method == "tools/call"
+                            if request.method in {"tools/call", "tasks/get"}
                             and error.code == types.REQUEST_TIMEOUT
                             else "remote"
                         )
@@ -155,12 +188,23 @@ class SDKMCPConnection:
         config = self._configuration
         if not config.enabled:
             raise MCPFailure("configuration")
+        # Bind durable handles to the endpoint and the values actually used by
+        # this connection, not just environment variable names. This digest is
+        # private control data and never belongs in public status or events.
+        identity: dict[str, object] = {
+            "transport": config.transport,
+            "command": config.command,
+            "args": config.args,
+            "cwd": str(config.cwd) if config.cwd is not None else None,
+            "url": config.url,
+        }
         if config.transport == "stdio":
             if config.command is None or config.cwd is None:
                 raise MCPFailure("configuration")
             environment = {
                 name: self._credential(reference) for name, reference in config.environment_refs
             }
+            identity["environment"] = environment
             read, write = await stack.enter_async_context(
                 bounded_stdio_client(
                     config.command, config.args, cwd=config.cwd, environment=environment
@@ -172,6 +216,7 @@ class SDKMCPConnection:
             headers: dict[str, str] = {}
             if config.bearer_env is not None:
                 headers["Authorization"] = "Bearer " + self._credential(config.bearer_env)
+            identity["headers"] = headers
             http = await stack.enter_async_context(
                 httpx2.AsyncClient(
                     transport=BoundedHttpTransport(
@@ -208,6 +253,9 @@ class SDKMCPConnection:
             prompts=capabilities.prompts is not None,
             tasks=session.protocol_version == "2026-07-28"
             and TASKS_EXTENSION in (capabilities.extensions or {}),
+            identity_digest=hashlib.sha256(
+                json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
         )
         return session
 
@@ -283,8 +331,19 @@ class SDKMCPConnection:
                 )
             case "tools/call":
                 result = await session.send_request(
-                    types.CallToolRequest.model_validate(wire), types.CallToolResult
+                    types.CallToolRequest.model_validate(wire),
+                    _TASK_CALL_RESULT
+                    if self._information is not None and self._information.tasks
+                    else types.CallToolResult,
                 )
+            case "tasks/get" | "tasks/cancel":
+                if self._information is None or not self._information.tasks:
+                    raise MCPFailure("unsupported")
+                task_id = require_string(request.params, "taskId")
+                if request.method == "tasks/cancel":
+                    await cancel_task(session, task_id)
+                    return {}
+                result = await get_task(session, task_id)
             case "tools/list":
                 result = await session.send_request(
                     types.ListToolsRequest.model_validate(wire), types.ListToolsResult
