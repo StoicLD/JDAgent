@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal
@@ -29,7 +30,11 @@ class MCPTaskManagement:
     """Use original Session bindings; management facts do not reopen old Turns."""
 
     def __init__(
-        self, service: MCPService, objects: ContextObjects, limits: MCPResultLimits, workspace: Path
+        self,
+        service: MCPService,
+        objects: ContextObjects,
+        limits: Callable[[], MCPResultLimits],
+        workspace: Path,
     ) -> None:
         self._service, self._objects, self._limits, self._workspace = (
             service,
@@ -71,6 +76,7 @@ class MCPTaskManagement:
     async def act(
         self, journal: RuntimeJournal, session_id: str, task_ref: str, action: MCPTaskAction
     ) -> ToolOutcome:
+        limits = self._limits()
         registration = next(
             (
                 e
@@ -152,7 +158,7 @@ class MCPTaskManagement:
             self._service,
             journal,
             self._objects,
-            max_control_bytes=self._limits.reservation_bytes,
+            max_control_bytes=limits.reservation_bytes,
             management=True,
         )
         execution.attach(task_ref, task)
@@ -210,7 +216,7 @@ class MCPTaskManagement:
             self._service.end_activity(session_id, entry)
         if execution.final_result is not None:
             saved = await MCPExecution(
-                self._service, journal, self._objects, self._limits
+                self._service, journal, self._objects, limits
             ).publish_task_result(
                 original_entry, execution.final_result, context, execution.details
             )

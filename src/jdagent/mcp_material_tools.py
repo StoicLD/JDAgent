@@ -1,6 +1,7 @@
 """Model-selected external resource and Prompt material, without user-role promotion."""
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, replace
 
 from jdagent.domain.events import MCPPromptPreparedPayload, RuntimeEventType
@@ -271,14 +272,14 @@ class MCPDirectPrompts:
     """Prepare material for a user command, without fabricating a model call pair."""
 
     def __init__(
-        self, service: MCPService, objects: ContextObjects, limits: MCPResultLimits
+        self, service: MCPService, objects: ContextObjects, limits: Callable[[], MCPResultLimits]
     ) -> None:
         self._service, self._objects, self._limits = service, objects, limits
 
     async def prepare(
         self, journal: RuntimeJournal, arguments: JsonObject, context: ToolExecutionContext
     ) -> ToolOutcome:
-        execution = MCPExecution(self._service, journal, self._objects, self._limits)
+        execution = MCPExecution(self._service, journal, self._objects, self._limits())
         outcome = await MCPMaterialTools(self._service, execution, context.session_id).get_prompt(
             arguments, context
         )

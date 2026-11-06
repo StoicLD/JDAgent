@@ -106,7 +106,7 @@ class RuntimeOptions:
     provider_options: JsonObject = field(default_factory=_empty_json_object)
     mcp_directory_limits: MCPDirectoryLimits = field(default_factory=MCPDirectoryLimits)
     mcp_definition_limits: MCPDefinitionLimits = field(default_factory=MCPDefinitionLimits)
-    mcp_result_limits: MCPResultLimits = field(default_factory=MCPResultLimits)
+    mcp_result_limits: MCPResultLimits | None = None
 
     def __post_init__(self) -> None:
         if self.max_model_calls <= 0:
@@ -180,6 +180,7 @@ class ConfiguredLoopFactory:
     mcp_servers: tuple[MCPServerConfiguration, ...] = ()
     mcp: MCPService | None = None
     mcp_result_limits: MCPResultLimits = field(default_factory=MCPResultLimits)
+    mcp_result_limits_override: MCPResultLimits | None = None
 
     def mcp_configuration(self) -> tuple[MCPServerConfiguration, ...]:
         return self.mcp_servers
@@ -227,6 +228,9 @@ class ConfiguredLoopFactory:
         self.global_instructions = config.global_instructions
         self.instructions_max_tokens = config.instructions_max_tokens
         self.mcp_servers = config.mcp_servers
+        self.mcp_result_limits = self.mcp_result_limits_override or MCPResultLimits(
+            session_bytes=config.mcp_result_quota_mib << 20
+        )
         if self.maintenance is not None:
             self.maintenance.enabled = config.memory_auto_consolidation
             self.maintenance.budget = budget
@@ -486,7 +490,9 @@ def build_runtime(
         runtime_engine=configuration.runtime_engine,
         mcp_servers=configuration.mcp_servers,
         mcp=mcp if options.include_tools else None,
-        mcp_result_limits=options.mcp_result_limits,
+        mcp_result_limits=options.mcp_result_limits
+        or MCPResultLimits(session_bytes=configuration.mcp_result_quota_mib << 20),
+        mcp_result_limits_override=options.mcp_result_limits,
         runtime_limits=LoopLimits(options.max_model_calls, options.max_tool_calls)
         if runtime_options is not None
         else None,
@@ -506,8 +512,10 @@ def build_runtime(
         ),
         memory=memory,
         mcp=mcp,
-        mcp_task_management=MCPTaskManagement(mcp, objects, options.mcp_result_limits, workspace),
-        mcp_prompts=MCPDirectPrompts(mcp, objects, options.mcp_result_limits),
+        mcp_task_management=MCPTaskManagement(
+            mcp, objects, lambda: loop_factory.mcp_result_limits, workspace
+        ),
+        mcp_prompts=MCPDirectPrompts(mcp, objects, lambda: loop_factory.mcp_result_limits),
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

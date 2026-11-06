@@ -37,6 +37,12 @@ class MCPServerConfiguration:
     tool_overrides: tuple[MCPToolOverride, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class MCPConfiguration:
+    servers: tuple[MCPServerConfiguration, ...]
+    result_quota_mib: int = 100
+
+
 def _table(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, dict) or any(
         not isinstance(key, str) for key in cast(dict[object, object], value)
@@ -193,17 +199,20 @@ def _server(
 
 def resolve_mcp_configuration(
     user: object, project: object, *, workspace: Path, user_directory: Path
-) -> tuple[MCPServerConfiguration, ...]:
+) -> MCPConfiguration:
     """Validate references without resolving credentials, connecting, or launching processes."""
     user_table = _table(user, "User MCP")
     project_table = _table(project, "Project MCP")
-    _keys(user_table, {"servers", "timeout_seconds"}, "User MCP")
+    _keys(user_table, {"servers", "timeout_seconds", "result_quota_mib"}, "User MCP")
     _keys(project_table, {"servers"}, "Project MCP")
     definitions = _table(user_table.get("servers", {}), "User MCP servers")
     restrictions = _table(project_table.get("servers", {}), "Project MCP servers")
     if set(restrictions) - set(definitions):
         raise MCPConfigurationError("Project MCP references an undefined Server")
     resolved: list[MCPServerConfiguration] = []
+    quota = user_table.get("result_quota_mib", 100)
+    if isinstance(quota, bool) or not isinstance(quota, int) or quota <= 0:
+        raise MCPConfigurationError("MCP result_quota_mib must be a positive integer")
     default_timeout = _duration(user_table.get("timeout_seconds", 600.0))
     for name, definition in definitions.items():
         server = _server(name, definition, workspace, user_directory, default_timeout)
@@ -234,4 +243,4 @@ def resolve_mcp_configuration(
                 ),
             )
         )
-    return tuple(resolved)
+    return MCPConfiguration(tuple(resolved), quota)

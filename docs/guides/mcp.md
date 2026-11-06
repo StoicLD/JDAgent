@@ -52,6 +52,7 @@ Server 默认禁用，工具默认空名单，Resources／Prompts 默认关闭�
 ```toml
 [mcp]
 timeout_seconds = 600
+result_quota_mib = 100
 
 [mcp.servers.docs]
 enabled = true
@@ -87,6 +88,10 @@ stdio 的 `cwd` 省略时使用当前工作区。显式相对路径相对于用�
 `args` 按原数组传给进程，不经过 shell 字符串拼接。HTTP 不接受 stdio 的 command／args／cwd／env 字段，反向混用也拒绝。
 
 等待预算按工具 > Server > mcp 默认值选择，默认 600 秒，必须为有限正数。连接 15 秒与收尾 5 秒是独立约束。
+`mcp.result_quota_mib` 是每个 Session 的 MCP 结果存储配额，默认 100 MiB，必须为正整数。
+只允许在用户配置中设置；空闲后的下一次操作重新读取配置，正在执行的操作保留开始时的限额。
+降低配额不删除已有原文或改变既有发送事实；新增业务操作不能取得所需预留时，在发送前返回容量不足。
+原文、重复对象与 Task 再次取回结果的完整计量合同仍在实施，不能把配置接入视为完整配额验收。
 safe_repeat 默认为 false；设为 true 只允许宿主在可靠识别服务端业务超时且仍有时间／次数额度时考虑重复。
 它不授权在客户端超时、断线、取消或结果不明后重发。当前普通工具调用已接通有条件重试：
 可靠识别的 Server JSON-RPC 超时且 safe_repeat=true 时，总共最多 3 次，退避分别为 0.5 秒、1 秒。

@@ -25,6 +25,46 @@ from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 
 
+@pytest.mark.parametrize("engine", ["native", "langgraph"])
+def test_direct_prompt_obeys_reloaded_user_result_quota(tmp_path: Path, engine: str) -> None:
+    config = prompt_configuration(tmp_path, engine)
+    path = config.data_paths.user_config_file
+    original_config = path.read_text(encoding="utf-8")
+    model = FakeModelPort(scripts=((TextDelta("Explained."), ResponseCompleted("stop")),))
+
+    async def scenario() -> None:
+        runtime = build_runtime(
+            config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=lambda _: model
+        )
+        try:
+            path.write_text("[mcp]\nresult_quota_mib = 1\n" + original_config, encoding="utf-8")
+            rejected = await run_headless(
+                runtime.coordinator,
+                "/mcp prompt docs explain topic=quota",
+                provider="fake",
+                model="fake",
+            )
+            assert rejected.exit_status is ExitStatus.RUNTIME_ERROR
+            assert not model.requests
+            events = [event async for event in runtime.session.read(rejected.session_id)]
+            assert not any(
+                event.event_type is RuntimeEventType.MCP_INVOCATION_STARTED for event in events
+            )
+            path.write_text("[mcp]\nresult_quota_mib = 8\n" + original_config, encoding="utf-8")
+            accepted = await run_headless(
+                runtime.coordinator,
+                "/mcp prompt docs explain topic=quota",
+                session_id=rejected.session_id,
+                provider="fake",
+                model="fake",
+            )
+            assert accepted.exit_status is ExitStatus.SUCCESS and len(model.requests) == 1
+        finally:
+            await runtime.aclose()
+
+    asyncio.run(scenario())
+
+
 def prompt_configuration(tmp_path: Path, engine: str) -> ResolvedConfiguration:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"

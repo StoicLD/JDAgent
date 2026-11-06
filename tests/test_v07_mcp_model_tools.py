@@ -21,7 +21,6 @@ from jdagent.domain.model import (
 )
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
 from jdagent.mcp_definitions import MCPDefinitionLimits
-from jdagent.mcp_execution import MCPResultLimits
 
 
 @pytest.mark.parametrize("engine", ["native", "langgraph"])
@@ -208,7 +207,8 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
     paths.user_config_file.parent.mkdir(parents=True)
     fixture = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
     paths.user_config_file.write_text(
-        "[memory]\nauto_consolidation = false\n[mcp.servers.docs]\nenabled = true\n"
+        "[memory]\nauto_consolidation = false\n[mcp]\nresult_quota_mib = 1\n"
+        "[mcp.servers.docs]\nenabled = true\n"
         f'transport = "stdio"\ncommand = {json.dumps(sys.executable)}\n'
         f"args = {json.dumps([str(fixture), '2026-07-28', 'catalog_once'])}\n"
         'tools = ["read"]\n',
@@ -231,6 +231,11 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
                 ResponseCompleted("tool_calls"),
             ),
             (TextDelta("Storage is full"), ResponseCompleted("stop")),
+            (
+                ToolCallCompleted(ToolCall("now-allowed", "mcp__docs__read", {})),
+                ResponseCompleted("tool_calls"),
+            ),
+            (TextDelta("Read after increasing storage"), ResponseCompleted("stop")),
         )
     )
 
@@ -238,7 +243,6 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
         runtime = build_runtime(
             config,
             FakeApproval(ApprovalDecision.APPROVE),
-            runtime_options=RuntimeOptions(mcp_result_limits=MCPResultLimits(session_bytes=1024)),
             model_wrapper=lambda _: model,
         )
         try:
@@ -258,6 +262,21 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
                 )
                 for event in events
             )
+            paths.user_config_file.write_text(
+                paths.user_config_file.read_text(encoding="utf-8").replace(
+                    "result_quota_mib = 1", "result_quota_mib = 8"
+                ),
+                encoding="utf-8",
+            )
+            await runtime.coordinator.send("Read with the larger quota", session_id=turn.session_id)
+            events = [event async for event in runtime.session.read(turn.session_id)]
+            allowed = next(
+                event.payload.result
+                for event in events
+                if isinstance(event.payload, ToolExecutionCompletedPayload)
+                and event.payload.result.call_id == "now-allowed"
+            )
+            assert allowed.status is ToolResultStatus.SUCCESS
         finally:
             await runtime.aclose()
 

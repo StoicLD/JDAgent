@@ -131,6 +131,7 @@ class ResolvedConfiguration:
     model_adapter: str = "native"
     runtime_engine: str = "native"
     mcp_servers: tuple[MCPServerConfiguration, ...] = ()
+    mcp_result_quota_mib: int = 100
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -274,7 +275,7 @@ def resolve_configuration(
     user = _read_layer(paths.user_config_file, layer="user", allowed=_USER_FIELDS)
     project = _read_layer(paths.project_config_file, layer="project", allowed=_PROJECT_FIELDS)
     try:
-        mcp_servers = resolve_mcp_configuration(
+        mcp_configuration = resolve_mcp_configuration(
             user.pop("mcp", {}),
             project.pop("mcp", {}),
             workspace=paths.workspace,
@@ -415,5 +416,6 @@ def resolve_configuration(
         total_output_token_limit=cast(int, total_output),
         memory_embedding=embedding,
         cli_overrides=overrides,
-        mcp_servers=mcp_servers,
+        mcp_servers=mcp_configuration.servers,
+        mcp_result_quota_mib=mcp_configuration.result_quota_mib,
     )
