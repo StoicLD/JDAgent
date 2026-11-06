@@ -22,10 +22,12 @@ Task 登记、状态观察和取消意图分别使用 mcp_task_registered、mcp_
 恢复截断前缀会保留已登记任务的引用，未登记时不声称可查回；两种情况都不自动重提工具。
 显式管理使用原 Session 的 task_ref，先核验工作区、受控对象与原连接身份，再查询或取消。
 管理事件不带 Turn ID；mcp_task_result_saved 单独保存取回结果，不重复结束旧模型调用。
+再次取结果需要额外容量时，先写 mcp_task_result_reserved，关联原 Turn、调用及 Task 引用；
+查询中断不释放这份预留，重开会话仍按持久事实计量。不同哈希的已保存原文保留并累计，相同对象只计一次。
 直接 Prompt 使用 mcp_prompt_prepared 保存带来源的有界材料和原文引用。只有触发命令写入 user_message；
 获取事实沿用 MCP 意图／结果链，不生成虚构的 assistant 工具调用或 tool_execution_completed 配对。
 结果来源保留原调用定义，普通原文入口可分页读取；更新后的 TTL 跨重启保留，过期不意味着远端已停止。
-本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令与完整故障矩阵待交付，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
+本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令已接通，完整故障矩阵仍待验收，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
 
 事件记录用户输入、完整模型消息、工具请求、权限决定、规则授予／撤销、工具开始与结束、
 用量、检索元数据、窗口裁剪以及 Turn 完成／失败。Trace 消费同一事件流，

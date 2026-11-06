@@ -35,6 +35,7 @@ class TaskPeerState:
     cancellations: int = 0
     task_id: str = "private-http-task"
     poll_interval_ms: int = 100
+    result_text: str = "remote task result"
     query_times: list[float] = field(default_factory=lambda: list[float]())
 
     def snapshot(self) -> dict[str, object]:
@@ -147,7 +148,7 @@ def wire_server(
                     if task_state.status == "completed":
                         result["result"] = {
                             "resultType": "complete",
-                            "content": [{"type": "text", "text": "remote task result"}],
+                            "content": [{"type": "text", "text": task_state.result_text}],
                         }
                     elif task_state.status == "failed":
                         result["error"] = {"code": -32001, "message": "private-task-error"}

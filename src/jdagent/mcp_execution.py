@@ -14,6 +14,7 @@ from jdagent.domain.events import (
     MCPInvocationStartedPayload,
     MCPTaskObservedPayload,
     MCPTaskRegisteredPayload,
+    MCPTaskResultReservedPayload,
     MCPTaskResultSavedPayload,
     RuntimeEventType,
 )
@@ -68,9 +69,9 @@ class MCPExecution:
             limits,
         )
 
-    def _has_capacity(self, required: int | None = None) -> bool:
+    def _usage(self) -> tuple[int, dict[tuple[str | None, str], int]]:
         charges: dict[tuple[str | None, str], int] = {}
-        controls: dict[str, int] = {}
+        objects: dict[str, int] = {}
         tasks: dict[str, tuple[str | None, str]] = {}
         for event in self._journal.events:
             payload = event.payload
@@ -79,7 +80,9 @@ class MCPExecution:
             elif isinstance(payload, MCPTaskRegisteredPayload):
                 key = (event.turn_id, payload.call_id)
                 charges[key] = max(0, charges.get(key, 0) - payload.handle_bytes)
-                controls[payload.task_ref] = payload.handle_bytes
+                objects[payload.handle_hash] = max(
+                    objects.get(payload.handle_hash, 0), payload.handle_bytes
+                )
                 tasks[payload.task_ref] = key
             elif (
                 isinstance(payload, MCPTaskObservedPayload)
@@ -90,14 +93,42 @@ class MCPExecution:
                 # These terminal states have no business result to fetch. Keep
                 # the control object charged, but release its unused reservation.
                 charges[tasks[payload.task_ref]] = 0
-            elif isinstance(payload, MCPInvocationFinishedPayload) and payload.result_confirmed:
-                charges[event.turn_id, payload.result.call_id] = payload.original_bytes
+            elif isinstance(payload, MCPInvocationFinishedPayload):
+                if payload.result_confirmed:
+                    charges[event.turn_id, payload.result.call_id] = 0
+                if payload.original_hash is not None:
+                    objects[payload.original_hash] = max(
+                        objects.get(payload.original_hash, 0), payload.original_bytes
+                    )
             elif isinstance(payload, MCPTaskResultSavedPayload):
-                charges[payload.origin_turn_id, payload.call_id] = payload.original_bytes
+                charges[payload.origin_turn_id, payload.call_id] = 0
+                objects[payload.original_hash] = max(
+                    objects.get(payload.original_hash, 0), payload.original_bytes
+                )
+            elif isinstance(payload, MCPTaskResultReservedPayload):
+                charges[payload.origin_turn_id, payload.call_id] = payload.reserved_bytes
+        return sum(charges.values()) + sum(objects.values()), charges
+
+    def _has_capacity(self, required: int | None = None) -> bool:
+        used, _ = self._usage()
         reserve = self._limits.reservation_bytes if required is None else required
-        return (
-            sum(charges.values()) + sum(controls.values()) + reserve <= self._limits.session_bytes
+        return used + reserve <= self._limits.session_bytes
+
+    async def reserve_task_result(self, task_ref: str, context: ToolExecutionContext) -> bool:
+        """Retain existing capacity or commit new capacity before a management RPC."""
+        used, reservations = self._usage()
+        existing = reservations.get((context.turn_id, context.call_id), 0)
+        required = self._limits.reservation_bytes
+        if existing >= required:
+            return True
+        if used + required - existing > self._limits.session_bytes:
+            return False
+        await self._journal.record(
+            None,
+            RuntimeEventType.MCP_TASK_RESULT_RESERVED,
+            MCPTaskResultReservedPayload(task_ref, context.call_id, context.turn_id, required),
         )
+        return True
 
     async def publish_discovery(
         self,

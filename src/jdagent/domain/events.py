@@ -50,6 +50,7 @@ class RuntimeEventType(StrEnum):
     MCP_TASK_OBSERVED = "mcp_task_observed"
     MCP_TASK_CANCEL_REQUESTED = "mcp_task_cancel_requested"
     MCP_TASK_RESULT_SAVED = "mcp_task_result_saved"
+    MCP_TASK_RESULT_RESERVED = "mcp_task_result_reserved"
     MCP_PROMPT_PREPARED = "mcp_prompt_prepared"
     MODEL_USAGE_RECORDED = "model_usage_recorded"
     TURN_COMPLETED = "turn_completed"
@@ -349,6 +350,16 @@ class MCPTaskCancelRequestedPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class MCPTaskResultReservedPayload:
+    """Durable capacity for another fetch of an already registered task."""
+
+    task_ref: str
+    call_id: str
+    origin_turn_id: str
+    reserved_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class MCPTaskResultSavedPayload:
     """An explicit management result, not another model-call completion."""
 
@@ -430,6 +441,7 @@ RuntimePayload: TypeAlias = (
     | MCPTaskObservedPayload
     | MCPTaskCancelRequestedPayload
     | MCPTaskResultSavedPayload
+    | MCPTaskResultReservedPayload
     | MCPPromptPreparedPayload
     | ModelUsageRecordedPayload
     | TurnCompletedPayload

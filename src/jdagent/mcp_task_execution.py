@@ -172,7 +172,9 @@ class MCPTaskExecution:
                     cancelled=task.status == "cancelled",
                 )
 
-    async def cancel(self, entry: MCPCapability, context: ToolExecutionContext) -> None:
+    async def cancel(
+        self, entry: MCPCapability, context: ToolExecutionContext, *, query_result: bool = True
+    ) -> None:
         """Request cancel and inspect its effect within one independent five-second window."""
         if self._task_ref is None or self._task is None or self.result_confirmed:
             return
@@ -194,6 +196,8 @@ class MCPTaskExecution:
                     RuntimeEventType.MCP_TASK_OBSERVED,
                     MCPTaskObservedPayload(context.call_id, task_ref, None, operation="cancel"),
                 )
+                if not query_result:
+                    return
                 await asyncio.sleep(max(0.1, (task.poll_interval_ms or 0) / 1000))
                 snapshot = await self._query(entry, task, task_ref, context)
                 self._task = snapshot.task

@@ -27,6 +27,7 @@ from jdagent.domain.events import (
     MCPTaskCancelRequestedPayload,
     MCPTaskObservedPayload,
     MCPTaskRegisteredPayload,
+    MCPTaskResultReservedPayload,
     MCPTaskResultSavedPayload,
     ModelRequestPreparedPayload,
     ModelUsageRecordedPayload,
@@ -155,6 +156,13 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    if isinstance(payload, MCPTaskResultReservedPayload):
+        return {
+            "task_ref": payload.task_ref,
+            "call_id": payload.call_id,
+            "origin_turn_id": payload.origin_turn_id,
+            "reserved_bytes": payload.reserved_bytes,
+        }
     if isinstance(payload, MCPPromptPreparedPayload):
         return {"call_id": payload.call_id, "outcome": payload.outcome.to_data()}
     if isinstance(payload, MCPTaskResultSavedPayload):
@@ -481,6 +489,16 @@ def _tool_outcome(value: JsonObject) -> ToolOutcome:
 
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    if event_type is RuntimeEventType.MCP_TASK_RESULT_RESERVED:
+        reserved = require_integer(data, "reserved_bytes")
+        if reserved <= 0:
+            raise ValueError("MCP Task result reservation must be positive")
+        return MCPTaskResultReservedPayload(
+            require_string(data, "task_ref"),
+            require_string(data, "call_id"),
+            require_string(data, "origin_turn_id"),
+            reserved,
+        )
     if event_type is RuntimeEventType.MCP_PROMPT_PREPARED:
         return MCPPromptPreparedPayload(
             require_string(data, "call_id"),

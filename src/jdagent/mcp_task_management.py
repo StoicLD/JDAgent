@@ -163,6 +163,7 @@ class MCPTaskManagement:
         )
         execution.attach(task_ref, task)
         original_entry = entry
+        results = MCPExecution(self._service, journal, self._objects, limits)
         interruption: ToolOutcome | None = None
         try:
             if task.timing.expired:
@@ -170,6 +171,13 @@ class MCPTaskManagement:
             entry = await self._service.bind_task(
                 session_id, entry, require_string(control, "identity_digest")
             )
+            can_fetch = await results.reserve_task_result(task_ref, context)
+            if not can_fetch and action != "cancel":
+                return ToolOutcome(
+                    completed=False,
+                    error_code=ToolErrorCode.CAPACITY,
+                    message="MCP result storage quota cannot reserve another Task response",
+                )
             self._service.begin_activity(
                 session_id,
                 entry,
@@ -177,9 +185,16 @@ class MCPTaskManagement:
                 task_status=task.status,
             )
             if action == "cancel":
-                await execution.cancel(entry, context)
+                await execution.cancel(entry, context, query_result=can_fetch)
                 if execution.control_failure is not None:
                     raise execution.control_failure
+                if not can_fetch:
+                    interruption = ToolOutcome(
+                        data={**execution.details, "result_query_skipped": "capacity"},
+                        completed=False,
+                        error_code=ToolErrorCode.CAPACITY,
+                        message="Cancellation acknowledged; result query requires storage capacity",
+                    )
             else:
                 async with asyncio.timeout(self._service.execution_timeout(session_id, entry)):
                     snapshot = await execution.query(entry, context)
@@ -215,9 +230,7 @@ class MCPTaskManagement:
         finally:
             self._service.end_activity(session_id, entry)
         if execution.final_result is not None:
-            saved = await MCPExecution(
-                self._service, journal, self._objects, limits
-            ).publish_task_result(
+            saved = await results.publish_task_result(
                 original_entry, execution.final_result, context, execution.details
             )
             # Keep the business result separately from this management action's
