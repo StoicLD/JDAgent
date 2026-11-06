@@ -106,6 +106,7 @@ class ModelRequestPreparedPayload:
     object_hash: str
     call_kind: str
     input_tokens: int
+    mcp_context: bool = False
 
 
 @dataclass(frozen=True, slots=True)

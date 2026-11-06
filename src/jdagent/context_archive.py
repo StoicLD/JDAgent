@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import asdict
 from datetime import datetime
 
-from jdagent.domain.events import CompactionFailedPayload, RuntimeEvent
+from jdagent.domain.events import CompactionFailedPayload, ModelRequestPreparedPayload, RuntimeEvent
 from jdagent.domain.json import (
     JsonObject,
     JsonValue,
@@ -56,6 +56,9 @@ def prefix_hash(events: Sequence[RuntimeEvent], through: int) -> str:
         if event.sequence > through:
             continue
         record = asdict(event)
+        if isinstance(event.payload, ModelRequestPreparedPayload) and not event.payload.mcp_context:
+            # Old schema-4 request manifests have no provenance flag; preserve their hashes.
+            record["payload"].pop("mcp_context", None)
         if isinstance(event.payload, CompactionFailedPayload) and not event.payload.response_hashes:
             # Keep the original v0.5 schema-4 canonical form when the optional field is absent.
             record["payload"].pop("response_hashes", None)

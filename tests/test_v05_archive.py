@@ -13,6 +13,7 @@ from jdagent.context_archive import archive_request, encode_json, prefix_hash, r
 from jdagent.domain.errors import SessionError
 from jdagent.domain.events import (
     CompactionFailedPayload,
+    ModelRequestPreparedPayload,
     RuntimeEvent,
     RuntimeEventType,
     UserMessagePayload,
@@ -50,6 +51,32 @@ def test_original_v05_failed_event_keeps_its_prefix_hash(tmp_path: Path):
         session = JsonlSession(tmp_path)
         session.path_for("old-v05").write_bytes(encode_json(legacy) + b"\n")
         restored = [item async for item in session.read("old-v05")]
+        assert prefix_hash(restored, 1) == expected
+        assert restored[0] == event
+
+    asyncio.run(scenario())
+
+
+def test_original_request_manifest_keeps_its_prefix_hash_without_mcp_provenance(tmp_path: Path):
+    async def scenario():
+        event = RuntimeEvent.create(
+            session_id="old-request",
+            turn_id="t",
+            sequence=1,
+            event_type=RuntimeEventType.MODEL_REQUEST_PREPARED,
+            payload=ModelRequestPreparedPayload("request", "a" * 64, "task", 100),
+        )
+        legacy = asdict(event)
+        legacy["payload"] = {
+            "request_id": "request",
+            "object_hash": "a" * 64,
+            "call_kind": "task",
+            "input_tokens": 100,
+        }
+        expected = hashlib.sha256(encode_json([legacy])).hexdigest()
+        session = JsonlSession(tmp_path)
+        session.path_for("old-request").write_bytes(encode_json(legacy) + b"\n")
+        restored = [item async for item in session.read("old-request")]
         assert prefix_hash(restored, 1) == expected
         assert restored[0] == event
 

@@ -247,6 +247,7 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
             "object_hash": payload.object_hash,
             "call_kind": payload.call_kind,
             "input_tokens": payload.input_tokens,
+            **({"mcp_context": True} if payload.mcp_context else {}),
         }
     if isinstance(payload, CompactionCommittedPayload):
         return {
@@ -607,11 +608,14 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
             require_integer(data, "expected_version"),
         )
     if event_type is RuntimeEventType.MODEL_REQUEST_PREPARED:
+        if not isinstance(data.get("mcp_context", False), bool):
+            raise ValueError("mcp_context must be boolean")
         return ModelRequestPreparedPayload(
             require_string(data, "request_id"),
             require_string(data, "object_hash"),
             require_string(data, "call_kind"),
             require_integer(data, "input_tokens"),
+            mcp_context=data.get("mcp_context") is True,
         )
     if event_type is RuntimeEventType.COMPACTION_COMMITTED:
         return CompactionCommittedPayload(
