@@ -66,6 +66,10 @@ safe_repeat 默认为 false；设为 true 只允许宿主在可靠识别服务�
 
 ## 长操作与新版 Tasks
 
+交互中可用 `/mcp status` 查看本地连接与目录状态，命令本身不会连接 Server。
+运行中仍可使用 `/status`、`/context-window`、`/mcp status` 和 `/cancel`；`/exit` 先取消并收尾再退出。
+`/compact` 和刷新等操作需要等空闲后重新发出，不在当前 Turn 排队；审批期间这些命令不会被当成审批答案。
+
 Server 协商新版 Tasks 后，可以把工具调用返回为任务。JDAgent 保存任务关联后顺序等待，
 模型取得最终结果才继续；内部查询和重试不额外消耗业务工具次数，也不延长本次 timeout_seconds。
 查询至少间隔 100 ms，Server 要求更长间隔时遵从该值。可识别的查询超时最多尝试三次，始终查询原任务。

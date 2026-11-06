@@ -50,6 +50,8 @@ _COMMANDS = (
     "/logs",
     "/compact",
     "/context-window",
+    "/mcp status",
+    "/cancel",
     "/trace",
     "/exit",
 )

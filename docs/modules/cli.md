@@ -35,12 +35,15 @@ Session 事件 schema v4 是不同合同。JSON 另有 `maintenance` 作业 ID �
 | `/trace` | 查看结构化执行轨迹 |
 | `/knowledge status\|bindings\|sources` | 查看绑定数量、绑定或来源列表 |
 | `/logs clear` | 清理当前 Session 的命令日志；读取日志通过 read_command_output 工具 |
-| `/compact` | 提前压缩，运行中排队并合并重复请求 |
+| `/compact` | 空闲时提前压缩；运行中拒绝，不排队 |
 | `/context-window` | 显示窗口、输入预算、最近完整占用与分类 |
-| `/exit` | 退出交互 |
+| `/mcp status` | 读取本地 MCP 状态，不连接或刷新 |
+| `/cancel` | 取消当前操作；空闲时不退出 |
+| `/exit` | 先取消活动操作并等待收尾，再退出交互 |
 
-当前枚举为 13 条；没有 `/context` 或 `/memory`。终端只有一个输入读取者，运行中命令不会
+当前枚举为 15 条；没有 `/context` 或 `/memory`。终端只有一个输入读取者，运行中命令不会
 成为审批答案，普通输入也不会暗中启动另一 Turn。
+运行中及审批期间只允许本地状态、上下文窗口、取消和退出；其他操作要求空闲后重发。
 `jdagent maintain --pending --workspace <路径>` 续做已登记的后台整理。
 知识管理还提供 `jdagent knowledge ...` 独立命令树，负责连接、知识库、来源和 Binding 等操作；
 它的真实 RAG 配置限制见[知识模块](knowledge.md)。

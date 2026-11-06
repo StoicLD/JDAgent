@@ -49,6 +49,8 @@ class CommandName(StrEnum):
     LOGS = "logs"
     COMPACT = "compact"
     CONTEXT_WINDOW = "context-window"
+    MCP = "mcp"
+    CANCEL = "cancel"
     EXIT = "exit"
 
 
@@ -180,7 +182,7 @@ _HELP = (
     "/help /status /new /sessions /resume <name|id> /rename <name> "
     "/permissions [revoke <rule-id>] /knowledge status|bindings|sources /trace /exit\n"
     "/logs clear (clear current session command output)\n"
-    "/compact /context-window\n"
+    "/compact /context-window /mcp status /cancel\n"
     "Enter submit | Alt+Enter newline | Ctrl+R history search | "
     "Ctrl+C cancels a running turn; at idle it exits"
 )
@@ -375,21 +377,42 @@ class InteractiveApplication:
                     except CommandError as error:
                         await self._presenter.publish(UiEvent(UiEventKind.ERROR, str(error)))
                         continue
+                    if isinstance(action, CommandAction) and action.name in {
+                        CommandName.CANCEL,
+                        CommandName.EXIT,
+                    }:
+                        if action.arguments:
+                            await self._presenter.publish(
+                                UiEvent(UiEventKind.ERROR, f"Usage: /{action.name.value}")
+                            )
+                            continue
+                        action = ExitAction() if action.name is CommandName.EXIT else CancelAction()
                     if isinstance(action, (CancelAction, ExitAction)):
-                        self._exit_requested = (
+                        self._exit_requested |= (
                             isinstance(action, ExitAction) and not action.cancelled
                         )
+                        if self._active_cancellation is not None:
+                            self._active_cancellation.cancel()
+                        await self._set_state(InteractionState.CANCELLING)
                         operation.cancel()
                     elif isinstance(action, CommandAction) and action.name in {
                         CommandName.COMPACT,
                         CommandName.CONTEXT_WINDOW,
+                        CommandName.STATUS,
                     }:
+                        await self._handle_command(action)
+                    elif (
+                        isinstance(action, CommandAction)
+                        and action.name is CommandName.MCP
+                        and action.arguments in {(), ("status",)}
+                    ):
                         await self._handle_command(action)
                     else:
                         await self._presenter.publish(
                             UiEvent(
                                 UiEventKind.INFO,
-                                "Turn is busy; use /compact, /context-window, or Ctrl+C",
+                                "Session is busy; use /status, /context-window, "
+                                "/mcp status, /cancel, or /exit",
                             )
                         )
             finally:
@@ -403,6 +426,11 @@ class InteractiveApplication:
             if action.name is CommandName.EXIT:
                 self._require_arity(action.arguments, 0, "/exit")
                 return True
+            if action.name is CommandName.CANCEL:
+                self._require_arity(action.arguments, 0, "/cancel")
+                await self._presenter.publish(
+                    UiEvent(UiEventKind.INFO, "No active operation to cancel")
+                )
             if action.name is CommandName.COMPACT:
                 self._require_arity(action.arguments, 0, "/compact")
                 if self._session_id is None:
@@ -410,8 +438,12 @@ class InteractiveApplication:
                         UiEvent(UiEventKind.INFO, "No history to compact")
                     )
                 elif self.turn_running or self._state is InteractionState.COMPACTING:
-                    message = await self._coordinator.compact(self._session_id)
-                    await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
+                    await self._presenter.publish(
+                        UiEvent(
+                            UiEventKind.INFO,
+                            "/compact requires an idle session; resend after the current operation",
+                        )
+                    )
                 else:
                     await self._set_state(InteractionState.COMPACTING)
                     operation = asyncio.create_task(self._coordinator.compact(self._session_id))
@@ -464,6 +496,21 @@ class InteractiveApplication:
                             f"provider_request={snapshot.provider_request_id or 'unavailable'}",
                         )
                     )
+            elif action.name is CommandName.MCP:
+                if action.arguments not in {(), ("status",)}:
+                    raise CommandError("Usage: /mcp status")
+                servers = self._coordinator.mcp_status(self._session_id or "")
+                message = (
+                    "\n".join(
+                        f"server={server.server_id} connection={server.connection} "
+                        f"directory={server.directory} "
+                        f"protocol={server.protocol_version or 'unknown'} "
+                        f"entries={server.entry_count} reason={server.reason or 'none'}"
+                        for server in servers
+                    )
+                    or "No MCP Servers configured"
+                )
+                await self._presenter.publish(UiEvent(UiEventKind.INFO, message))
             elif action.name is CommandName.HELP:
                 self._require_arity(action.arguments, 0, "/help")
                 await self._presenter.publish(UiEvent(UiEventKind.INFO, _HELP))

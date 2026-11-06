@@ -16,6 +16,7 @@ from jdagent.application.interactive import (
     InteractiveApplication,
     InteractiveContext,
     PromptAction,
+    parse_user_action,
 )
 from jdagent.application.session_catalog import SessionCatalog
 from jdagent.domain.model import ResponseCompleted, TextDelta
@@ -56,7 +57,7 @@ def test_control_command_during_approval_does_not_answer_the_approval(tmp_path: 
     asyncio.run(scenario())
 
 
-def test_running_cli_queues_compaction_and_reports_window_without_extra_task_calls(
+def test_running_cli_rejects_compaction_and_reports_local_status_without_extra_task_calls(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
@@ -77,6 +78,8 @@ def test_running_cli_queues_compaction_and_reports_window_without_extra_task_cal
                 PromptAction("hello"),
                 CommandAction(CommandName.COMPACT),
                 CommandAction(CommandName.CONTEXT_WINDOW),
+                CommandAction(CommandName.STATUS),
+                parse_user_action("/mcp status"),
                 ExitAction(),
             )
         )
@@ -93,7 +96,12 @@ def test_running_cli_queues_compaction_and_reports_window_without_extra_task_cal
         )
         assert await application.run() == 0
         assert len(model.requests) == 1
-        assert any("queued" in event.message for event in presenter.events)
+        assert any(
+            "/compact requires an idle session" in event.message for event in presenter.events
+        )
+        assert not any("queued" in event.message for event in presenter.events)
         assert any("input_budget=" in event.message for event in presenter.events)
+        assert any("provider=fake" in event.message for event in presenter.events)
+        assert any("No MCP Servers configured" in event.message for event in presenter.events)
 
     asyncio.run(scenario())

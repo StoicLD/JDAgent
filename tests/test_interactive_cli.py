@@ -121,6 +121,8 @@ def test_repl_routes_commands_without_sending_them_to_model(tmp_path: Path) -> N
     )
     terminal = ScriptedTerminal(
         (
+            CommandAction(CommandName.CANCEL),
+            CommandAction(CommandName.MCP, ("status",)),
             PromptAction("hello"),
             CommandAction(CommandName.STATUS),
             ExitAction(),
@@ -151,6 +153,8 @@ def test_repl_routes_commands_without_sending_them_to_model(tmp_path: Path) -> N
     assert len(model.requests) == 1
     assert [message.content for message in model.requests[0].messages] == ["hello"]
     assert terminal.closed is True
+    assert any("No active operation to cancel" in event.message for event in presenter.events)
+    assert any("No MCP Servers configured" in event.message for event in presenter.events)
     assert any(
         event.kind is UiEventKind.ASSISTANT and event.message == "answer"
         for event in presenter.events
