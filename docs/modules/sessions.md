@@ -27,7 +27,8 @@ Task 登记、状态观察和取消意图分别使用 mcp_task_registered、mcp_
 直接 Prompt 使用 mcp_prompt_prepared 保存带来源的有界材料和原文引用。只有触发命令写入 user_message；
 获取事实沿用 MCP 意图／结果链，不生成虚构的 assistant 工具调用或 tool_execution_completed 配对。
 结果来源保留原调用定义，普通原文入口可分页读取；更新后的 TTL 跨重启保留，过期不意味着远端已停止。
-本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令已接通，完整故障矩阵仍待验收，见[v0.7 实施记录](../plans/v0.7-implementation.md)。
+本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令已接通，绑定编码与登记校验由
+[MCPTaskBinding](../../src/jdagent/mcp_task_binding.py)统一负责；恢复证据见[v0.7 验收映射](../development/v0.7-acceptance-matrix.md)。
 
 事件记录用户输入、完整模型消息、工具请求、权限决定、规则授予／撤销、工具开始与结束、
 用量、检索元数据、窗口裁剪以及 Turn 完成／失败。Trace 消费同一事件流，

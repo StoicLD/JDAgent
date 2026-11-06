@@ -2,7 +2,7 @@
 
 状态：`Implemented`（状态记录）
 
-更新日期：2026-11-06（v0.7 已完成 P0、P1a–P1d、P2a–P2h、P3a–P3h 和 P4a–P4d 的分段实现；完整阶段验收与既有版本状态未变）。
+更新日期：2026-11-06（v0.7 实施、双轴代码审查及三项修复已完成；人工学习出口和既有版本门禁保留）。
 v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 此前 R1 文档修订与本次实现是不同授权阶段；固定快照和运行证据见
 [实现记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
@@ -20,10 +20,14 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
 | v0.3 RAG | P1 代码已实现；工程复核未通过，Milvus Live 未完成 | 2026-09-16 所有者裁定关闭 |
 | v0.4 工具执行 | 八工具和离线链已实现；真实 DeepSeek 三次主线仅 2/3 通过 | 未完成，人工语义验收待学习者 |
 | v0.5 Context 与 Memory | 代码与确定性验证已落地，独立发现逐项修复；修复后的第三轮固定 DeepSeek 复验 3/3 通过，完整工程门禁仍有未完成项，见实现记录 | 初始模型已记录，学习出口未关闭 |
+| v0.7 MCP Client | 三类能力、双传输、BM25／缓存、长调用及顺序 Tasks 已实现；独立双轴审查的三项发现均修复并复核，见[验收映射](../development/v0.7-acceptance-matrix.md) | 学习材料已交付，人工闭卷与延迟复测待执行 |
 
-最近完整离线运行：2026-11-05，v0.6 `40946ef`：`545 passed, 1 failed, 3 skipped, 11 deselected`；
-唯一失败仍为 v0.3 词项 Recall `0.8125 < 0.85`，integration 未运行。随后实验记录校验修复的控制器 15 项定向通过。
-范围和证据见[实施记录](../plans/v0.6-implementation.md)及[A01–A13 映射](../development/v0.6-acceptance-matrix.md)。
+最近完整离线运行：2026-11-06，v0.7 `f747299`：`934 passed, 1 failed, 14 skipped in 327.58s`；
+唯一失败仍为 v0.3 词项 Recall `0.8125 < 0.85`。11 项真实服务和 3 项规模测试按 opt-in 跳过。
+审查后的 Schema／目录／Task 绑定修复相关回归为 43、98、105 项通过；交付核对另补长来源预览限制，
+七文件 88 项回归通过。最终代码 `c412174`，Ruff、format（366 文件）、Pyright 和离线锁文件检查通过。两轴独立复核通过，详见
+[实现审查](../reviews/REV-20261106-003-v0.7-implementation.md)与[逐项验收映射](../development/v0.7-acceptance-matrix.md)。
+此前 v0.6 完整结果及其未完成门禁保留在[实施记录](../plans/v0.6-implementation.md)和[A01–A13 映射](../development/v0.6-acceptance-matrix.md)。
 六次入口和统一任务已完成离线演练，[固定实现自审](../reviews/REV-20261105-002-v0.6-implementation-self-review.md)
 的发现已处置。获准后的[首轮 Live](../reviews/v0.6-live-comparison-20261105.md)只执行 B1，因相对命令日志
 目录缺陷失败，其余五次未运行；修复后 67 项定向回归通过。随后另获授权的[第二轮六次对照](../reviews/v0.6-live-comparison-20261105-r2.md)
@@ -87,8 +91,13 @@ v0.5 实现基于 `1729161b062cdffbdd4b30c6cff0ca4baeaec877`。
    重试与模型工具补充回归 28 项通过。
    P5a 补齐两版核心的三类能力互操作和官方 MCPServer 的双 Runner／三种传输响应形式，四文件回归 46 项通过。
    P3i 修复 Task 登记代次不一致未拒绝及空闲 compact 制造假中断的问题，五文件恢复回归 88 项通过。
-   完整验收映射、全量测试和最终代码审查仍待实施。
-   R1 独立复审与完整 v0.7 验收尚未完成。
+   P5b／P5c 修复独立 Spec 审查发现的引用异常和单项畸形定义牵连目录；43／98 项相关回归通过，
+   Spec 评审者独立运行 47 项通过。P5d 集中 Task 持久绑定合同，105 项相关回归通过，Standards 独立复核通过。
+   P5e 补超长来源标识的模型投影预算，完整来源与原文保留，88 项相关回归通过。
+   US-01–64、AC-01–23、R07-01–12 的[验收映射](../development/v0.7-acceptance-matrix.md)已完成；
+   全量唯一失败为既有 RAG 指标，本次 MCP 实施、审查修复和分段提交已交付。
+   Cursor 对 R1 的独立设计复审未执行；本次代码独立评审不改写原设计报告。
+   人工学习出口待学习者完成，不把实施交付记为整个学习模块完成。
 
 ## 授权与证据边界
 

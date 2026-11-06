@@ -19,6 +19,8 @@
 | v0.6，2026-11-05 完整离线 | 545 passed、1 个既有 RAG 失败、3 skipped、11 deselected；Ruff、Pyright 通过 | `40946ef` 的[完整回归及自审修复证据](../reviews/evidence/v0.6-20261105/implementation-self-review/README.md)；随后控制器 15 项定向通过；覆盖与边界见[验收映射](../development/v0.6-acceptance-matrix.md) |
 | v0.6，2026-11-05 首轮 Live 与修复 | B1 failed，其余五次未运行；路径修复后 67 项定向通过 | `7026431` 的[真实记录](../reviews/v0.6-live-comparison-20261105.md)；相对日志目录导致命令状态不确定，未通过 A13 |
 | v0.6，2026-11-05 第二轮 Live | 任务 6/6 通过，目标组冻结比较 1/3 通过 | `c9b5fb0` 的[完整六次记录](../reviews/v0.6-live-comparison-20261105-r2.md)；T1 输出超限，T3 的调用／工具／用量／耗时超限，默认不切换 |
+| v0.7，2026-11-06 完整离线 | 934 passed、1 个既有 RAG 失败、14 skipped | `f747299` 的[实现审查与验证](../reviews/REV-20261106-003-v0.7-implementation.md)；11 项 Live 和 3 项规模测试 opt-in 未运行 |
+| v0.7，2026-11-06 审查修复 | 43／98／105 项相关回归通过，额外来源预算修复 88 项通过；Ruff、format 366 文件、Pyright、锁文件检查通过 | `c412174`；独立 Spec 复核 47 项通过、Standards 字节兼容与身份错配复核通过；[64 US／23 AC／12 R07 映射](../development/v0.7-acceptance-matrix.md)，人工学习待执行 |
 
 v0.4 实现的 Standards／Spec 独立评审在修复后定向复核通过，见[处置记录](../reviews/v0.4-implementation-review.md)。
 该报告前部“Live 未执行”是当时事实，末尾已追加后续结果，最新结论以三次 Live 记录为准。

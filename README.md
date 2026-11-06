@@ -1,9 +1,9 @@
 # JDAgent
 
-状态：`Implemented`（使用说明），更新：2026-11-05，当前包版本：`0.5.0`。
+状态：`Implemented`（使用说明），更新：2026-11-06，当前包版本：`0.5.0`。
 
 JDAgent 是用于实践 Agent 核心机制的 Python 命令行项目。目前支持 DeepSeek 对话、持久会话、
-项目文件读写、命令执行、上下文压缩、历史检索和长期记忆。知识库已有管理与摄取入口，
+项目文件读写、命令执行、上下文压缩、历史检索、长期记忆和 MCP 工具／资源／Prompt。知识库已有管理与摄取入口，
 但真实 RAG 配置链仍有缺口。当前主要运行和验证环境为 Windows。
 
 **完整操作步骤见[安装与使用教程](docs/guides/usage.md)。**
@@ -86,6 +86,8 @@ uv run jdagent --provider deepseek --runtime-engine langgraph --model-adapter la
 
 - [安装与使用教程](docs/guides/usage.md)：安装、会话、审批、上下文、记忆、配置、数据和排错。
 - [知识库操作教程](docs/guides/knowledge.md)：管理命令、文件摄取及当前 RAG 限制。
+- [MCP 配置与使用](docs/guides/mcp.md)：stdio／HTTP、三类能力、关键词检索、原文读回和长任务管理；
+  v0.7 的[验收映射](docs/development/v0.7-acceptance-matrix.md)与[审查修复](docs/reviews/REV-20261106-003-v0.7-implementation.md)保留实际证据。
 - [文档 Map](docs/map.md)：按模块理解实现；[当前状态](docs/context/current.md)记录剩余工作。
 - [验证与验收](docs/modules/verification.md)：测试入口和原始证据。v0.5 修复后的三次固定
   DeepSeek 验收通过，完整故障矩阵、语义 Eval 等尚未完成，既有 RAG Recall 失败仍保留。

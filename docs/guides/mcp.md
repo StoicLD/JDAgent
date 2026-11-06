@@ -1,11 +1,12 @@
 # MCP 配置与使用
 
-状态：`Proposed`（配置、三类模型入口、结果处理及 CLI 目录／Task 管理已实施；完整 v0.7 仍在实施中）。
+状态：`Implemented`（当前 MCP 使用说明；工程证据见[验收映射](../development/v0.7-acceptance-matrix.md)）。
 
 实现进度见[实施记录](../plans/v0.7-implementation.md)。当前 CLI 能读取并验证以下配置，普通对话不会因此启动 Server。
 模型现在可通过 search_tools 检索已启用工具，并从下一请求开始调用选中的定义；两个 Runner 共用此路径。
 完整定义还须装得进本次输入窗口；空间不足时在请求之间移除较少使用的定义，保留检索入口，不截断参数约束。
 结果预览有界，完整原文可通过 read_mcp_result 按引用分页读回。
+超长来源标识显示为明确标注的前缀和 SHA256；完整来源保留在持久调用记录中，原文内容不变。
 开启相应能力后，模型也可发现／读取 Resources，以及检索／获取 Prompts；用户也可直接用命令触发 Prompt。
 新版 Tasks 已接入当前调用的顺序等待；CLI 支持重开会话后显式管理原任务。
 TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；两种 Runner 共用同一会话服务。
@@ -13,6 +14,8 @@ TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；�
 新版核心的 x-mcp-header 参数注解由 Client 自动处理：HTTP 调用按已加载工具定义发送对应的 Mcp-Param-* Header，
 用户无需另配 Header。不合法的注解在目录中标为 invalid_header_annotation，仅拒绝对应工具。
 旧版核心不应用这套参数 Header 规则。
+畸形能力定义显示 invalid_definition；无法支持或解析引用的 Schema 显示 unsupported_input_schema。
+这些条目不可调用，同一 Server 的合法能力仍可使用；损坏的整个响应仍会使目录准备失败。
 受控互操作已覆盖两版核心的 stdio、HTTP JSON／SSE，以及锁定官方 MCPServer 的三类能力和直接 Prompt；
 具体范围见实施记录，不表示所有商业服务均已测试。
 
@@ -132,7 +135,8 @@ Server 协商新版 Tasks 后，可以把工具调用返回为任务。JDAgent �
 Server 要求当前不支持的额外输入时，结束等待并请求取消。远端句柄不会出现在模型材料中，用户看到的是本地任务引用。
 若取消期间收到最终结果，仍保留该结果原文。应用层允许按原会话的本地引用查询、读结果或再次取消；
 每次远端操作核验原工作区、Server 和账号。换账号或端点不能查回原任务，stdio 新进程遗失任务时明确报错，不重新提交。
-TTL 是 Server 保留任务的期限，更新后跨重启保留；本地已保存的结果仍可读回。完整恢复矩阵尚待验收。
+TTL 是 Server 保留任务的期限，更新后跨重启保留；本地已保存的结果仍可读回。
+重启和真实进程中断的证据见[验收映射](../development/v0.7-acceptance-matrix.md)。
 
 ## 模型使用资源和模板
 
