@@ -4,8 +4,9 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType, RuntimePayload
-from jdagent.domain.json import JsonObject
+from jdagent.domain.json import JsonObject, JsonValue
 from jdagent.domain.mcp import (
+    MCPCapabilityKind,
     MCPConnectionState,
     MCPMethod,
     MCPPeerInformation,
@@ -44,6 +45,10 @@ class MCPConnectionPort(Protocol):
 
     def input_schema_issue(self, schema: JsonObject) -> str | None:
         """Report a negotiated-protocol constraint before exposing a tool."""
+        ...
+
+    def capability_issue(self, kind: MCPCapabilityKind, definition: JsonValue) -> str | None:
+        """Validate one directory entry without rejecting its usable siblings."""
         ...
 
     async def request(

@@ -23,7 +23,6 @@ from jdagent.domain.json import (
     normalize_json,
     require_array,
     require_object,
-    require_string,
 )
 from jdagent.domain.mcp import (
     MCPActivityStatus,
@@ -646,15 +645,16 @@ class MCPService:
                         params: JsonObject = {} if cursor is None else {"cursor": cursor}
                         result = await peer.request(method, params)
                         for raw in require_array(result[key], key):
-                            item = require_object(raw, key)
-                            name = require_string(item, "name")
-                            if kind == "tool" and name not in config.tools:
+                            raw_name = raw.get("name") if isinstance(raw, dict) else None
+                            name = raw_name if isinstance(raw_name, str) else "<invalid entry>"
+                            if (
+                                kind == "tool"
+                                and isinstance(raw_name, str)
+                                and name not in config.tools
+                            ):
                                 continue
-                            description = item.get("description", "")
-                            if not isinstance(description, str):
-                                raise ValueError("Invalid MCP description")
                             definition = json.dumps(
-                                item, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                                raw, ensure_ascii=False, sort_keys=True, separators=(",", ":")
                             )
                             metadata_bytes += len(definition.encode("utf-8"))
                             if (
@@ -676,6 +676,18 @@ class MCPService:
                                     rejected.append(duplicate)
                                 continue
                             names.add((kind, name))
+                            if issue := peer.capability_issue(kind, raw):
+                                rejected.append(MCPRejectedCapability(name, issue, kind))
+                                continue
+                            item = require_object(raw, key)
+                            description = item.get("description", "")
+                            if description is None:
+                                description = ""
+                            if not isinstance(description, str):
+                                rejected.append(
+                                    MCPRejectedCapability(name, "invalid_definition", kind)
+                                )
+                                continue
                             if kind == "tool" and not _valid_input_schema(item.get("inputSchema")):
                                 rejected.append(
                                     MCPRejectedCapability(name, "unsupported_input_schema")

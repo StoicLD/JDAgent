@@ -67,6 +67,7 @@ def wire_server(
     extra_tools: tuple[dict[str, object], ...] = (),
     materials: bool = False,
     tools_capability: bool = True,
+    directory_overrides: dict[str, dict[str, object]] | None = None,
 ) -> Generator[str]:
     capabilities: dict[str, object] = {"tools": {}} if tools_capability else {}
     if materials:
@@ -226,6 +227,8 @@ def wire_server(
                     tool_gate[1].wait(15)
                 if tool_error == "server_timeout":
                     response["error"] = {"code": -32001, "message": "private-timeout-text"}
+            if directory_overrides is not None and method in directory_overrides:
+                result.update(directory_overrides[method])
             if "error" not in response:
                 response["result"] = result
             body = json.dumps(response).encode()

@@ -35,8 +35,15 @@ from jdagent.adapters.mcp_transport import (
     ResponseEncodingError,
     ResponseLimitExceeded,
 )
-from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
+from jdagent.domain.json import (
+    JsonObject,
+    JsonValue,
+    normalize_json,
+    require_object,
+    require_string,
+)
 from jdagent.domain.mcp import (
+    MCPCapabilityKind,
     MCPConnectionState,
     MCPFailure,
     MCPMethod,
@@ -51,6 +58,15 @@ _TaskCallResult: TypeAlias = types.CallToolResult | TaskHandle
 _TASK_CALL_RESULT = TypeAdapter[_TaskCallResult](_TaskCallResult)  # pyright: ignore[reportArgumentType]
 _PARAMETER_HEADERS: ContextVar[dict[str, str] | None] = ContextVar(
     "mcp_parameter_headers", default=None
+)
+_DIRECTORY_KEYS = {
+    "tools/list": "tools",
+    "resources/list": "resources",
+    "resources/templates/list": "resourceTemplates",
+    "prompts/list": "prompts",
+}
+_DIRECTORY_ENTRIES: ContextVar[JsonObject | None] = ContextVar(
+    "mcp_directory_entries", default=None
 )
 
 
@@ -74,9 +90,19 @@ class _ParameterHeaderDispatcher(JSONRPCDispatcher[TransportContext]):
         options: CallOptions = {**(opts or {})}
         if method == "tools/call" and (headers := _PARAMETER_HEADERS.get()):
             options["headers"] = {**options.get("headers", {}), **headers}
-        return await super().send_raw_request(
+        raw = await super().send_raw_request(
             method, params, options, _related_request_id=_related_request_id
         )
+        entries = _DIRECTORY_ENTRIES.get()
+        key = _DIRECTORY_KEYS.get(method)
+        if entries is not None and key is not None and isinstance(raw.get(key), list):
+            # The SDK validates list results atomically. Validate its envelope
+            # here with an empty list, then expose the original entries for
+            # per-item SDK validation through capability_issue. No constraints
+            # or malformed entries silently disappear from the host catalog.
+            entries[key] = normalize_json(raw[key])
+            return {**raw, key: []}
+        return raw
 
 
 @dataclass(slots=True)
@@ -124,6 +150,19 @@ class SDKMCPConnection:
             return "invalid_header_annotation"
         return None
 
+    def capability_issue(self, kind: MCPCapabilityKind, definition: JsonValue) -> str | None:
+        model = {
+            "tool": types.Tool,
+            "resource": types.Resource,
+            "resource_template": types.ResourceTemplate,
+            "prompt": types.Prompt,
+        }[kind]
+        try:
+            model.model_validate(definition)
+        except ValidationError:
+            return "invalid_definition"
+        return None
+
     async def request(
         self,
         method: MCPMethod,
@@ -132,7 +171,7 @@ class SDKMCPConnection:
         on_progress: MCPProgressCallback | None = None,
         input_schema: JsonObject | None = None,
     ) -> JsonObject:
-        """Return an SDK-validated result or a safe failure; never retry a send."""
+        """Validate results; directory entries require capability_issue before use."""
         return await self._request(
             method, params, on_progress=on_progress, input_schema=input_schema
         )
@@ -449,27 +488,45 @@ class SDKMCPConnection:
                     await cancel_task(session, task_id, progress_callback=progress_callback)
                     return {}
                 result = await get_task(session, task_id, progress_callback=progress_callback)
-            case "tools/list":
-                result = await session.send_request(
-                    types.ListToolsRequest.model_validate(wire), types.ListToolsResult
-                )
-            case "resources/list":
-                result = await session.send_request(
-                    types.ListResourcesRequest.model_validate(wire), types.ListResourcesResult
-                )
-            case "resources/templates/list":
-                result = await session.send_request(
-                    types.ListResourceTemplatesRequest.model_validate(wire),
-                    types.ListResourceTemplatesResult,
-                )
-            case "prompts/list":
-                result = await session.send_request(
-                    types.ListPromptsRequest.model_validate(wire), types.ListPromptsResult
-                )
+            case "tools/list" | "resources/list" | "resources/templates/list" | "prompts/list":
+                return await self._list(session, request)
         return require_object(
             normalize_json(result.model_dump(by_alias=True, mode="json", exclude_unset=True)),
             "MCP result",
         )
+
+    async def _list(self, session: ClientSession, request: _Request) -> JsonObject:
+        entries: JsonObject = {}
+        token = _DIRECTORY_ENTRIES.set(entries)
+        wire = {"method": request.method, "params": request.params}
+        try:
+            match request.method:
+                case "tools/list":
+                    result = await session.send_request(
+                        types.ListToolsRequest.model_validate(wire), types.ListToolsResult
+                    )
+                case "resources/list":
+                    result = await session.send_request(
+                        types.ListResourcesRequest.model_validate(wire), types.ListResourcesResult
+                    )
+                case "resources/templates/list":
+                    result = await session.send_request(
+                        types.ListResourceTemplatesRequest.model_validate(wire),
+                        types.ListResourceTemplatesResult,
+                    )
+                case "prompts/list":
+                    result = await session.send_request(
+                        types.ListPromptsRequest.model_validate(wire), types.ListPromptsResult
+                    )
+                case _:
+                    raise MCPFailure("unsupported")
+            normalized = require_object(
+                normalize_json(result.model_dump(by_alias=True, mode="json", exclude_unset=True)),
+                "MCP directory result",
+            )
+            return {**normalized, **entries}
+        finally:
+            _DIRECTORY_ENTRIES.reset(token)
 
 
 def _safe_failure(error: BaseException) -> MCPFailure:
