@@ -1,43 +1,33 @@
 # JDAgent Agent 地图
 
-本文件是 Codex 与 Cursor 从产品 Git 仓库根启动时的原生入口。本仓库同时承载需求、架构、
-决策、代码、测试、验收证据、协作规则和项目当前状态，是唯一权威事实来源。
+本文件是产品仓库的原生入口。**当前代码是产品行为的唯一 source of truth**；文档解释代码，
+历史方案、审批与验收记录用于追溯。此规则来自所有者 2026-11-11 的文档整理要求。
+产品文件与协作规则均维护在本仓库，外层目录只是启动路由。
 
 ## 固定启动顺序
 
-无论直接从本仓库启动，还是由外层本地工作区路由进入，开始任务前依次执行：
+1. 阅读[文档 Map](docs/map.md)。
+2. 阅读[当前状态](docs/context/current.md)。
+3. 阅读[协作与评审规则](docs/development/agent-collaboration.md)。
+4. 按任务读取当前架构／模块及其代码；只在追溯理由或验证历史时进入归档、ADR 和评审。
+5. 检查本仓库的 branch、HEAD、remote、工作树和未提交变更，再确定写入范围。
 
-1. 阅读共同的[项目文档 Map](docs/map.md)。
-2. 阅读[当前项目状态](docs/context/current.md)。
-3. 阅读[Agent 协作与评审规则](docs/development/agent-collaboration.md)。
-4. 只打开索引中与当前任务有关的需求、架构、计划、决策、规范和验证证据。
-5. 检查本仓库的 branch、HEAD、remote、工作树和未提交变更，再判断允许的写入范围。
+[旧索引](docs/context/index.md)仅保留兼容导航。当前文档与代码不一致时，以代码核对并修订文档，
+不要为了迎合旧方案改变实现。无法从代码确定的运行质量标为未验证；归档不改变历史验收结果。
 
-[旧项目文档索引](docs/context/index.md)保留兼容导航。了解当前实现时按 Map 读取模块说明；
-需要历史设计或验收追溯时再进入归档与评审。归档位置不改变原始批准状态或未完成门禁。
+## 工作边界
 
-不得把仓库外的同级 Agent Context、工具私有目录、聊天摘要、缓存或临时输出加入启动链，
-也不得把它们当作项目事实或正式交接接口。
+- 新功能或行为变更需要明确范围和可验证的验收标准；现状文档整理不要求重新批准已有实现。
+- 文档状态使用 `Draft`、`Proposed`、`Approved`、`Implemented`、`Superseded` 或 `Rejected`。
+  说明实现存在不等于批准旧提案，也不等于工程／学习验收完成。
+- 实质性模块遵循[交付与学习工作流](docs/development/module-delivery-workflow.md)；
+  Python 变更遵循[工程规范](docs/development/python-style.md)，检查入口见[开发指南](docs/development/contributing.md)。
+- Git 提交、推送、合并、历史改写、分支切换或 remote 修改须有当前适用的用户授权。
+- 不覆盖用户的未提交修改；不在仓库保存凭据或不必要的敏感数据。
+- 不把仓库外的私有 Context、缓存、聊天摘要或临时输出加入启动链。
+- 入口缺失、Git 状态无法确认或事实仍无法核实时，停止受影响的写入，保留现场并报告证据。
 
-## 最小工作边界
+## 按需规则
 
-- 文档状态只使用 `Draft`、`Proposed`、`Approved`、`Implemented`、`Superseded` 或
-  `Rejected`；Agent 不得自行批准提案。
-- 讨论、诊断和评审默认只读；实质性实现前必须有可验证的需求和验收标准。
-- v0.2 之后的实质性模块遵循[模块交付与学习工作流](docs/development/module-delivery-workflow.md)；
-  Python 变更遵循[Python 工程规范](docs/development/python-style.md)。
-- 未经用户明确授权，不 commit、pull、push、merge、改写历史、切换分支或配置 remote。
-- 不在仓库中保存密钥、Token、账号密码、支付信息或不必要的个人敏感数据。
-- 若入口链接缺失、权威事实冲突或 Git 状态无法确认，停止写入，保留现场并报告准确证据。
-
-## Agent skills
-
-### Issue tracker
-
-工程技能通过 GitHub Issues 跟踪任务；读取、创建或更新任务前，参见
-[任务跟踪约定](docs/agents/issue-tracker.md)。
-
-### Domain docs
-
-采用 single-context 布局，复用现有文档索引、领域词汇表与 ADR；
-开展领域建模或架构分析前，参见[领域文档约定](docs/agents/domain.md)。
+- 操作 GitHub Issues 前，读[任务跟踪约定](docs/agents/issue-tracker.md)。
+- 开展领域建模或架构分析前，读[领域文档约定](docs/agents/domain.md)。

@@ -9,4 +9,4 @@ Ruff 与全量 Pyright strict 通过。
 每组均经实际 CLI/Host，测试 JSON v2、退出码、失败不重试、重启回退、交互上下文与压缩命令、
 独立维护入口和资源借用。用户输入由 ScriptedTerminal 提供，所有 HTTP 由 MockTransport 响应；
 配置、文件和数据库均在临时目录，不读取真实凭据，不执行付费请求。覆盖与限制见
-[实施记录](../../../../plans/v0.6-implementation.md)。
+[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。

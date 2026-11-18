@@ -1,8 +1,22 @@
 # MCP 配置与使用
 
-状态：`Implemented`（当前 MCP 使用说明；工程证据见[验收映射](../development/v0.7-acceptance-matrix.md)）。
+核对日期：2026-11-11，代码基准：`e23604f`。
 
-实现进度见[实施记录](../plans/v0.7-implementation.md)。当前 CLI 能读取并验证以下配置，普通对话不会因此启动 Server。
+## 第一次接入
+
+1. 按下文[用户定义 Server](#用户定义-server)在用户 config.toml 中登记一个实际服务，替换示例命令／URL，明确启用能力。
+2. 若需要凭据，在启动 JDAgent 的终端设置被引用的环境变量；TOML 只保存变量名。
+3. 启动交互 CLI，先用 `/mcp status` 查看本地状态，再用 `/mcp list <server-id>` 按需连接和查看目录。
+4. 目录中的 rejected 项不可执行；确认需要的能力列出后，再向真实模型提出检索／读取请求，或显式触发 Prompt。
+5. 连接配置变更后，在空闲时执行 `/mcp refresh <server-id>`。用 `/mcp tasks` 查本会话的长任务引用。
+
+Fake Provider 只返回固定文本，不会自行选择远端工具；它适合检查启动和管理命令，不能验证自然语言调用质量。
+
+## 当前能力
+
+状态：`Implemented`（当前 MCP 使用说明；工程证据见[验收映射](../archive/2026-11-11/development/v0.7-acceptance-matrix.md)）。
+
+当前结构见[MCP 模块](../modules/mcp.md)，阶段过程见[历史实施记录](../archive/2026-11-11/plans/v0.7-implementation.md)。当前 CLI 能读取并验证以下配置，普通对话不会因此启动 Server。
 模型现在可通过 search_tools 检索已启用工具，并从下一请求开始调用选中的定义；两个 Runner 共用此路径。
 完整定义还须装得进本次输入窗口；空间不足时在请求之间移除较少使用的定义，保留检索入口，不截断参数约束。
 结果预览有界，完整原文可通过 read_mcp_result 按引用分页读回。
@@ -10,7 +24,7 @@
 开启相应能力后，模型也可发现／读取 Resources，以及检索／获取 Prompts；用户也可直接用命令触发 Prompt。
 新版 Tasks 已接入当前调用的顺序等待；CLI 支持重开会话后显式管理原任务。
 TurnCoordinator 已提供本地状态、目录、显式刷新与 BM25 检索；两种 Runner 共用同一会话服务。
-目录与索引的容量单位、默认值和固定检索样例见[实施记录](../plans/v0.7-implementation.md)。
+目录、定义缓存与结果配额的默认值见[MCP 模块](../modules/mcp.md)，固定检索样例见历史实施记录。
 新版核心的 x-mcp-header 参数注解由 Client 自动处理：HTTP 调用按已加载工具定义发送对应的 Mcp-Param-* Header，
 用户无需另配 Header。不合法的注解在目录中标为 invalid_header_annotation，仅拒绝对应工具。
 旧版核心不应用这套参数 Header 规则。
@@ -109,7 +123,7 @@ safe_repeat 默认为 false；设为 true 只允许宿主在可靠识别服务�
 首次调用、退避和重试共用 timeout_seconds，不会每次重置。HTTP 504、isError 或文本里的 timeout 均不足以重试。
 同 Turn 失败后更换模型 call_id 不恢复已耗尽额度；成功结束后的正常再次读取仍可执行。
 普通 MCP 调用不受内置工具的十秒限制。取消沿适配层的有界协议清理返回；已经收到的句柄与结果仍完成本地保存，
-当前 Turn 按取消停止。范围与验证见[实施记录](../plans/v0.7-implementation.md)。
+当前 Turn 按取消停止。范围与验证见[实施记录](../archive/2026-11-11/plans/v0.7-implementation.md)。
 
 ## 长操作与新版 Tasks
 
@@ -136,7 +150,7 @@ Server 要求当前不支持的额外输入时，结束等待并请求取消。�
 若取消期间收到最终结果，仍保留该结果原文。应用层允许按原会话的本地引用查询、读结果或再次取消；
 每次远端操作核验原工作区、Server 和账号。换账号或端点不能查回原任务，stdio 新进程遗失任务时明确报错，不重新提交。
 TTL 是 Server 保留任务的期限，更新后跨重启保留；本地已保存的结果仍可读回。
-重启和真实进程中断的证据见[验收映射](../development/v0.7-acceptance-matrix.md)。
+重启和真实进程中断的证据见[验收映射](../archive/2026-11-11/development/v0.7-acceptance-matrix.md)。
 
 ## 模型使用资源和模板
 
@@ -161,7 +175,7 @@ Prompt 返回的消息角色保留在外部结果中；不会成为用户亲自�
 结构化结果遵守协商版本：锁定的 SDK 2.3.0 对 `2026-07-28` 接受任意 JSON 值，
 对 `2025-11-25` 的结构化字段接受对象或 null；旧协议下数组等值会报告协议失败。
 已声明的输出 Schema 仅校验成功业务结果，且校验完整结构化数据；`isError=true` 保留为业务失败，
-不要求它符合成功结果的 Schema。以上范围和运行证据见[实施记录](../plans/v0.7-implementation.md)。
+不要求它符合成功结果的 Schema。以上范围和运行证据见[实施记录](../archive/2026-11-11/plans/v0.7-implementation.md)。
 
 ## 项目只能收窄范围
 

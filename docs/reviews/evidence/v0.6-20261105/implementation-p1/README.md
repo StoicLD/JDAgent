@@ -3,7 +3,7 @@
 状态：`Implemented`（测试记录），日期：2026-11-05。
 
 三份 gzip 文件保存本地运行的原始 JUnit XML。实现范围及限制见
-[实施记录](../../../../plans/v0.6-implementation.md)。固定源码由包含本目录的 Git 提交保存。
+[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。固定源码由包含本目录的 Git 提交保存。
 
 | 文件 | 实际范围与结果 |
 | --- | --- |

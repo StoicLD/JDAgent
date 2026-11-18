@@ -1,5 +1,7 @@
 # 会话与事件
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（实现说明）
 
 Session 保存对话和执行事实，模型上下文、Trace、Session Catalog 都由事实投影生成。
@@ -28,7 +30,7 @@ Task 登记、状态观察和取消意图分别使用 mcp_task_registered、mcp_
 获取事实沿用 MCP 意图／结果链，不生成虚构的 assistant 工具调用或 tool_execution_completed 配对。
 结果来源保留原调用定义，普通原文入口可分页读取；更新后的 TTL 跨重启保留，过期不意味着远端已停止。
 本地未知写的会话隔离仍生效，不因 Task 管理解除。CLI 管理命令已接通，绑定编码与登记校验由
-[MCPTaskBinding](../../src/jdagent/mcp_task_binding.py)统一负责；恢复证据见[v0.7 验收映射](../development/v0.7-acceptance-matrix.md)。
+[MCPTaskBinding](../../src/jdagent/mcp_task_binding.py)统一负责；恢复证据见[v0.7 验收映射](../archive/2026-11-11/development/v0.7-acceptance-matrix.md)。
 
 事件记录用户输入、完整模型消息、工具请求、权限决定、规则授予／撤销、工具开始与结束、
 用量、检索元数据、窗口裁剪以及 Turn 完成／失败。Trace 消费同一事件流，
@@ -73,7 +75,7 @@ EventJournal 的持久追加与内存序号更新也作为一个本地事务完�
 MCP 已收到的原文和 Task 句柄在发布引用前完成对象写入；取消不丢弃这些已知事实。
 真实宿主进程中断验证覆盖发送意图、句柄和最终结果发布的七个窗口；未发布引用的孤立对象不被猜测为可恢复关联。
 有持久 Task 关联时允许显式查询原任务，已有最终结果时本地读回；不会重新提交业务，见
-[进程恢复测试](../../tests/test_v07_mcp_process_recovery.py)及[P3h 记录](../plans/v0.7-implementation.md#p3h真实宿主进程中断与原任务查回)。
+[进程恢复测试](../../tests/test_v07_mcp_process_recovery.py)及[P3h 记录](../archive/2026-11-11/plans/v0.7-implementation.md#p3h真实宿主进程中断与原任务查回)。
 
 模型一次请求多工具而批次中止时，未开始调用补 `not_executed`；
 已开始且无法确认副作用的调用保留 unknown。这样后续上下文保持工具调用与结果配对，
@@ -94,4 +96,4 @@ Session 级规则的授予与撤销都是事件；`/exit` 后恢复同一正常 
 - [JSONL 测试](../../tests/test_jsonl_session.py)、[恢复测试](../../tests/test_session_recovery.py)、
   [强制退出测试](../../tests/test_forced_exit_recovery.py)、[v0.4 配对与未知状态测试](../../tests/test_v04_contracts.py)
 - 历史来源：[v0.2 生命周期](../archive/v0.2/session-lifecycle.md)、
-  [恢复设计](../archive/v0.2/session-recovery.md)；v0.4 增量见[实现记录](../plans/v0.4-implementation.md)。
+  [恢复设计](../archive/v0.2/session-recovery.md)；v0.4 增量见[实现记录](../archive/2026-11-11/plans/v0.4-implementation.md)。

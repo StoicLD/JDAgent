@@ -1,98 +1,100 @@
 # JDAgent
 
-状态：`Implemented`（使用说明），更新：2026-11-06，当前包版本：`0.5.0`。
+JDAgent 是用于学习和实践 Agent 工程的 Python 命令行程序。它可以调用 DeepSeek，读取与修改
+项目文件、执行命令、保存和恢复会话、压缩上下文、检索历史与记忆，并连接 MCP 服务。
+主要运行环境为 Windows，文件写入和进程管理使用 Windows 实现。
 
-JDAgent 是用于实践 Agent 核心机制的 Python 命令行项目。目前支持 DeepSeek 对话、持久会话、
-项目文件读写、命令执行、上下文压缩、历史检索、长期记忆和 MCP 工具／资源／Prompt。知识库已有管理与摄取入口，
-但真实 RAG 配置链仍有缺口。当前主要运行和验证环境为 Windows。
+当前代码是产品行为的唯一事实来源。本文于 **2026-11-11** 对照 `e23604f` 核对；包版本仍为
+**0.5.0**，包含后来加入的 LangGraph、LangChain 和 MCP 能力。v0.1–v0.7 是历史开发阶段，
+不能用来推断当前包版本或验收结果。
 
-**完整操作步骤见[安装与使用教程](docs/guides/usage.md)。**
+## 五分钟开始
 
-## 安装与离线启动
-
-在 PowerShell 中进入产品仓库，执行：
+需要 Git、uv 和 Python 3.11+；[.python-version](.python-version) 指定开发解释器版本。
+以下命令在 PowerShell 中执行。已有本地仓库时，进入 `JDAgentProject` 后从 `uv sync` 开始。
 
 ```powershell
-Set-Location 'E:\Projects\Codex_Projects_Overall\JDAgent\JDAgentProject'
+git clone https://github.com/StoicLD/JDAgent.git JDAgentProject
+Set-Location JDAgentProject
 uv sync --locked
 uv run jdagent --version
 uv run jdagent --provider fake --output json "离线测试"
 ```
 
-需要 Python 3.11+ 和 uv，仓库指定 Python 3.11.15。尚未安装环境或首次克隆时，按
-[安装教程](docs/guides/usage.md#安装与更新)操作。预期版本为 `jdagent 0.5.0`。
-Fake 重放固定脚本，用于检查运行链路，不能代替真实模型分析文件或验证记忆、压缩质量。
+预期版本输出 `jdagent 0.5.0`，离线回答为 `Offline fake model response.`。
+Fake 只验证运行链路，不理解问题或按自然语言操作文件。新克隆只包含已推送内容。
 
-## 使用 DeepSeek
-
-在当前 PowerShell 输入 Key，再启动交互模式：
+使用真实模型，在同一终端设置 Key 后启动：
 
 ```powershell
 $env:DEEPSEEK_API_KEY = [System.Net.NetworkCredential]::new('', (Read-Host 'DeepSeek API Key' -AsSecureString)).Password
 uv run jdagent --provider deepseek --tool-scope analyze
 ```
 
-默认模型标识为 `deepseek-v4-flash`。直接输入问题，`/help` 查看命令，`/exit` 退出。
-`analyze` 适合先阅读代码；真实问答、压缩与后台记忆整理会使用模型服务。
-
-## 试用 v0.6 框架后端
-
-v0.6 正在实施，默认仍使用原生执行引擎和模型适配器。安装当前锁定依赖后，可显式选择新后端：
-
-```powershell
-uv run jdagent --provider deepseek --runtime-engine langgraph --model-adapter langchain --tool-scope analyze
-```
-
-`runtime_engine` 决定一轮任务怎样调度，`model_adapter` 决定怎样接入模型；两项可分别选择和回退。
-选择方式、四种组合及重启要求见[后端选择教程](docs/guides/usage.md#选择执行引擎与模型适配器)。
-仅验证图引擎启动可加 `--provider fake`；Fake 不经过 LangChain 网络适配器。
-真实对照的六次任务全部完成，但目标后端仅一次满足全部冻结比较指标，因此默认仍保持原生。
-结果见[六次对照报告](docs/reviews/v0.6-live-comparison-20261105-r2.md)，其他证据和未完成门禁见
-[v0.6 实施记录](docs/plans/v0.6-implementation.md)；当前不代表 v0.6 已发布。
+程序默认模型名为 `deepseek-v4-flash`，可以用 `--model` 覆盖。输入问题开始对话，`/help` 查看命令，
+`/exit` 退出。安装、密钥文件、恢复会话和排错见[完整使用教程](docs/guides/usage.md)。
 
 ## 常用操作
 
-以下命令在产品仓库根目录的 PowerShell 执行，工作区替换为已有项目目录：
+在产品仓库目录执行，将工作区替换为已经存在的项目路径：
 
-| 目的 | 命令 |
+| 目的 | PowerShell 命令 |
 | --- | --- |
 | 阅读与搜索项目 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope analyze` |
-| 允许创建、编辑文件 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope edit` |
-| 允许编辑并执行命令 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope execute --command-permission ask` |
-| 单次问答后退出 | `uv run jdagent --tool-scope analyze "解释 ModelPort"` |
-| 单次 JSON 输出 | `uv run jdagent --output json --show-trace "解释 ModelPort"` |
-| 续做后台记忆作业 | `uv run jdagent maintain --pending --workspace 'E:\Projects\Example'` |
+| 创建与修改文件 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope edit` |
+| 编辑并运行程序 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope execute --command-permission ask` |
+| 单次 JSON 回答 | `uv run jdagent --tool-scope analyze --output json --show-trace "解释项目的启动流程"` |
+| 指定图引擎与模型适配器 | `uv run jdagent --runtime-engine langgraph --model-adapter langchain --tool-scope analyze` |
+| 续做已有记忆整理作业 | `uv run jdagent maintain --pending --workspace 'E:\Projects\Example'` |
 
-不传 `--workspace` 时使用当前目录。默认范围为 execute，文件写入与命令默认需要审批；
-单次运行不会等待交互审批。命令在本机运行，不提供不可信代码沙箱。
+默认执行引擎和模型适配器为 `native/native`，两项可分别选择，切换后重启。
+默认工具范围为 `execute`，写入与命令需要审批；单次运行不等待人工审批。
+程序在本机执行命令，不提供不可信代码沙箱。
 
-下面输入到 **JDAgent 交互提示符**，不是 PowerShell：
+下面输入到 **JDAgent 交互界面**：
 
 ```text
-/status
-/rename 上下文实验
+/rename 项目梳理
 /sessions
 /context-window
-/compact
+/mcp status
 /trace
 /exit
 ```
 
-`/resume <名称或ID>` 恢复会话，`/new` 开始新会话。`/compact` 提前压缩，原始历史仍保留。
-自然语言 `记住：项目使用 pytest` 保存项目记忆；查询、更正和停用示例见
-[历史与记忆操作](docs/guides/usage.md#历史检索与长期记忆)。没有 `/memory` 或 `/context` 命令。
+`/resume <名称或ID>` 恢复会话，`/new` 开始新会话，`/compact` 在空闲时压缩上下文。
+长期记忆使用“记住：项目使用 pytest”等直接输入，详见[历史与记忆](docs/guides/usage.md#历史检索与长期记忆)。
 
-## 文档与当前限制
+## 能力与边界
 
-- [安装与使用教程](docs/guides/usage.md)：安装、会话、审批、上下文、记忆、配置、数据和排错。
-- [知识库操作教程](docs/guides/knowledge.md)：管理命令、文件摄取及当前 RAG 限制。
-- [MCP 配置与使用](docs/guides/mcp.md)：stdio／HTTP、三类能力、关键词检索、原文读回和长任务管理；
-  v0.7 的[验收映射](docs/development/v0.7-acceptance-matrix.md)与[审查修复](docs/reviews/REV-20261106-003-v0.7-implementation.md)保留实际证据。
-- [文档 Map](docs/map.md)：按模块理解实现；[当前状态](docs/context/current.md)记录剩余工作。
-- [验证与验收](docs/modules/verification.md)：测试入口和原始证据。v0.5 修复后的三次固定
-  DeepSeek 验收通过，完整故障矩阵、语义 Eval 等尚未完成，既有 RAG Recall 失败仍保留。
+| 范围 | 当前实现 |
+| --- | --- |
+| 执行与模型 | 原生循环或 LangGraph；原生 DeepSeek 或 LangChain 适配器；工具按顺序执行 |
+| 本地工具 | 计算、文件查找／读取／搜索／创建／精确编辑、命令执行及输出分页读取 |
+| 会话与上下文 | JSONL 事件、独占锁、异常恢复、请求归档、预算与压缩；压缩保留原始历史 |
+| 历史与记忆 | 同工作区历史检索、项目／用户记忆、版本与来源、后台整理；未配置 Embedding 时关键词检索 |
+| MCP | stdio 与 HTTP、工具／资源／Prompt、BM25 检索、有界缓存、原文读回和顺序等待 Task |
+| 知识库 | TXT／Markdown／CSV 摄取、来源与绑定管理；普通 CLI 的真实 RAG 配置链仍不完整 |
 
-v0.5 不兼容 v0.4 及更早的会话格式，也不会自动清理旧目录。v0.6 当前两种后端沿用 v0.5 的
-Session schema-v4 和 sessions-v5 目录；切换后端不需要清空会话。
-Agent 开发入口为 [AGENTS.md](AGENTS.md)；工程与学习验收分别遵循
-[模块交付与学习工作流](docs/development/module-delivery-workflow.md)。
+本地知识摄取成功不代表普通对话能使用该索引。LangGraph 没有持久 checkpoint 或自动重放；
+MCP 只加载用户名单中的工具，不提供并行任务编排。现有失败、未验证范围和历史验收分别记录在
+[当前状态](docs/context/current.md)与[验证说明](docs/modules/verification.md)。
+
+## 文档导航
+
+- **使用**：[安装与操作](docs/guides/usage.md) · [配置参考](docs/reference/configuration.md) · [MCP](docs/guides/mcp.md) · [知识库](docs/guides/knowledge.md)
+- **理解代码**：[架构总览](docs/architecture/overview.md) · [模块地图](docs/map.md) · [术语](docs/reference/glossary.md)
+- **开发维护**：[开发指南](docs/development/contributing.md) · [Agent 入口](AGENTS.md) · [验证与验收](docs/modules/verification.md)
+- **追溯历史**：[归档索引](docs/archive/README.md) · [架构决策](docs/decisions/README.md)
+
+常规开发检查：
+
+```powershell
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
+uv run pytest -q -m "not integration"
+```
+
+历史完整套件存在 RAG Recall 失败，具体 revision 和数字见[验证记录](docs/modules/verification.md)。
+测试通过范围与真实服务、人工学习结果分别报告。

@@ -1,0 +1,111 @@
+# ModelPort 设计
+
+> 2026-11-11 归档：本文保留当时的方案、审批或验证状态，不作为当前功能说明。当前行为以代码及[架构总览](../../../architecture/overview.md)为准。未完成验证不因归档而通过。
+
+状态：`Approved`
+
+批准日期：2026-08-12
+
+当前实现见[模型模块](../../../modules/models.md)；本设计中的 Provider 列举是扩展边界，
+现有真实生成模型适配器为 DeepSeek，Fake 用于测试。
+
+## 目的
+
+`ModelPort` 是 Agent Core 使用模型能力的唯一接口。Core 只理解项目定义的请求、事件、能力和错误；DeepSeek、OpenAI、Anthropic、本地模型和 Fake Model 通过各自 Adapter 实现相同契约。
+
+模型无关不等于抹平模型差异。通用能力进入稳定领域类型，Provider 特性通过能力声明和受控扩展表达，不能把原始 SDK 对象泄漏给 Core。
+
+本文件只定义模型边界；当前停止条件见[运行时模块](../../../modules/runtime.md)，
+持久化与格式见[会话模块](../../../modules/sessions.md)。
+早期分层错误和停止语义保留在[Runtime 核心契约](../../v0.1/runtime-contracts.md)。
+
+## 概念接口
+
+```python
+class ModelPort(Protocol):
+    @property
+    def capabilities(self) -> ModelCapabilities: ...
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]: ...
+```
+
+`stream` 返回异步事件流，调用者使用 `async for` 消费。实现可以是包含 `yield` 的异步生成器；接口不负责重试整个 Agent Turn。
+
+## 统一请求
+
+`ModelRequest` 至少包含：
+
+- `model`：逻辑模型选择，由 Adapter 解析为 Provider 模型标识。
+- `system_parts`：分段系统指令，保留来源和顺序。
+- `messages`：项目标准消息，不包含 Provider SDK 类型。
+- `tools`：经过 Tool Registry 导出的稳定工具 Schema。
+- `settings`：温度、最大输出、停止选项等已批准的通用设置。
+- `metadata`：Session ID、Turn ID 和 Trace 关联信息，不发送秘密。
+- `provider_options`：显式命名空间下的受控 Provider 扩展；Core 不读取其内容。
+
+## 能力声明
+
+`ModelCapabilities` 描述：
+
+- `streaming`
+- `tool_calls`
+- `parallel_tool_calls`
+- `structured_output`
+- `reasoning`
+- `context_window`
+
+请求依赖不支持的能力时应在调用前产生明确错误，不静默降级。v0.1 不因 Provider 声明支持并行工具调用而并行执行工具。
+
+## 事件模型
+
+`ModelEvent` 是带类型标识的联合，至少覆盖：
+
+- `TextDelta`：可展示的增量文本。
+- `ToolCallDelta`：流式工具名称或参数片段，只用于组装，不能执行。
+- `ToolCallCompleted`：具有稳定 call ID、工具名和完整参数的可执行候选。
+- `UsageReported`：输入、输出及 Provider 可用的缓存或推理用量。
+- `ResponseCompleted`：包含标准化的 Provider 响应 `finish_reason`。
+- `ModelFailed`：包含分类错误和可安全记录的诊断信息。
+
+只有 `ToolCallCompleted` 可以进入 Tool Runtime。重复或冲突的 call ID 必须作为协议错误处理。
+
+`finish_reason` 描述一次 Provider 响应为何结束，不等于整个 Turn 的 `StopReason`。最终映射由 Runtime 完成。
+
+## `ModelErrorCategory`
+
+稳定错误类别包括：
+
+- `authentication`
+- `permission`
+- `rate_limit`
+- `timeout`
+- `connection`
+- `context_length`
+- `invalid_request`
+- `invalid_response`
+- `provider_internal`
+- `cancelled`
+
+这组值只属于模型边界，不作为 Tool、Session 或整个 Runtime 的全局错误枚举。
+
+Adapter 保存可用于诊断的 Provider 状态码和请求 ID，但不得把 API Key、认证 Header 或未经筛选的响应正文写入错误、事件或日志。
+
+## DeepSeek Adapter
+
+- 首选 DeepSeek 官方兼容 API，不在 Core 中依赖 OpenAI SDK 对象。
+- 将标准消息、工具 Schema 和设置翻译成 DeepSeek 请求，将流式 Chunk 重建为统一事件。
+- Usage 中未返回的缓存或推理 Token 明细按 0 投影；基础 input/output Token 仍必须存在，
+  非法类型继续作为 `invalid_response` fail closed。
+- DeepSeek thinking、strict schema 等特性只能通过能力声明或 `provider_options.deepseek` 暴露。
+- v0.1 不把 Beta strict mode 作为工具参数安全性的唯一保证；本地 Tool Runtime 始终独立校验 Schema。
+- 重试仅覆盖明确可重试、且尚未产生不可安全重放副作用的 Provider 调用；详细重试策略在实现前另行批准。
+- Adapter 构造函数仍只接受已解析的 Key；环境变量和开发 Key 文件的优先级由 Composition
+  Root 处理，秘密来源不会进入 Core、Session 或 Trace。
+
+## Fake Model
+
+`FakeModelPort` 接收预设事件脚本，用于确定性覆盖文本、工具调用、多个工具调用、错误、超时和无限循环。测试不得通过 `if test_mode` 修改 Agent Core 行为。
+
+## 非职责
+
+`ModelPort` 不执行工具、不审批权限、不保存 Session、不压缩上下文、不检索记忆，也不决定 Agent 是否完成任务。

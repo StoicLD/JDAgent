@@ -1,0 +1,167 @@
+{
+  "date": "2026-11-11",
+  "source_revision": "e23604fcc4660fa393d65f07215d6ac220532e2f",
+  "note": "Original hashes before archival notices and relative-link relocation; original bytes remain in source_revision.",
+  "files": [
+    {
+      "original": "docs/architecture/knowledge-contracts-v0.3.md",
+      "archived": "docs/archive/2026-11-11/architecture/knowledge-contracts-v0.3.md",
+      "original_sha256": "81906a27bb708bf36cb63d80bcd04ea2ebae15321ba6ea255ee119e4cffbbfd0"
+    },
+    {
+      "original": "docs/architecture/milvus-revision-saga-v0.3.md",
+      "archived": "docs/archive/2026-11-11/architecture/milvus-revision-saga-v0.3.md",
+      "original_sha256": "b265bb94607b7170f193956dc5051c8373bfd0f80c9ee7c56fc21b16154f772e"
+    },
+    {
+      "original": "docs/architecture/model-port.md",
+      "archived": "docs/archive/2026-11-11/architecture/model-port.md",
+      "original_sha256": "106a71b479155b1bbc23e17cc2b17c479a7eaa60862f00e5ffafc1d1cfca8e59"
+    },
+    {
+      "original": "docs/architecture/v0.3-knowledge-retrieval.md",
+      "archived": "docs/archive/2026-11-11/architecture/v0.3-knowledge-retrieval.md",
+      "original_sha256": "6752da6c16da0d30a1a9880c200a46e9f85d0108cd85d4959d6b8120253010ca"
+    },
+    {
+      "original": "docs/architecture/v0.5-context-memory.md",
+      "archived": "docs/archive/2026-11-11/architecture/v0.5-context-memory.md",
+      "original_sha256": "3c1ae6671fe2adaec67a02d2f87f842133180c7c0e20e9ca1edc18b12476a871"
+    },
+    {
+      "original": "docs/architecture/v0.6-langchain-langgraph.md",
+      "archived": "docs/archive/2026-11-11/architecture/v0.6-langchain-langgraph.md",
+      "original_sha256": "a85fdb428e87b892c1871625809e61ad3b806fe60f83653971867bdda37c3f8e"
+    },
+    {
+      "original": "docs/architecture/v0.7-mcp-client.md",
+      "archived": "docs/archive/2026-11-11/architecture/v0.7-mcp-client.md",
+      "original_sha256": "cbdfb2303834094857ed59152c7bda3c75400f5148f241ce375d81af6fb88213"
+    },
+    {
+      "original": "docs/context/current.md",
+      "archived": "docs/archive/2026-11-11/context/current.md",
+      "original_sha256": "3519f89ce0f0b951655613d8b35ef2cd6f78869008fd171697ef53b83b83fcc2"
+    },
+    {
+      "original": "docs/context/v0.3-rag-glossary.md",
+      "archived": "docs/archive/2026-11-11/context/v0.3-rag-glossary.md",
+      "original_sha256": "a4af822fc246d6e77bbd13453cf287510df678435fbad11ebc8dda757bf01eb7"
+    },
+    {
+      "original": "docs/context/v0.3-rag-illustrated-guide.md",
+      "archived": "docs/archive/2026-11-11/context/v0.3-rag-illustrated-guide.md",
+      "original_sha256": "7639f3757ef6524237bf43529db7c6b398f7d9f3bdcb0dd31b1313e834102aa0"
+    },
+    {
+      "original": "docs/context/v0.4-tools-glossary.md",
+      "archived": "docs/archive/2026-11-11/context/v0.4-tools-glossary.md",
+      "original_sha256": "60e2f7f68cc015dd9c8354f2f73f5e0006f7d9fd6d076bdd44ed0d0d64050c59"
+    },
+    {
+      "original": "docs/context/v0.5-context-memory-design-discussion.md",
+      "archived": "docs/archive/2026-11-11/context/v0.5-context-memory-design-discussion.md",
+      "original_sha256": "529b92403c6e40cc3156a8bfdb9c5299b6bea889b819f4887cc5cfc8c1c01990"
+    },
+    {
+      "original": "docs/development/v0.3-rag-manual-verification.md",
+      "archived": "docs/archive/2026-11-11/development/v0.3-rag-manual-verification.md",
+      "original_sha256": "a16e99d0d87c9510a4b16ab219f067cc3d321ec9d6c6605e913d15deebb4af6b"
+    },
+    {
+      "original": "docs/development/v0.5-context-memory-validation.md",
+      "archived": "docs/archive/2026-11-11/development/v0.5-context-memory-validation.md",
+      "original_sha256": "bb41a8c232dd49f3c2779d86346bf777a9565a19f3b710e0ee745b092a858ce0"
+    },
+    {
+      "original": "docs/development/v0.5-session-reset.md",
+      "archived": "docs/archive/2026-11-11/development/v0.5-session-reset.md",
+      "original_sha256": "408a1a3207cc4676b230b2c71a10d178c2f845094311c64b068b1919185ea392"
+    },
+    {
+      "original": "docs/development/v0.6-acceptance-matrix.md",
+      "archived": "docs/archive/2026-11-11/development/v0.6-acceptance-matrix.md",
+      "original_sha256": "8b4b8e1dca75745d4a191bea6f48a8fbceac27ba887939a99c81461c821dc966"
+    },
+    {
+      "original": "docs/development/v0.6-comparison-runbook.md",
+      "archived": "docs/archive/2026-11-11/development/v0.6-comparison-runbook.md",
+      "original_sha256": "91608156ad7d2394eb4a8727f57b015aacd7166706a45e6b0ccb0f88b06a3fcf"
+    },
+    {
+      "original": "docs/development/v0.6-comparison-template.md",
+      "archived": "docs/archive/2026-11-11/development/v0.6-comparison-template.md",
+      "original_sha256": "d8fa30766b1f24f82c60deca975c5fe008908c347c444c35403c380debd17692"
+    },
+    {
+      "original": "docs/development/v0.7-acceptance-matrix.md",
+      "archived": "docs/archive/2026-11-11/development/v0.7-acceptance-matrix.md",
+      "original_sha256": "c5bf33604c872f1a69e7db9c557e516fa2cb9dee945c4d58e23ba5864fad0628"
+    },
+    {
+      "original": "docs/map.md",
+      "archived": "docs/archive/2026-11-11/map.md",
+      "original_sha256": "7149ac9b0e8c281214db8fc638c91d5f32a22a6af24fed3cafa82f1db84e5f69"
+    },
+    {
+      "original": "docs/plans/post-v0.2-learning-roadmap.md",
+      "archived": "docs/archive/2026-11-11/plans/post-v0.2-learning-roadmap.md",
+      "original_sha256": "78578f04a48c841ea257d83d78bf4db6535a4814046cafc77c8a0e0eed8b908d"
+    },
+    {
+      "original": "docs/plans/v0.3-rag-implementation.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.3-rag-implementation.md",
+      "original_sha256": "64bc7dcd4df6c4427b5c7bb47b437baa6892f4bbe04e24dd8b20e73ff4ebaa10"
+    },
+    {
+      "original": "docs/plans/v0.3-rag-improvement-proposal.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.3-rag-improvement-proposal.md",
+      "original_sha256": "f3753135b3856931c911d93b67d99854d3705460eee669a4d26be41c26f67313"
+    },
+    {
+      "original": "docs/plans/v0.3-rag-p1-p2-appendix.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.3-rag-p1-p2-appendix.md",
+      "original_sha256": "b44f3f5a470d800ecd08d7777fe42d225f0c526211c49735415e4c147f7747a5"
+    },
+    {
+      "original": "docs/plans/v0.4-implementation.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.4-implementation.md",
+      "original_sha256": "d48c8e5fa07a254bb297d4c75c3c7041eaf1632e4f56ac8ed6914f8900a6fde5"
+    },
+    {
+      "original": "docs/plans/v0.5-context-memory-implementation.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.5-context-memory-implementation.md",
+      "original_sha256": "3fdae1607a1df5c014215fc6f9c870e96a86bc42aabbc530670fdbf8883f36fc"
+    },
+    {
+      "original": "docs/plans/v0.6-implementation.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.6-implementation.md",
+      "original_sha256": "06a92ef8d752a6fd9778109b9a8726177f03f0fe1bcbbe897ca08f43d2e10e51"
+    },
+    {
+      "original": "docs/plans/v0.7-implementation.md",
+      "archived": "docs/archive/2026-11-11/plans/v0.7-implementation.md",
+      "original_sha256": "eab26dd7910c11d88aa65fd0d8646d5e61ecb8d067dbfd0b6e8f3edefd8f240d"
+    },
+    {
+      "original": "docs/requirements/v0.3-knowledge-retrieval.md",
+      "archived": "docs/archive/2026-11-11/requirements/v0.3-knowledge-retrieval.md",
+      "original_sha256": "9276668ea3b5b3e28f9b627f9e9d6f2c5558b51f64e97f45ab136a23c9b07b1d"
+    },
+    {
+      "original": "docs/requirements/v0.5-context-memory.md",
+      "archived": "docs/archive/2026-11-11/requirements/v0.5-context-memory.md",
+      "original_sha256": "d03774940d56e85892f6f9de5cfbc59e7a2cbc431eea142e87fc161e492bc0e9"
+    },
+    {
+      "original": "docs/requirements/v0.7-mcp-client.md",
+      "archived": "docs/archive/2026-11-11/requirements/v0.7-mcp-client.md",
+      "original_sha256": "fe140a4611dbaf0ef57deb8dd3da781dcae071fffce533da7dcaeabe1ccc1203"
+    },
+    {
+      "original": "docs/research/v0.6-langchain-langgraph.md",
+      "archived": "docs/archive/2026-11-11/research/v0.6-langchain-langgraph.md",
+      "original_sha256": "f4cf546acd359579aa1b9f2e261b7ed965e27530ac032c72783542d6ed6a5f75"
+    }
+  ]
+}

@@ -19,4 +19,4 @@
 
 287 个文件格式通过，Lint 和 Pyright strict 通过。异步测试按已确认的 Windows 沙箱 socketpair
 限制在获准宿主执行；网络边界仍为 Fake／MockTransport。后来新增的 8 项资源验证单独保存，
-未混入本次完整结果。覆盖分配及尚未完成项见[验收映射](../../../../development/v0.6-acceptance-matrix.md)。
+未混入本次完整结果。覆盖分配及尚未完成项见[验收映射](../../../../archive/2026-11-11/development/v0.6-acceptance-matrix.md)。

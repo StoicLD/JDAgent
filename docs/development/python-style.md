@@ -38,8 +38,8 @@ uv run pytest
 
 ## 代码组织
 
-- 使用 `src` layout；包名在工程初始化前单独确认。
-- Core、Application、Ports 和 Adapters 保持单向依赖，不通过运行时导入绕过边界。
+- 使用 `src` layout；当前包为 `src/jdagent`。
+- 新代码按职责与端口保持依赖边界；现有 Coordinator 的知识组装和 Runner 的引用处理见[架构总览](../architecture/overview.md)，不把理想分层写成已有事实。
 - 模块按稳定职责命名，避免无边界的 `utils.py`、`helpers.py` 或 `common.py`。
 - `__init__.py` 只暴露明确公共 API，不执行 I/O、读取环境或注册全局状态。
 - 每个概念只有一个数据定义和一个规范化入口，避免 Provider、CLI 和存储各自定义相似类型。
@@ -49,7 +49,7 @@ uv run pytest
 - 所有公共接口、端口、Adapter 边界和模块级函数必须具有完整类型注解。
 - 使用 `Protocol` 定义依赖反转端口；不因只有一个实现就跳过边界。
 - 内部不可变值优先使用 frozen dataclass；小型 TOML 配置使用 Python 3.11 标准库 `tomllib`。
-  只有出现独立批准的复杂运行时类型建模需求，才评估 Pydantic 等新增运行依赖。
+  当前已依赖 Pydantic，并在 MCP 等适配边界使用；依赖事实以 `pyproject.toml` 和锁文件为准。
 - `Any` 只允许出现在无法避免的第三方边界，必须立即校验并转换为项目领域类型。
 - 不使用无类型 `dict` 在模块间传递重要状态；使用显式 dataclass、TypedDict 或带标识联合。
 - `None`、空集合、缺失字段和未知枚举值的语义必须显式，不依赖 truthy/falsy 猜测。

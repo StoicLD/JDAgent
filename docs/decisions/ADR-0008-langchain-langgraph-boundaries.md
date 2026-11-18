@@ -1,9 +1,11 @@
 # ADR-0008 LangChain 与 LangGraph 的接入边界
 
+> 2026-11-11 整理说明：以下保留原决策与批准状态。当前产品行为以代码为准，见[架构总览](../architecture/overview.md)；本文不证明所有目标均已实现。
+
 状态：`Approved`（2026-11-05 所有者明确选择自建 StateGraph 等方案并要求实施）。
 
 初稿日期：2026-10-29；R1 修订及实施授权日期：2026-11-05。实现状态见
-[实施记录](../plans/v0.6-implementation.md)；批准决策不等于工程验收通过。
+[实施记录](../archive/2026-11-11/plans/v0.6-implementation.md)；批准决策不等于工程验收通过。
 
 ## 背景
 
@@ -62,11 +64,11 @@ v0.5 已确认的产品行为和当前实现是迁移输入；它们的工程与
 出现已批准的跨进程暂停／继续、多 Agent、并行工具或远程执行需求时，复审图持久化与审批。
 2026-11-06 的 v0.7 R1 已就远程执行完成设计层回应：只保存任务关联并允许显式查询／取消，
 不恢复图节点、不自动续跑、不增加跨进程审批，因此继续不启用持久图 checkpointer／interrupt。
-依据与边界见 [v0.7 衔接设计 C09](../architecture/v0.7-mcp-client.md#c09-adr-0008-复审回应)。
+依据与边界见 [v0.7 衔接设计 C09](../archive/2026-11-11/architecture/v0.7-mcp-client.md#c09-adr-0008-复审回应)。
 该回应不是 SDK 或运行验收证据；后续若批准上述更广恢复或并行需求，仍须重新复审。
 若 LangChain Adapter 无法保留必要协议、费用或取消证据，阻止默认切换，重新比较具体集成方式。
 若实测只有抽象层增加而控制代码、可测试性或维护范围没有改善，应重新评估图边界。
 
-完整需求、数据流、迁移和验收见 [v0.6 设计](../architecture/v0.6-langchain-langgraph.md)，
-框架事实依据见[官方资料](../research/v0.6-langchain-langgraph.md)，
+完整需求、数据流、迁移和验收见 [v0.6 设计](../archive/2026-11-11/architecture/v0.6-langchain-langgraph.md)，
+框架事实依据见[官方资料](../archive/2026-11-11/research/v0.6-langchain-langgraph.md)，
 R1 修订范围及尚待实施的验证见[自审处置](../reviews/REV-20261105-001-v0.6-design-disposition.md)。

@@ -17,4 +17,4 @@
 逐轮配置与归档、后端重启检查。四组合全部工具、恢复及故障矩阵仍待补齐。
 
 全量 Ruff 格式／Lint 与 Pyright strict 通过。完整完成条件、未验证项和后续提交入口见
-[实施记录](../../../../plans/v0.6-implementation.md)。
+[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。

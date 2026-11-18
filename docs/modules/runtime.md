@@ -1,5 +1,7 @@
 # 运行时与主循环
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（实现说明）
 
 本模块负责把一次用户输入推进到回答、失败或取消。基准与验收范围见[Map](../map.md)、
@@ -9,7 +11,7 @@
 
 外层 `InteractiveApplication` 等待输入、处理命令，再调用 `TurnCoordinator.send()`。
 Coordinator 打开 Session、检查恢复状态、记录用户输入、准备本轮知识，随后通过 `TurnRunner` 执行本轮。
-组合根默认创建原生 `AgentLoop`；v0.6 开发阶段也可显式选择 `LangGraphTurnRunner`。
+组合根默认创建原生 `AgentLoop`；也可显式选择 `LangGraphTurnRunner`。
 一个 Session 包含多个 Turn，一个 Turn 可以调用模型和工具多次。
 
 Runner 决定调用顺序和停止条件；`ContextService` 在请求前执行预算、归档与压缩，
@@ -48,6 +50,8 @@ Loop 接收完整响应后才执行工具；同批多个调用按顺序 `await`�
 
 默认每轮最多 16 次模型调用、32 次工具调用。`max_failure_recoveries=2`：
 Loop 累计 `ToolOutcome.observed_failure`，第三次观察到失败时停止，避免无限修复。
+当前普通 CLI 将这三个次数固定为 16／32／2；直接组合根可使用配置或显式 RuntimeOptions。
+配置解析成功不等于普通 CLI 会采用相应次数，接线限制见[配置参考](../reference/configuration.md#顶层字段)。
 启动失败没有验证结果，不能等同于“测试失败”。
 
 停止原因包括 `completed`、`cancelled`、`model_error`、`context_limit`、
@@ -71,7 +75,7 @@ Loop 累计 `ToolOutcome.observed_failure`，第三次观察到失败时停止�
 工具 ID 集合在 Turn 开始时从历史初始化，按工具发起时点更新；发现目录规则时，未执行的后续调用
 仍占用该批次的工具次数。这些语义保留原循环行为。
 
-v0.6 尚在实施，当前默认仍为原生引擎；完整验收范围及剩余项见[实施记录](../plans/v0.6-implementation.md)。
+图引擎已实现，默认仍为原生引擎；真实比较与其他未完成验证见[验证说明](verification.md)。
 
 早期“小而稳定的 Loop”是设计方向；现有 Loop 已直接包含知识引用校验与修复分支，
 Coordinator 也包含知识 Catalog／Index 组装。后续讨论模块边界时应以这些实际依赖为起点。

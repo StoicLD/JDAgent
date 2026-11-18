@@ -1,8 +1,8 @@
 # JDAgent 安装与使用教程
 
-状态：`Implemented`（当前操作说明），更新：2026-11-05。
+状态：`Implemented`（当前操作说明），更新：2026-11-11；代码基准：`e23604f`。
 
-按当前包版本 0.5.0 及 v0.6 可选后端实现核对，面向 Windows PowerShell。`powershell` 代码块在终端执行，`text` 中的
+按当前包版本 0.5.0、双后端和 MCP 实现核对，面向 Windows PowerShell。`powershell` 代码块在终端执行，`text` 中的
 命令和对话示例在 JDAgent 交互界面输入。尖括号中的 ID 是占位符，使用前替换为实际值。
 
 ## 安装与更新
@@ -79,7 +79,7 @@ api_key_file = 'C:\Users\YourName\.secrets\deepseek-key.txt'
 
 ## 选择执行引擎与模型适配器
 
-v0.6 的新后端可以显式试用，默认仍是 native/native。执行引擎负责模型与工具之间的调度，模型
+两种执行引擎和模型适配器已实现，默认仍是 native/native。执行引擎负责模型与工具之间的调度，模型
 适配器负责请求与流的转换；下面四种组合都可选择，其他命令、权限和数据位置沿用原行为。
 
 | 组合 | CLI 参数 | 用途 |
@@ -87,7 +87,7 @@ v0.6 的新后端可以显式试用，默认仍是 native/native。执行引擎�
 | 原生执行与原生接入 | `--runtime-engine native --model-adapter native` | 当前默认及回退入口 |
 | 原生执行与 LangChain 接入 | `--runtime-engine native --model-adapter langchain` | 单独试模型适配器 |
 | LangGraph 执行与原生接入 | `--runtime-engine langgraph --model-adapter native` | 单独试图调度 |
-| LangGraph 执行与 LangChain 接入 | `--runtime-engine langgraph --model-adapter langchain` | v0.6 目标组合 |
+| LangGraph 执行与 LangChain 接入 | `--runtime-engine langgraph --model-adapter langchain` | 同时使用图调度与 LangChain |
 
 例如，已按上一节设置 DeepSeek Key 后启动目标组合：
 
@@ -112,7 +112,7 @@ model_adapter = "langchain"
 切换任一后端必须退出并重新启动，CLI 可覆盖用户配置。model、timeout、输出上限等仍按每轮重读，
 已经建立的请求保留自己的参数。回退时显式传 native/native，再用原来的 `/resume <名称或ID>`
 入口继续会话；遇到 unknown 副作用仍需按恢复提示核查，后端切换不使未知结果自动变成已完成。
-当前两个后端共用 v0.5 数据格式，不需要清空会话。版本验收和已知限制见[v0.6 实施记录](../plans/v0.6-implementation.md)。
+当前两个后端共用 v0.5 数据格式，不需要清空会话。版本验收和已知限制见[v0.6 实施记录](../archive/2026-11-11/plans/v0.6-implementation.md)。
 
 ## 工作区、文件操作与权限
 
@@ -142,7 +142,8 @@ revision；出现冲突时让 Agent 重新读取。命令采用明确程序与�
 
 ## 保存、切换和恢复会话
 
-首次发送消息后才有当前 Session。进入界面尚未发言时，部分命令会提示没有当前会话。
+普通对话首次发送消息时建立 Session；首次发言前执行 MCP 目录发现也会创建空 Session。
+尚未创建或恢复会话时，部分命令会提示没有当前会话。
 
 ```text
 /rename 配置梳理
@@ -258,7 +259,7 @@ uv run jdagent maintain --pending --workspace 'E:\Projects\Example'
 
 `maintain` 必须放在首个位置，不能带 Prompt 或 `--session-id`。它续做已有作业，不新建会话，
 不强制为全部历史新建作业；执行可能调用模型。超出单个维护输入预算的历史会话目前尚未
-分块提取，相关作业可能失败。完整边界见[实现记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
+分块提取，相关作业可能失败。完整边界见[记忆模块](../modules/memory.md)及[历史实现记录](../reviews/REV-20261022-001-v0.5-implementation.md)。
 
 ## 配置与数据位置
 
@@ -276,9 +277,6 @@ max_context_tokens = 64000
 max_output_tokens = 4096
 compact_trigger_ratio = 0.9
 compact_target_ratio = 0.4
-max_model_calls = 16
-max_tool_calls = 32
-max_failure_recoveries = 2
 
 [memory]
 auto_consolidation = true
@@ -290,10 +288,12 @@ total_output_token_limit = 3000000
 ```
 
 普通配置优先级为 CLI > 项目 > 用户 > 默认值；DENY 另有不能放宽的限制。
+`memory` 表按层整体替换，不逐键合并；完整字段、作用域与路径解析见[配置参考](../reference/configuration.md)。
 `provider`、`base_url`、`api_key_file`、`runtime_engine`、`model_adapter` 只能放用户配置，
 除 `api_key_file` 外都可用 CLI 覆盖。未知或不允许的字段会报错。
 每轮开始重读配置；Provider、端点或上述后端选择变化应重启。
-`max_model_calls` 等是任务次数限制，不是模型容量。
+当前普通 CLI 的任务次数为 16 次模型、32 次工具、2 次失败恢复；虽能解析 `max_model_calls` 等配置，
+宿主组装会覆盖这三个值，暂不能靠 TOML 调整。具体原因见[配置参考](../reference/configuration.md#顶层字段)。
 
 `memory.input_token_limit` / `output_token_limit` 限制维护费用，`total_*` 限制含普通请求在内
 的总费用，单位都是 token。费用持久累计，重启和新建会话不会清零。
@@ -348,14 +348,5 @@ $LASTEXITCODE
 开发检查见[验证与验收](../modules/verification.md)。固定三次 DeepSeek 通过不代表完整故障
 矩阵、语义质量、RAG Recall 或人工学习出口均已通过。
 
-本文验证记录（2026-10-23）：已在隔离临时工作区运行安装后的 0.5.0 CLI，确认 Fake JSON
-返回 v2，并通过 TOML 示例解析、项目配置加载与所列交互命令解析。未为文档更新调用真实
-模型，也未把已有环境验证写成全新机器安装验证。
-
-2026-11-05 补充后端选择：四组合参数解析、配置限制、请求重载、文件效果和恢复证据见
-[实施记录](../plans/v0.6-implementation.md)。本次教程更新核对了 CLI 参数、TOML 示例和文档链接，
-没有执行付费 Live，也没有把开发环境检查写成全新机器安装验收。
-
-同日后续真实验证另获授权并完成[固定六次对照](../reviews/v0.6-live-comparison-20261105-r2.md)：
-任务检查 6/6 通过，目标组冻结比较 1/3 通过。因此新后端继续作为显式选项，默认不切换；
-独立评审、完整发布和本人学习验收仍未完成。
+本次示例参数、配置与离线运行的核对见[文档维护记录](../development/documentation-refresh-2026-11-11.md)。
+历史真实对照见[验证说明](../modules/verification.md)，不把已有环境检查当作新机器安装或真实服务验收。

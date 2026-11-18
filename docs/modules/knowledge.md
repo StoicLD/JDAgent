@@ -1,10 +1,12 @@
 # 知识摄取与检索
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（现有 P1 实现说明，工程验收未通过）
 
 知识模块已有摄取、索引、按 Turn 检索和引用处理链路，但真实配置与数据生命周期仍有缺口。
-基准见[Map](../map.md)；概念定义见[词汇表](../context/v0.3-rag-glossary.md)，
-入门示例见[休假政策图解](../context/v0.3-rag-illustrated-guide.md)。
+基准见[Map](../map.md)；当前概念见[术语表](../reference/glossary.md)。
+早期完整生命周期目标和图解已归档，不能把其目标视为当前保证。
 当前 CLI 的创建、摄取、绑定与维护步骤见[知识库操作教程](../guides/knowledge.md)。
 
 ## 状态和内容归属
@@ -17,7 +19,7 @@
 | Workspace Binding | 指定 workspace 获准使用哪些连接下的知识库，不属于 Session |
 | PreparedTurnKnowledge | 本轮冻结的检索范围、结果和证据，供本轮所有模型调用复用 |
 
-已批准设计要求这些身份和所有权分开；现有实现仍有部分 Snapshot／Generation 独立生命周期缺口，
+当前类型与存储区分这些身份；Snapshot／Generation 的独立生命周期仍有缺口，
 不能仅凭类型或字段存在认定完整设计已经实现。
 
 ## 摄取链
@@ -45,15 +47,16 @@ Catalog 保存操作阶段与 Lease，提供 retry／reconcile；来源可停用
 
 ## 已确认限制和后续工作
 
-以下编号来自 [2026-09-05 审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)；
-该报告中的历史结论与后续修复应合并阅读。
+以下是保留的工程缺口，编号来自 [2026-09-05 审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md)；
+该报告与后续修复合并阅读。2026-11-11 按组合根、Coordinator、管理 CLI、摄取与检索代码
+重新核对配置链、删除路径及跨库预算；未重新执行全部历史故障实验。
 
 | 范围 | 当前限制 |
 | --- | --- |
 | F08 恢复 | 缺失索引写入不能全部从持久 Manifest 自动重建；KB 激活与 Source 指针仍分步提交；Lease 续期和早期重试输入稳定性不足 |
 | F09 删除 | 墓碑排除新检索，但索引物理 purge 与幂等 Delete Saga 尚不完整 |
 | F10 来源核验 | 历史 Citation Resolver 未完整接入真实入口；Parent 文本仍来自 IndexHit，缺少完整 Store 加载与哈希核验 |
-| F11 真实配置 | CLI 未完整暴露 Embedding/Profile 和 credential_ref；默认 Runtime 不读取 CLI 的本地索引 |
+| F11 真实配置 | connection add 可登记 credential_ref，但实际索引／Embedding 创建未完整接入凭据与 Profile；connection test 只查本地记录；默认 Runtime 不读取管理 CLI 的本地索引 |
 | F12 Milvus | BM25 异常时仍可能回退本地词频评分；SDK 错误映射与实际版本兼容矩阵未完成 |
 | F13 跨库预算 | 全局预算仍受最后一个库的 Profile 影响；Generation 与物理 Collection 映射未充分分离 |
 | F14 Eval | 词项 Recall 未达门槛；回答支持评测仍主要是目标／Locator 代理，不能当作主张语义支持 |
@@ -69,8 +72,8 @@ Catalog 保存操作阶段与 Lease，提供 retry／reconcile；来源可停用
 
 ## 设计与验证入口
 
-RAG 高层设计和阶段计划已批准；M0 详细需求、知识合同与 Eval 规格仍为 `Proposed`。
-[改进方案](../plans/v0.3-rag-improvement-proposal.md)也是 `Proposed`，不构成新实施授权。
+版本化方案和计划已经归档，保留原 Approved／Proposed 状态，用于追溯目标与缺口。
+[改进方案](../archive/2026-11-11/plans/v0.3-rag-improvement-proposal.md)也是 `Proposed`，不构成新实施授权。
 工程未通过与学习出口已关闭分别记录在[验证模块](verification.md)。
 
 - [Catalog](../../src/jdagent/knowledge/catalog.py)、[Store](../../src/jdagent/knowledge/store.py)、
@@ -81,5 +84,5 @@ RAG 高层设计和阶段计划已批准；M0 详细需求、知识合同与 Eva
 - [摄取测试](../../tests/test_ingestion.py)、[来源回归](../../tests/test_source_revision_regressions.py)、
   [检索测试](../../tests/test_retrieval.py)、[引用测试](../../tests/test_citation.py)、
   [Eval](../../tests/test_v03_eval.py)
-- [已批准高层设计](../architecture/v0.3-knowledge-retrieval.md)、
-  [阶段范围](../plans/v0.3-rag-p1-p2-appendix.md)、[人工验证步骤](../development/v0.3-rag-manual-verification.md)
+- [已批准高层设计](../archive/2026-11-11/architecture/v0.3-knowledge-retrieval.md)、
+  [阶段范围](../archive/2026-11-11/plans/v0.3-rag-p1-p2-appendix.md)、[人工验证步骤](../archive/2026-11-11/development/v0.3-rag-manual-verification.md)

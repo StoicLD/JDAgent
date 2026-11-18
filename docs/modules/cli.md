@@ -1,11 +1,13 @@
 # CLI 与配置
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（实现说明）
 
 CLI 提供持久交互与单次 Headless 两种入口，共用 TurnCoordinator 和 Runtime。
 实现基准见[Map](../map.md)，最短启动步骤见[README](../../README.md)。
 安装、密钥、完整交互命令和排错见[使用教程](../guides/usage.md)；知识管理命令见
-[知识库教程](../guides/knowledge.md)。操作教程按 2026-10-23 实现核对。
+[知识库教程](../guides/knowledge.md)。操作教程与[配置参考](../reference/configuration.md)按当前代码核对。
 
 ## 两种入口
 
@@ -62,14 +64,15 @@ MCP 管理等待也使用同一控制入口；首次对话前发现目录可创�
 默认 Provider 为 DeepSeek，工具范围 execute，写与命令权限 ask。
 模型／工具超时和上下文窗口由配置提供，完整参数以 `jdagent --help` 为准。
 配置在 Turn 边界重读；本轮模型设置和指令正文固定。默认任务限额为 16 次模型、32 次工具、
-2 次失败恢复，可在配置中调整。Provider 或端点变化需要重启；未知模型需要显式窗口容量。
+2 次失败恢复。当前普通 CLI 的 RuntimeOptions 会覆盖这三个 TOML 次数字段，详见
+[配置参考](../reference/configuration.md#顶层字段)。Provider 或端点变化需要重启；未知模型需要显式窗口容量。
 `--model-context-window`、`--max-output-tokens` 和 `--max-context-tokens` 分别控制模型容量、
 输出预留和应用上限。后台与总费用配置见[记忆模块](memory.md)。
 
-v0.6 开发阶段提供 `--runtime-engine native|langgraph` 和 `--model-adapter native|langchain`，
+当前提供 `--runtime-engine native|langgraph` 和 `--model-adapter native|langchain`，
 默认仍为 native/native。对应 `runtime_engine`、`model_adapter` 仅允许用户配置或 CLI 指定，
 项目配置不能覆盖；改变任一后端需退出后重启。Fake 适合检查图执行入口，但不验证真实模型适配器。
-完整默认切换和发布仍待[v0.6 验收](../plans/v0.6-implementation.md)。
+历史真实比较未满足全部目标，见[验证说明](verification.md)。
 
 DeepSeek Key 优先读取 `DEEPSEEK_API_KEY`，其次使用用户配置 `api_key_file`，
 最后回退到开发期 `../tmp/keys/deepseek-api-key.txt`。

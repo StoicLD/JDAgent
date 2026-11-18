@@ -13,4 +13,4 @@
 
 组合测试曾发现引用修复发送元数据没有 `call_kind=citation_repair`，已与归档分类统一。LangChain
 JSON mode 初次测试还暴露了夹具缺少 SSE envelope 和 role，修正夹具后通过，没有放宽适配器校验。
-模型全部为 Fake／MockTransport，没有执行真实模型调用。后续范围见[实施记录](../../../../plans/v0.6-implementation.md)。
+模型全部为 Fake／MockTransport，没有执行真实模型调用。后续范围见[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。

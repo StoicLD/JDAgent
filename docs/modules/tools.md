@@ -1,9 +1,11 @@
 # 工具与权限
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（实现说明）
 
 工具模块负责把模型请求变成受控执行，并准确返回完成情况与副作用。
-当前八工具和离线链已有实现，完整工程验收仍开放；基准见[Map](../map.md)，结论见[验证](verification.md)。
+本地八工具之外已接入历史／记忆与 MCP 工具，完整工程验收仍开放；基准见[Map](../map.md)，结论见[验证](verification.md)。
 
 ## 注册与调用
 
@@ -25,9 +27,11 @@ Loop 保存最终 `tool_execution_completed`，并决定继续还是停止。
 
 `--tool-scope` 默认 `execute`；`edit` 包含 analyze，execute 包含 edit。
 工具定义投影和实际执行使用同一范围，隐藏工具不能靠伪造调用获得执行。
-旧三工具工厂保留给既有合同回归，正常组合根使用上表八工具。
+旧三工具工厂保留给既有合同回归。正常组合根注册上表八工具，并注册 `search_history`、
+`read_history`、`search_memory`、`update_memory` 四个历史／记忆工具。前三者为 analyze 范围，
+update_memory 为 edit 范围且必须消费宿主绑定的直接用户意图；详见[记忆模块](memory.md)。
 
-v0.7 另接入 search_tools、read_mcp_result 和动态 MCP 定义。工具检索复用 Session 的 BM25 与两层缓存，
+MCP 另接入 search_tools、read_mcp_result 和动态 MCP 定义。工具检索复用 Session 的 BM25 与两层缓存，
 新定义只在下一模型请求生效；ToolRuntime 通过请求快照核验曝光范围、Schema 和宿主来源。
 完整输入接近压缩触发线时，先在请求之间释放较少使用的 MCP 定义，仍不足才压缩历史；本批次快照保持固定。
 MCP 参数不进入本地目录规则。Resources 的目录／读取、Prompts 的 BM25 检索／获取也通过模型工具执行，
@@ -36,7 +40,9 @@ MCP 参数不进入本地目录规则。Resources 的目录／读取、Prompts �
 应用层支持显式查询、结果读取与取消原 Task。MCP 取消直接到达适配层，不进入内置工具的无界收尾；
 已收到的句柄／结果完成本地保存后再结束等待。直接 Prompt、Task CLI 和进度入口也已接通。
 目录按条目使用 SDK 类型校验，畸形定义与悬空 Schema 引用局部隔离；合法的其他能力继续可用。
-范围及故障验证见[v0.7 验收映射](../development/v0.7-acceptance-matrix.md)和[审查修复](../reviews/REV-20261106-003-v0.7-implementation.md)。
+范围及故障验证见[v0.7 验收映射](../archive/2026-11-11/development/v0.7-acceptance-matrix.md)和[审查修复](../reviews/REV-20261106-003-v0.7-implementation.md)。
+
+MCP 的连接、缓存和持久任务设计集中在[MCP 模块](mcp.md)。
 
 ## 权限和审批
 
@@ -92,4 +98,4 @@ stdout/stderr 分开留存，单次合计 10 MiB、workspace 合计 100 MiB、�
   [日志](../../src/jdagent/tools/command_output.py)
 - [文件测试](../../tests/test_v04_files.py)、[命令测试](../../tests/test_v04_commands.py)、
   [整链测试](../../tests/test_v04_e2e.py)、[Runtime 测试](../../tests/test_tool_runtime.py)
-- [实施合同与授权](../plans/v0.4-implementation.md)、[历史设计](../archive/v0.4/tool-execution-proposal.md)
+- [实施合同与授权](../archive/2026-11-11/plans/v0.4-implementation.md)、[历史设计](../archive/v0.4/tool-execution-proposal.md)

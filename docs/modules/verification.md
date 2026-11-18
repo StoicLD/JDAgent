@@ -1,9 +1,12 @@
 # 验证与验收
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（证据导航与状态说明）
 
 这里区分实现存在、测试通过、真实服务验证和学习验收。基准见[Map](../map.md)。
-下表是保留的历史运行结果，不是 2026-10-20 重跑完整产品测试的结论。
+下表是保留的历史运行结果，不是本次重跑完整产品测试的结论。
+2026-11-11 文档维护检查单列在[本次核对记录](../development/documentation-refresh-2026-11-11.md)。
 
 ## 最近证据
 
@@ -12,15 +15,15 @@
 | v0.1，2026-08-20 完成 | 工程、DeepSeek 与 M10b 学习出口通过 | 首版 Runtime；[审计](../reviews/v0.1-completion-audit.md) |
 | v0.2，2026-08-20 工程验证 | 113 passed、3 skipped；Live、安装与终端主路径通过 | 当时 CLI 实现；[实现审查](../reviews/v0.2-implementation-review.md) |
 | v0.3，2026-09-05 修复后 | 197 passed、1 failed、5 skipped | 自测与限范围回归；工程复核 fail；[审查](../reviews/REV-20260905-001-v0.3-implementation-audit.md) |
-| v0.4，2026-09-23 完整离线 | 236 passed、1 failed、8 skipped；Ruff、Pyright、安装通过 | 离线链及 Windows 文件／进程机制；[实施记录](../plans/v0.4-implementation.md) |
+| v0.4，2026-09-23 完整离线 | 236 passed、1 failed、8 skipped；Ruff、Pyright、安装通过 | 离线链及 Windows 文件／进程机制；[实施记录](../archive/2026-11-11/plans/v0.4-implementation.md) |
 | v0.4，2026-09-23 真实 DeepSeek | 1 failed、2 passed，基准 `7e18a1a` | 三次固定工具任务；[完整 Live 记录](../reviews/v0.4-live-verification.md) |
 | v0.5，2026-10-22 完整离线 | 273 passed、1 既有 RAG 失败、14 skipped | I 快照完整套件；后续定向修复及规模实验见[实施记录](../reviews/REV-20261022-001-v0.5-implementation.md) |
 | v0.5，2026-10-22 真实 DeepSeek | 第一轮 0/3、第二轮 1/3、修复后第三轮 3/3 通过 | 第三轮基于 `94d90aa`，三次均成功压缩并完成必需工具链；全部失败与诊断计费保留，固定夹具通过不等于整版通过 |
-| v0.6，2026-11-05 完整离线 | 545 passed、1 个既有 RAG 失败、3 skipped、11 deselected；Ruff、Pyright 通过 | `40946ef` 的[完整回归及自审修复证据](../reviews/evidence/v0.6-20261105/implementation-self-review/README.md)；随后控制器 15 项定向通过；覆盖与边界见[验收映射](../development/v0.6-acceptance-matrix.md) |
+| v0.6，2026-11-05 完整离线 | 545 passed、1 个既有 RAG 失败、3 skipped、11 deselected；Ruff、Pyright 通过 | `40946ef` 的[完整回归及自审修复证据](../reviews/evidence/v0.6-20261105/implementation-self-review/README.md)；随后控制器 15 项定向通过；覆盖与边界见[验收映射](../archive/2026-11-11/development/v0.6-acceptance-matrix.md) |
 | v0.6，2026-11-05 首轮 Live 与修复 | B1 failed，其余五次未运行；路径修复后 67 项定向通过 | `7026431` 的[真实记录](../reviews/v0.6-live-comparison-20261105.md)；相对日志目录导致命令状态不确定，未通过 A13 |
 | v0.6，2026-11-05 第二轮 Live | 任务 6/6 通过，目标组冻结比较 1/3 通过 | `c9b5fb0` 的[完整六次记录](../reviews/v0.6-live-comparison-20261105-r2.md)；T1 输出超限，T3 的调用／工具／用量／耗时超限，默认不切换 |
 | v0.7，2026-11-06 完整离线 | 934 passed、1 个既有 RAG 失败、14 skipped | `f747299` 的[实现审查与验证](../reviews/REV-20261106-003-v0.7-implementation.md)；11 项 Live 和 3 项规模测试 opt-in 未运行 |
-| v0.7，2026-11-06 审查修复 | 43／98／105 项相关回归通过，额外来源预算修复 88 项通过；Ruff、format 366 文件、Pyright、锁文件检查通过 | `c412174`；独立 Spec 复核 47 项通过、Standards 字节兼容与身份错配复核通过；[64 US／23 AC／12 R07 映射](../development/v0.7-acceptance-matrix.md)，人工学习待执行 |
+| v0.7，2026-11-06 审查修复 | 43／98／105 项相关回归通过，额外来源预算修复 88 项通过；Ruff、format 366 文件、Pyright、锁文件检查通过 | `c412174`；独立 Spec 复核 47 项通过、Standards 字节兼容与身份错配复核通过；[64 US／23 AC／12 R07 映射](../archive/2026-11-11/development/v0.7-acceptance-matrix.md)，人工学习待执行 |
 
 v0.4 实现的 Standards／Spec 独立评审在修复后定向复核通过，见[处置记录](../reviews/v0.4-implementation-review.md)。
 该报告前部“Live 未执行”是当时事实，末尾已追加后续结果，最新结论以三次 Live 记录为准。
@@ -40,9 +43,9 @@ v0.4 三次真实任务都修复了夹具错误并获得 exit 0，但首次遗�
 Q23 按实际依赖处理跨版本阻塞：相关权限、Session、工具与基础回归问题须处理；
 无关 RAG 质量缺口单独跟踪。既有失败不因此变成通过，新结果也不能覆盖失败尝试。
 
-v0.6 仍在实施：已有真实适配器加假 HTTP 的四组合证据，Windows／Python 3.11 独立安装检查通过
+v0.6 后端已实现：已有真实适配器加假 HTTP 的四组合证据，Windows／Python 3.11 独立安装检查通过
 （[安装证据](../reviews/evidence/v0.6-20261105/implementation-install/README.md)），默认未切换；
-验收映射及本阶段完整回归已记录；[六次实验入口](../development/v0.6-comparison-runbook.md)已完成
+验收映射及本阶段完整回归已记录；[六次实验入口](../archive/2026-11-11/development/v0.6-comparison-runbook.md)已完成
 23 项离线演练，后续[本地自审](../reviews/REV-20261105-002-v0.6-implementation-self-review.md)补追踪隔离
 并修复实验记录校验。首轮获准的 Live 在 B1 暴露相对日志目录问题；修复后的六次对照任务全部通过，
 但目标组仅 T2 满足全部冻结指标，比较门禁尚未通过。独立评审、发布裁定和人工学习出口仍未完成。
@@ -57,6 +60,7 @@ v0.6 仍在实施：已有真实适配器加假 HTTP 的四组合证据，Window
 | Session／CLI | `test_jsonl_session.py`、`test_session_recovery.py`、`test_forced_exit_recovery.py`、`test_interactive_cli.py`、`test_configuration.py` |
 | RAG | `test_ingestion.py`、`test_source_revision_regressions.py`、`test_retrieval.py`、`test_citation.py`、`test_v03_eval.py` |
 | v0.5 Context / Memory | `test_v05_*.py`；规模实验与真实模型夹具分别显式 opt-in，见实施记录 |
+| MCP | `test_v07_*.py`；模型工具、CLI、SDK 互操作、Task、原文配额、来源与进程恢复 |
 | v0.6 框架与四组合 | `test_langchain_model.py`、`test_v06_*.py`、`test_model_stream_lifecycle.py`；预算、工具、取消、强退恢复、历史副本和参数快照均有独立入口 |
 
 上述文件都位于 [tests](../../tests)。工具 Eval 使用[v0.4 固定夹具](../../testdata/v0.4-tools/DATASET.md)，
@@ -68,7 +72,7 @@ v0.6 仍在实施：已有真实适配器加假 HTTP 的四组合证据，Window
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
-uv run pytest -q
+uv run pytest -q -m "not integration"
 ```
 
 真实 DeepSeek 测试显式设置 `JDAGENT_RUN_DEEPSEEK_INTEGRATION=1`，
@@ -81,5 +85,8 @@ Milvus 测试另用 `JDAGENT_RUN_RAG_LIVE=1`；入口位于 [integration](../../
 - [v0.2](../learning/v0.2-learning-checklist.md)：2026-08-24 所有者按范围关闭，原练习供复习。
 - [v0.3](../learning/v0.3-rag-learning-checklist.md)：2026-09-16 所有者裁定关闭，工程仍未通过。
 - [v0.4](../learning/v0.4-tools-learning-checklist.md)：学习及人工语义验收待本人完成。
+
+- [v0.5](../learning/v0.5-context-memory-learning-checklist.md)、[v0.6](../learning/v0.6-langchain-langgraph-learning-checklist.md)、
+  [v0.7](../learning/v0.7-mcp-client-learning-checklist.md)：人工学习出口仍待本人执行。
 
 学习结论不能替代工程结论；AI 的报告核对也不替代学习者的人工出口。

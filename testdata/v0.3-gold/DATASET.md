@@ -6,9 +6,9 @@
 
 Dataset revision：`v0.3-gold-r1`
 
-关联需求：[v0.3 需求 AC-049–054](../../docs/requirements/v0.3-knowledge-retrieval.md)
+关联需求：[v0.3 需求 AC-049–054](../../docs/archive/2026-11-11/requirements/v0.3-knowledge-retrieval.md)
 
-关联架构：[高层设计 §17](../../docs/architecture/v0.3-knowledge-retrieval.md)
+关联架构：[高层设计 §17](../../docs/archive/2026-11-11/architecture/v0.3-knowledge-retrieval.md)
 
 本目录是 v0.3 规范 Gold Corpus。公开 IR 数据集不得替代本语料的生命周期与 Citation 场景。
 

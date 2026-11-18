@@ -13,4 +13,4 @@ MockTransport。检查顺序、不可重跑、判据冻结／修改阻断、计�
 
 测试为隔离准备过程而固定仓库／环境快照；真实 prepare 的本机清单另行核查，不能以这些 Mock
 证明真实环境指纹稳定。所有调用使用 synthetic key，未访问真实模型。操作和限制见
-[说明](../../../../development/v0.6-comparison-runbook.md)。
+[说明](../../../../archive/2026-11-11/development/v0.6-comparison-runbook.md)。

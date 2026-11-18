@@ -1,7 +1,7 @@
 # 当前项目状态
 
 > 归档日期：2026-10-20。保留原始版本的状态、批准记录和历史叙述；归档不撤销仍适用的约束，也不表示未完成事项已通过验收。
-> 当前实现从[模块说明](../../context/current.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
+> 当前实现从[模块说明](../2026-11-11/context/current.md)阅读；迁移原因及适用范围见[归档索引](../README.md)。
 
 
 状态：`Implemented`
@@ -34,10 +34,10 @@ finding 已全部修复，复核为 0 Blocker、0 High。项目所有者于 2026
 当前最急切的 Agent 核心学习范围，因此不要求逐项执行原 M10 练习，并验收 v0.2 学习门禁完成。
 
 v0.3 的 Q1–Q59 高层设计访谈已于 2026-08-29 收敛，形成
-[RAG 与来源可追踪知识检索高层设计](../../architecture/v0.3-knowledge-retrieval.md)、RAG 限定语境
-[词汇表](../../context/v0.3-rag-glossary.md)、[ADR-0006](../../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
-和[实施计划 P1/P2 附页](../../plans/v0.3-rag-p1-p2-appendix.md)。项目所有者于 2026-08-30 批准上述
-设计、决策、默认项和[分阶段实施计划](../../plans/v0.3-rag-implementation.md)，并授权实现者在不改变
+[RAG 与来源可追踪知识检索高层设计](../2026-11-11/architecture/v0.3-knowledge-retrieval.md)、RAG 限定语境
+[词汇表](../2026-11-11/context/v0.3-rag-glossary.md)、[ADR-0006](../../decisions/ADR-0006-milvus-standalone-knowledge-index.md)
+和[实施计划 P1/P2 附页](../2026-11-11/plans/v0.3-rag-p1-p2-appendix.md)。项目所有者于 2026-08-30 批准上述
+设计、决策、默认项和[分阶段实施计划](../2026-11-11/plans/v0.3-rag-implementation.md)，并授权实现者在不改变
 核心结果的前提下推进 P1 产品代码。M0–M6 的 P1 实现已合入包版本 `0.3.0`；对 `40b9aee` 的
 独立实现评审 High 已处置。M0 详细合同仍保持 `Proposed`；项目所有者于 2026-09-16 裁定
 v0.3 学习验证完成，详见[学习完成记录](../../learning/v0.3-rag-learning-checklist.md)。
@@ -51,13 +51,13 @@ v0.3 学习验证完成，详见[学习完成记录](../../learning/v0.3-rag-lea
 v0.4 工具实现及离线整链已落地；用户明确授权后，真实 DeepSeek 三次验收为 2/3，
 首次遗漏 search_text，工程门禁尚未通过。详见 [Live 记录](../../reviews/v0.4-live-verification.md)。当前完整离线为 `236 passed, 1 failed, 8 skipped`，
 唯一失败仍是 v0.3 既有 Recall 门槛。具体授权、合同细化、机制与验证证据见
-[实现记录](../../plans/v0.4-implementation.md)，原始设计/讨论/评审文档保留历史状态，不能据此
+[实现记录](../2026-11-11/plans/v0.4-implementation.md)，原始设计/讨论/评审文档保留历史状态，不能据此
 误读为尚未授权实现。学习验收仍待本人完成，无关 RAG 缺口按 Q23 独立跟踪。
 
 ## 已批准事实
 
 - 2026-09-23 项目所有者明确授权按上一轮 v0.4 设计实施，并要求先提交草案、保持 Git 干净。
-  范围与采用的具体默认项记录于 [v0.4 实现记录](../../plans/v0.4-implementation.md)。
+  范围与采用的具体默认项记录于 [v0.4 实现记录](../2026-11-11/plans/v0.4-implementation.md)。
 - Q23 裁定：按实际依赖判断 v0.3 遗留项的阻塞范围；权限、会话、工具和基础回归的相关缺口
   需处理，无关 RAG 质量缺口独立跟踪。此裁定不表示 v0.3 工程验收通过。
 
@@ -84,7 +84,7 @@ v0.4 工具实现及离线整链已落地；用户明确授权后，真实 DeepS
   [ADR-0004](../../decisions/ADR-0004-cli-application-layer.md) 与
   [v0.2 实施计划](../v0.2/implementation.md)。
 - 2026-08-30 用户批准 v0.3 高层设计、知识检索语境、ADR-0006、P1/P2 默认项和
-  [分阶段实施计划](../../plans/v0.3-rag-implementation.md)。批准允许从 M0 开始推进，并给予实现者对
+  [分阶段实施计划](../2026-11-11/plans/v0.3-rag-implementation.md)。批准允许从 M0 开始推进，并给予实现者对
   文件布局、内部算法、局部 Interface 和 Commit 拆分的自主裁量；改变核心结果、不变量、事实
   所有权、公开合同、重大风险或 P1/P2 范围时仍须升级裁定。
 - v0.2 以交互式 CLI 日常可用性为唯一核心结果；Claude Code 与
@@ -188,7 +188,7 @@ v0.4 工具实现及离线整链已落地；用户明确授权后，真实 DeepS
   判断和人工学习出口。
 - 每个实质性模块的设计包必须包含需求与非目标、Interface 与状态所有权、失败模型、最小 Eval、
   实施计划和模块专属学习清单；Eval 从 v0.3 起是横向门禁，不单独占用产品版本，也不得后补。
-- 项目所有者于 2026-09-16 调整[v0.2 之后的模块学习路线](../../plans/post-v0.2-learning-roadmap.md)：
+- 项目所有者于 2026-09-16 调整[v0.2 之后的模块学习路线](../2026-11-11/plans/post-v0.2-learning-roadmap.md)：
   v0.3 RAG 之后优先推进 v0.4 Tool Registry & Function Calling，原 Memory 与 Context 模块依次
   顺延为 v0.5 长期记忆生命周期、v0.6 Context Orchestration 与 Compaction；MCP 保留为后续候选。
   v0.4 基于已有三工具与调用闭环扩展实用工具、完善模块边界，为这些后续模块提供基础。
@@ -241,10 +241,10 @@ v0.4 工具实现及离线整链已落地；用户明确授权后，真实 DeepS
 
 以下继续作为 v0.3 工程收尾事项跟踪，不因模块顺序调整而视为完成：
 
-手动体验与验证可按[操作报告](../../development/v0.3-rag-manual-verification.md)执行；该报告为 `Proposed`，
+手动体验与验证可按[操作报告](../2026-11-11/development/v0.3-rag-manual-verification.md)执行；该报告为 `Proposed`，
 不表示人工验收完成。2026-09-13 已演练隔离的本地 CLI/检索流程，未重跑真实服务或完整历史验收套件。
 
-1. 按[改进方案](../../plans/v0.3-rag-improvement-proposal.md)补齐持久恢复/删除与真实 RAG 路径；
+1. 按[改进方案](../2026-11-11/plans/v0.3-rag-improvement-proposal.md)补齐持久恢复/删除与真实 RAG 路径；
    该方案为 `Proposed`，不自动改变范围或批准迁移。
 2. 关闭正确计分后的 Eval 失败，并在可达的真实 Milvus/Embedding 上验证；保留原门槛。
 3. 项目所有者处理 M0 合同审批；对最终固定实现执行相称独立复核，而非仅复核历史 `2b28228`。

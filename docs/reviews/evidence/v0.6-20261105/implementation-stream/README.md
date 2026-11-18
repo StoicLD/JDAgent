@@ -8,4 +8,4 @@
 
 `test_priority_slot_waits_for_underlying_stream_close_before_reuse` 在修复前实际失败：消费者关闭完成时，
 底层仍阻塞于清理事件。修复后该用例与图差分、压缩、取消共 49 项定向检查通过；全量也包含此回归。
-模型全部使用 Fake／MockTransport。没有执行 Live。背景和后续范围见[实施记录](../../../../plans/v0.6-implementation.md)。
+模型全部使用 Fake／MockTransport。没有执行 Live。背景和后续范围见[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。

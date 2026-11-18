@@ -1,5 +1,7 @@
 # 模型接入
 
+核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+
 状态：`Implemented`（实现说明）
 
 模型接入把统一请求转换为 Provider 协议，再将响应转换为统一事件。
@@ -37,7 +39,7 @@ HTTP 错误映射为认证、权限、限流、连接、超时等类别，Loop �
 
 组合根选择真实或 Fake Adapter，并注入 Loop。更换 Provider 需要实现同一端口并验证事件合同，
 不要求修改工具 Handler 或 Session 存储格式。当前真实生成 Provider 仍只有 DeepSeek，有原生和
-LangChain 两种适配实现。`--model-adapter native|langchain` 独立于执行引擎，开发阶段默认 native；
+LangChain 两种适配实现。`--model-adapter native|langchain` 独立于执行引擎，默认 native；
 Fake Provider 始终使用 FakeModelPort。
 RAG 的 Embedding 是独立接口与配置，不能用生成模型接入成功推断检索配置也已完成。
 
@@ -47,7 +49,7 @@ Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter
 提前返回、协议错误和取消不依赖垃圾回收完成连接清理。
 两个适配器使用每份 ModelRequest 的 model、timeout 和输出上限；复用传输不固化启动时参数。
 后端切换需要重启，逐轮模型参数重载和请求归档保持一致。完整验证及当前限制见
-[v0.6 实施记录](../plans/v0.6-implementation.md)。
+[v0.6 实施记录](../archive/2026-11-11/plans/v0.6-implementation.md)。
 
 受控实验可通过组合根的 `model_wrapper` 在选定适配器外侧注入总预算。任务、压缩、引用修复和记忆
 维护共用它；实验账本属于验证设施，不替代产品费用账本。普通 CLI 不自动启用实验预算。
@@ -63,6 +65,6 @@ Key 的解析顺序见[CLI 与配置](cli.md)，解析后的值仅传入 Adapter
   [四组合内部调用接线](../../tests/test_v06_budget_wiring.py)
 - [协议测试](../../tests/test_deepseek_adapter.py)、[端口替身测试](../../tests/test_contract_adapters.py)、
   [真实模型测试](../../tests/integration/test_deepseek_live.py)
-- [ModelPort 设计](../architecture/model-port.md)、[ADR-0002](../decisions/ADR-0002-model-port.md)
+- [当前 ModelPort 合同](../architecture/model-port.md)、[ADR-0002](../decisions/ADR-0002-model-port.md)
 
 历史真实模型结果与当前门禁分别见[验证与验收](verification.md)。

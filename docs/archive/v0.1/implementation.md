@@ -23,7 +23,7 @@
 ## 前置批准与阶段闸门
 
 - [v0.1 需求](agent-runtime-requirements.md) 已于 2026-08-09 获得用户批准。
-- 开始 M0 前，用户需批准 [Agent Runtime 架构](agent-runtime.md)、[Runtime 核心契约](runtime-contracts.md)、[ModelPort 设计](../../architecture/model-port.md)、[Python 工程规范](../../development/python-style.md) 和本实施计划。
+- 开始 M0 前，用户需批准 [Agent Runtime 架构](agent-runtime.md)、[Runtime 核心契约](runtime-contracts.md)、[ModelPort 设计](../2026-11-11/architecture/model-port.md)、[Python 工程规范](../../development/python-style.md) 和本实施计划。
 - 开始 M0 前确认 Python import package 名和 distribution 名；二者可以相同，也可以显式区分。
 - DeepSeek model ID、base URL 和真实集成测试配置只在进入 M9 前确认，不阻塞离线 Runtime 的 M0–M8。
 - API Key 只由用户在本机安全提供；显式 Key 优先，缺省时可读取用户批准的工作区

@@ -8,4 +8,4 @@
 
 `test_incomplete_json_mode_is_a_model_failure_without_sdk_exception` 的 empty、length、content_filter
 三项在修复前实际抛出 SDK 异常，修复后输出项目 ModelFailed。协议、预算、内部调用定向检查共 55 项通过。
-全部为 Fake／MockTransport，未执行真实模型调用。阶段状态见[实施记录](../../../../plans/v0.6-implementation.md)。
+全部为 Fake／MockTransport，未执行真实模型调用。阶段状态见[实施记录](../../../../archive/2026-11-11/plans/v0.6-implementation.md)。

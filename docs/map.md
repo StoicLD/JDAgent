@@ -1,112 +1,53 @@
-# JDAgent 文档 Map
+# JDAgent 文档地图
 
-状态：`Implemented`（文档整理）
+状态：`Implemented`（当前实现导航）。核对日期：2026-11-11，代码基准：`e23604f`。
 
-实现核对日期：2026-10-22。v0.5 从 `1729161b062cdffbdd4b30c6cff0ca4baeaec877` 开始实现；
-固定评审快照、测试结果和剩余门禁见[实施记录](reviews/REV-20261022-001-v0.5-implementation.md)。
+**当前代码是产品行为的唯一事实来源。** 本目录解释代码；历史方案、计划和验收用于追溯，
+不能据此声称代码已有某项能力。发现说明与实现不一致时，核对代码并修订说明。
 
-## 从哪里开始
+## 按目的阅读
 
-- 了解产品与启动方式：[README](../README.md)。
-- 按步骤操作：[安装与使用教程](guides/usage.md)、[知识库操作教程](guides/knowledge.md)。
-- 恢复工作：[当前状态](context/current.md) → [协作规则](development/agent-collaboration.md) → 本次相关模块。
-- 理解现有实现：按下表进入模块；每篇列出职责、执行过程、限制和代码／测试入口。
-- 查设计理由或历史承诺：先看有效 ADR，再看模块关联的设计与[归档索引](archive/README.md)。
-
-## 当前实现
-
-| 模块 | 负责回答的问题 |
+| 目的 | 入口 |
 | --- | --- |
-| [运行时与主循环](modules/runtime.md) | 一轮任务怎么开始、调用模型和工具、结束；采用什么设计模式 |
-| [模型接入](modules/models.md) | ModelPort 如何隔离 Provider，流式文本和工具调用如何转换 |
-| [上下文构造](modules/context.md) | 事件如何变成请求，预算和压缩如何工作，原文如何保留 |
-| [跨会话与记忆](modules/memory.md) | 历史检索、记忆意图与版本、后台作业和费用如何管理 |
-| [工具与权限](modules/tools.md) | 八工具、审批、精确编辑、Windows 命令和输出日志如何工作 |
-| [会话与事件](modules/sessions.md) | 什么是持久事实，如何保存、恢复和处理未知副作用 |
-| [CLI 与配置](modules/cli.md) | 交互／Headless 入口、命令、配置优先级和数据位置 |
-| [知识摄取与检索](modules/knowledge.md) | Catalog、Store、Index、检索和引用如何衔接，哪些能力仍有缺口 |
-| [验证与验收](modules/verification.md) | 已有测试覆盖、最近证据、失败项、学习出口和复现入口 |
+| 初次安装和体验 | [README](../README.md) → [使用教程](guides/usage.md) |
+| 配置模型、权限、数据与预算 | [配置参考](reference/configuration.md) |
+| 接入 MCP | [配置与操作](guides/mcp.md) → [实现说明](modules/mcp.md) |
+| 导入知识材料 | [知识库教程](guides/knowledge.md)，先阅读可用范围 |
+| 理解整体设计 | [架构总览](architecture/overview.md) → 下表的模块 |
+| 修改代码 | [当前状态](context/current.md) → [协作规则](development/agent-collaboration.md) → [开发指南](development/contributing.md) |
+| 查验测试与限制 | [验证与验收](modules/verification.md)及模块内的代码／测试链接 |
+| 查历史取舍、审批和版本证据 | [ADR 索引](decisions/README.md)、[归档索引](archive/README.md) |
 
-文档状态 `Implemented` 表示现状说明已落地，不等同于模块工程或学习验收通过。
-代码事实发生变化时更新对应模块；新的测试结果进入评审记录，再更新验收摘要。
+## 当前模块
 
-## 当前仍需使用的设计和计划
-
-以下材料继续承担设计约束、未完成范围或授权记录的职责。`Proposed` 保持待批准状态；
-阅读实现情况优先使用模块说明，不能仅凭设计中的“必须”判断功能已经存在。
-
-| 用途 | 文档 |
+| 模块 | 回答的问题 |
 | --- | --- |
-| 模型边界的设计理由与合同 | [ModelPort 设计](architecture/model-port.md) |
-| RAG 已批准目标和阶段范围 | [高层设计](architecture/v0.3-knowledge-retrieval.md)、[分阶段计划](plans/v0.3-rag-implementation.md)、[P1/P2 附页](plans/v0.3-rag-p1-p2-appendix.md) |
-| RAG 尚待批准的详细规格 | [需求与验收](requirements/v0.3-knowledge-retrieval.md)、[知识 Port 与事件 v2 提案](architecture/knowledge-contracts-v0.3.md)、[Milvus 与 Saga 提案](architecture/milvus-revision-saga-v0.3.md) |
-| RAG 工程收尾 | [改进方案](plans/v0.3-rag-improvement-proposal.md)、[人工验证操作报告](development/v0.3-rag-manual-verification.md) |
-| v0.4 实施授权与合同细化 | [实现与验证记录](plans/v0.4-implementation.md) |
-| v0.5 已确认产品行为 | [上下文、跨会话与记忆规格](requirements/v0.5-context-memory.md)、[访谈与术语](context/v0.5-context-memory-design-discussion.md) |
-| v0.5 工程细化提案 | [架构](architecture/v0.5-context-memory.md)、[四阶段计划](plans/v0.5-context-memory-implementation.md)、[验收与 Eval](development/v0.5-context-memory-validation.md) |
-| v0.5 R1 审查处置 | [Cursor 原始审查与逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)，原始结论保持 |
-| v0.5 实现与审查 | [代码快照、逐项修复与验收](reviews/REV-20261022-001-v0.5-implementation.md) |
-| v0.5 旧会话过渡 | [一次性清理记录](development/v0.5-session-reset.md) |
-| v0.6 框架重构 | [已批准设计、迁移和验收](architecture/v0.6-langchain-langgraph.md)、[实施进度与验证](plans/v0.6-implementation.md)、[A01–A13 覆盖映射](development/v0.6-acceptance-matrix.md)、[资料核对](research/v0.6-langchain-langgraph.md) |
-| v0.6 R1 自审处置 | [五项设计修订与静态验证](reviews/REV-20261105-001-v0.6-design-disposition.md)；[原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)保留，独立评审尚未完成 |
-| v0.6 实现自审与实验 | [固定实现本地自审与修复](reviews/REV-20261105-002-v0.6-implementation-self-review.md)、[对照说明](development/v0.6-comparison-runbook.md)、[首轮失败与修复](reviews/v0.6-live-comparison-20261105.md)、[第二轮六次对照](reviews/v0.6-live-comparison-20261105-r2.md)；任务 6/6、目标比较 1/3，默认未切换，独立评审未完成 |
-| v0.7 MCP 已确认规格 | [通用 Client、BM25、两层缓存与顺序 Tasks](requirements/v0.7-mcp-client.md)、[R1 运行时衔接设计](architecture/v0.7-mcp-client.md)：已按用户授权进入分阶段实施 |
-| v0.7 Cursor 审查处置 | [F01–F09 逐项判断与文档验证](reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)；[原始审查](reviews/REV-20261106-001-v0.7-mcp-client-design-review.md)的 fail 保留，R1 独立复审未完成；后续 F08 锁版接入实验见 [P0 证据](reviews/REV-20261106-002-v0.7-p0-sdk-validation.md) |
-| v0.7 实施与验收 | [P0–P5 实施记录](plans/v0.7-implementation.md)、[US／AC／R07 验收映射](development/v0.7-acceptance-matrix.md)、[独立双轴审查与三项修复](reviews/REV-20261106-003-v0.7-implementation.md)、[MCP 配置说明](guides/mcp.md)；本次实施与审查修复已交付，完整套件保留一个既有 RAG 失败，[人工学习清单](learning/v0.7-mcp-client-learning-checklist.md)待执行 |
-| 后续学习模块顺序 | [v0.4 工具 → v0.5 Context 与 Memory](plans/post-v0.2-learning-roadmap.md) |
+| [运行时](modules/runtime.md) | Coordinator、原生循环与图引擎怎样执行一轮任务 |
+| [模型](modules/models.md)／[ModelPort 合同](architecture/model-port.md) | 模型请求、流和错误怎样跨越适配器边界 |
+| [上下文](modules/context.md) | 请求如何构造、计量、归档和压缩 |
+| [历史与记忆](modules/memory.md) | 如何检索旧会话、保存记忆版本、整理和计费 |
+| [工具与权限](modules/tools.md) | 本地操作、目录规则、审批及 MCP 调用如何受控 |
+| [会话与事件](modules/sessions.md) | 哪些数据持久保存，异常与未知副作用如何恢复 |
+| [CLI](modules/cli.md) | 交互、单次执行、控制命令和配置怎样接线 |
+| [知识库](modules/knowledge.md) | Catalog、内容对象、索引、检索和引用如何配合 |
+| [MCP](modules/mcp.md) | 连接、目录、动态定义、原文、Task 与来源如何管理 |
 
-## 术语与学习资料
+[术语表](reference/glossary.md)解释当前代码中的对象。模块文档的 `Implemented` 表示说明已有实现，
+不表示整版工程或人工学习验收完成。
 
-- RAG：[词汇表](context/v0.3-rag-glossary.md)、[休假政策图解](context/v0.3-rag-illustrated-guide.md)。
-- 工具：[设计阶段词汇表](context/v0.4-tools-glossary.md)（`Proposed`）；当前工具行为见工具模块。
-- 学习出口：[v0.1](learning/v0.1-learning-checklist.md)、[v0.2](learning/v0.2-learning-checklist.md)、
+## 工程与学习
+
+- [Python 规范](development/python-style.md)、[交付与学习工作流](development/module-delivery-workflow.md)
+- [任务跟踪](agents/issue-tracker.md)、[领域文档约定](agents/domain.md)
+- 学习清单：[v0.1](learning/v0.1-learning-checklist.md)、[v0.2](learning/v0.2-learning-checklist.md)、
   [v0.3](learning/v0.3-rag-learning-checklist.md)、[v0.4](learning/v0.4-tools-learning-checklist.md)、
-  [v0.5](learning/v0.5-context-memory-learning-checklist.md)（待执行）、
-  [v0.6 框架编排与接入](learning/v0.6-langchain-langgraph-learning-checklist.md)（`Proposed`）。
-- 后续模块：[交付与学习工作流](development/module-delivery-workflow.md)、
-  [学习检查表模板](learning/module-learning-checklist-template.md)。
+  [v0.5](learning/v0.5-context-memory-learning-checklist.md)、[v0.6](learning/v0.6-langchain-langgraph-learning-checklist.md)、
+  [v0.7](learning/v0.7-mcp-client-learning-checklist.md)。它们记录阶段练习与完成情况，不是当前功能清单。
 
-## 有效决策
+## 历史边界
 
-- [ADR-0001 Python Core](decisions/ADR-0001-python-core.md)
-- [ADR-0002 ModelPort](decisions/ADR-0002-model-port.md)
-- [ADR-0003 Runtime 与求职领域分离](decisions/ADR-0003-runtime-domain-separation.md)
-- [ADR-0004 CLI 应用层](decisions/ADR-0004-cli-application-layer.md)
-- [ADR-0005 产品仓库作为唯一启动事实源](decisions/ADR-0005-agent-context-free-startup.md)
-- [ADR-0006 Milvus Standalone](decisions/ADR-0006-milvus-standalone-knowledge-index.md)
-- [ADR-0008 LangChain 与 LangGraph 的接入边界](decisions/ADR-0008-langchain-langgraph-boundaries.md)
+2026-11-11 已将版本方案、需求、计划、阶段验收映射和状态流水移入[本次归档](archive/2026-11-11/README.md)。
+原审批状态、失败和人工未完成项保留。正式评审与证据仍在 `docs/reviews/`，迁移只调整导航链接。
+需要复现固定评审字节时使用报告指定的 Git revision。
 
-待评审决策：[ADR-0007 原始历史、上下文投影与记忆版本分离](decisions/ADR-0007-context-projection-memory.md)（`Proposed`）。
-
-## 工程规范
-
-- [Agent 入口](../AGENTS.md)、[协作与评审规则](development/agent-collaboration.md)
-- [Python 工程规范](development/python-style.md)
-- [任务跟踪约定](agents/issue-tracker.md)、[领域文档约定](agents/domain.md)
-
-## 验收原始记录
-
-| 范围 | 证据入口 |
-| --- | --- |
-| v0.1 | [实现审查](reviews/v0.1-implementation-review.md)、[完成度审计](reviews/v0.1-completion-audit.md)、[评审文件快照](reviews/v0.1-review-snapshot.sha256) |
-| v0.2 | [计划评审处置](reviews/REV-20260820-001-v0.2-cli-plan-disposition.md)、[实现审查](reviews/v0.2-implementation-review.md) |
-| v0.3 | [高层设计评审处置](reviews/REV-20260829-001-v0.3-rag-design-disposition.md)、[P1 实现评审处置](reviews/REV-20260830-001-v0.3-p1-rag-disposition.md)、[2026-09-05 实现审查与修复](reviews/REV-20260905-001-v0.3-implementation-audit.md) |
-| v0.4 | [设计评审原文](reviews/REV-20260923-001-v0.4-tool-execution-design-review.md)、[实施审查与处置](reviews/v0.4-implementation-review.md)、[三次 Live 结果](reviews/v0.4-live-verification.md) |
-| v0.5 | [设计初审与 R1 逐项处置](reviews/REV-20261021-001-v0.5-context-memory-design-review.md)、[R1 文件指纹](reviews/REV-20261021-001-v0.5-design-revision.sha256) |
-| v0.6 | [原始自审](reviews/REV-20261105-001-v0.6-design-self-review.md)、[R1 处置](reviews/REV-20261105-001-v0.6-design-disposition.md)、[设计快照](reviews/evidence/v0.6-20261105/README.md)；后续分段实现和离线验证见[实施记录](plans/v0.6-implementation.md)，真实比较使用[记录模板](development/v0.6-comparison-template.md) |
-| v0.7 | [Cursor 原始审查](reviews/REV-20261106-001-v0.7-mcp-client-design-review.md)、[R1 处置](reviews/REV-20261106-001-v0.7-mcp-client-design-disposition.md)、[R1 文档指纹](reviews/REV-20261106-001-v0.7-design-r1.sha256)保留设计时点；[P0 SDK 与传输证据](reviews/REV-20261106-002-v0.7-p0-sdk-validation.md)为后续实验，不等于完整运行时验收或独立复审 |
-| Eval 夹具 | [v0.3 Gold](../testdata/v0.3-gold/DATASET.md)、[v0.4 固定工具任务](../testdata/v0.4-tools/DATASET.md) |
-
-## 实现参考
-本项目的参考实现为codex和Dify，其中codex为JDAgent大部分模块的实现参考，Dify主要参考RAG部分的实现。参考目录并不意味着我们的项目是完全一致的复刻，而是作为设计灵感的来源，具体复杂问题的处理的参考，
-比如codex可能某个模块已经有成熟的实现了，那么我们的项目在设计对应模块的时候也可以进行参考。
-本地codex项目目录：
-E:\Projects\Codex_Projects_Overall\OpenSourceAgentAnalysis\codex
-
-本地Dify项目目录：
-E:\Projects\Codex_Projects_Overall\OpenSourceAgentAnalysis\dify
-
-## 历史归档
-
-[归档索引](archive/README.md)按版本列出旧设计、已完成计划及迁移原因。
-旧入口 [context/index.md](context/index.md)仅提供到本 Map 的兼容导航，不再维护第二份文档清单。
+[context/index.md](context/index.md)仅保留旧启动路径的兼容导航。

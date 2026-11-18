@@ -1,6 +1,6 @@
 # 知识库操作教程
 
-状态：`Implemented`（已有管理入口说明），更新：2026-10-23。
+状态：`Implemented`（已有管理入口说明），更新：2026-11-11；代码基准：`e23604f`。
 
 知识库保存外部材料，长期记忆保存对话形成的陈述，两者配置和用途不同。先完成
 [安装步骤](usage.md#安装与更新)。当前摄取支持 TXT、Markdown、CSV；不要把 PDF/DOCX 当作
@@ -36,8 +36,8 @@ UTF-8 Markdown 文件，替换两个路径后执行：
 ```powershell
 $workspacePath = 'E:\Projects\Example'
 $sourcePath = 'E:\Documents\policy.md'
-$connection = uv run jdagent --workspace $workspacePath knowledge connection add --name '教程本地连接' | ConvertFrom-Json
-$kb = uv run jdagent --workspace $workspacePath knowledge kb create --connection $connection.connection_id --name '教程资料库' | ConvertFrom-Json
+$connection = uv run jdagent --workspace $workspacePath knowledge connection add --name 'tutorial-local' | ConvertFrom-Json
+$kb = uv run jdagent --workspace $workspacePath knowledge kb create --connection $connection.connection_id --name 'tutorial-docs' | ConvertFrom-Json
 uv run jdagent --workspace $workspacePath knowledge source add --kb $kb.knowledge_base_id --file $sourcePath
 uv run jdagent --workspace $workspacePath knowledge kb status --id $kb.knowledge_base_id
 uv run jdagent --workspace $workspacePath knowledge source list --kb $kb.knowledge_base_id
@@ -48,7 +48,8 @@ uv run jdagent --workspace $workspacePath knowledge binding list
 逐条检查命令退出码和 JSON，前一步失败时不要继续使用空 ID。保留返回的 connection_id、
 knowledge_base_id、source_id、binding_id 和 operation_id；关闭终端后变量不会保留，
 可用 `connection list`、`kb list`、`source list --kb …`、`binding list` 重新查询。
-Binding 只授权当前 workspace 使用知识库，不代表检索服务已配置成功。
+连接与知识库名称须为 1–128 个 ASCII 字母、数字、点、下划线或连字符，首字符须为字母或数字；
+不能使用中文名称或空格。Binding 只授权当前 workspace 使用知识库，不代表检索服务已配置成功。
 
 在该 workspace 的交互界面查看：
 
@@ -83,14 +84,14 @@ retry 和 reconcile 用于已有操作恢复，但当前崩溃恢复仍有已知
 
 ## 真实服务与验证
 
-`connection add` 支持 `--endpoint` 和 `--credential-ref`，`connection test --id …` 提供连接
-检查入口；但真实 Embedding/Profile、凭据传递以及 Milvus 兼容性仍有缺口。安装
+`connection add` 支持 `--endpoint` 和 `--credential-ref`。`connection test --id …` 只检查登记记录、
+凭据环境变量是否存在或凭据文件是否存在，不访问远端，也不验证认证、Milvus 或检索可用性。
+真实 Embedding/Profile、凭据传递以及 Milvus 兼容性仍有缺口。安装
 `uv sync --locked --extra rag` 只增加依赖，不应据此编写“配置完即可生产使用”的操作承诺。
 
-需要研究已有集成实验时，阅读[人工验证记录](../development/v0.3-rag-manual-verification.md)
+需要研究已有集成实验时，阅读[人工验证记录](../archive/2026-11-11/development/v0.3-rag-manual-verification.md)
 和[验证状态](../modules/verification.md)。这些历史测试记录不是当前普通用户已打通的使用链。
 Memory 的 `[memory.embedding]` 配置也不会自动替知识库设置 Embedding Profile。
 
-本文验证记录（2026-10-23）：在隔离用户配置与数据目录、移除子进程 DeepSeek Key 的条件下，
-完成本地连接创建、建库、Markdown 摄取、状态/来源查询与工作区绑定；全部命令正常退出。
-该验证未连接 Milvus、真实 Embedding 或对话模型。
+当前步骤的执行核对见[文档维护记录](../development/documentation-refresh-2026-11-11.md)。
+本地管理链的验证不代表 Milvus、真实 Embedding 或普通对话检索通过。
