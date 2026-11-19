@@ -15,4 +15,5 @@ ADR 保存当时的理由、选择和批准状态；它不是当前实现的替�
 | [0005 产品仓库启动链](ADR-0005-agent-context-free-startup.md) | 仓库边界继续适用；2026-11-11 明确当前行为以代码为准 |
 | [0006 Milvus](ADR-0006-milvus-standalone-knowledge-index.md) | 历史索引方向，真实配置与验证仍有缺口 |
 | [0007 Context 与 Memory](ADR-0007-context-projection-memory.md) | 原 Proposed 状态保留；已有实现见 Context、Memory、Session 模块 |
-| [0008 LangChain／LangGraph](ADR-0008-langchain-langgraph-boundaries.md) | 框架边界已体现在代码中；默认 native/native，无持久图恢复 |
+| [0008 LangChain／LangGraph](ADR-0008-langchain-langgraph-boundaries.md) | v0.6 接入与持久化边界。双引擎与四组合条款由 0009 接替 |
+| [0009 单一 Turn 执行引擎](ADR-0009-langgraph-only.md) | LangGraph 负责调度，DeepSeek 保留两种模型适配器 |

@@ -13,17 +13,17 @@ from jdagent.adapters.jsonl_recovery import JsonlRecoveryStore
 from jdagent.application.session_recovery import SessionRecovery, prepare_session_resume
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import CompactionCommittedPayload
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 FIXTURE = Path(__file__).resolve().parents[1] / "testdata" / "v0.5-compacted"
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("state", ["intact", "missing", "corrupt"])
 def test_old_checkpoint_and_originals_survive_backend_switch(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str], state: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_adapter: str, state: str
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     case.workspace.mkdir()
     manifest = json.loads((FIXTURE / "manifest.json").read_text())
     for name, digest in manifest["files"].items():
@@ -51,8 +51,8 @@ def test_old_checkpoint_and_originals_survive_backend_switch(
         return model_response("Retained the old constraint.")
 
     async def scenario() -> None:
-        for chosen in (combination, ("native", "native")):
-            async with case.open(handler, combination=chosen) as runtime:
+        for chosen in (model_adapter, "native"):
+            async with case.open(handler, model_adapter=chosen) as runtime:
                 prepared = await prepare_session_resume(
                     session=runtime.session,
                     recovery=SessionRecovery(

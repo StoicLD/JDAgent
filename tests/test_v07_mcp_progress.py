@@ -28,11 +28,10 @@ def wait_for_signal(path: Path) -> bool:
     return path.exists()
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("progress", [False, True])
 @pytest.mark.parametrize("finish", ["release", "deadline"])
 def test_long_tool_exposes_elapsed_time_and_optional_progress_without_starting_another_turn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, progress: bool, finish: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, progress: bool, finish: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -49,7 +48,7 @@ def test_long_tool_exposes_elapsed_time_and_optional_progress_without_starting_a
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

@@ -28,11 +28,10 @@ def material_url(request: pytest.FixtureRequest, version: str) -> Generator[str 
             yield url
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
 @pytest.mark.parametrize("material_url", ["stdio", "json", "sse"], indirect=True)
 def test_model_discovers_resources_and_prompts_then_explicitly_reads_external_material(
-    tmp_path: Path, engine: str, version: str, material_url: str | None
+    tmp_path: Path, version: str, material_url: str | None
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -53,7 +52,7 @@ def test_model_discovers_resources_and_prompts_then_explicitly_reads_external_ma
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -158,10 +157,7 @@ def test_model_discovers_resources_and_prompts_then_explicitly_reads_external_ma
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_prompt_requires_arguments_and_material_scope_cannot_be_bypassed(
-    tmp_path: Path, engine: str
-) -> None:
+def test_prompt_requires_arguments_and_material_scope_cannot_be_bypassed(tmp_path: Path) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -178,7 +174,7 @@ def test_prompt_requires_arguments_and_material_scope_cannot_be_bypassed(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -246,10 +242,9 @@ def test_prompt_requires_arguments_and_material_scope_cannot_be_bypassed(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
 def test_structured_results_respect_the_negotiated_protocol_contract(
-    tmp_path: Path, engine: str, version: str
+    tmp_path: Path, version: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -266,7 +261,7 @@ def test_structured_results_respect_the_negotiated_protocol_contract(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -331,9 +326,8 @@ def test_structured_results_respect_the_negotiated_protocol_contract(
 
 
 @pytest.mark.parametrize("variant", ["binary", "mixed"])
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_binary_resource_is_preserved_but_never_reported_as_fully_supported(
-    tmp_path: Path, variant: str, engine: str
+    tmp_path: Path, variant: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -350,7 +344,7 @@ def test_binary_resource_is_preserved_but_never_reported_as_fully_supported(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

@@ -29,7 +29,7 @@ class ExitAfterFact:
             os._exit(23)
 
 
-async def run(root: Path, engine: str, adapter: str, phase: str) -> None:
+async def run(root: Path, adapter: str, phase: str) -> None:
     count = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -44,7 +44,7 @@ async def run(root: Path, engine: str, adapter: str, phase: str) -> None:
         return model_response("Created once.")
 
     with pytest.MonkeyPatch.context() as patch:
-        case = RuntimeCase(root, patch, (engine, adapter))
+        case = RuntimeCase(root, patch, adapter)
         async with case.open(handler, observers=(ExitAfterFact(phase),)) as runtime:
             await runtime.coordinator.send(
                 "Create effect.txt exactly once.", new_session_id="crashed"
@@ -55,8 +55,7 @@ async def run(root: Path, engine: str, adapter: str, phase: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
-    parser.add_argument("engine", choices=("native", "langgraph"))
     parser.add_argument("adapter", choices=("native", "langchain"))
     parser.add_argument("phase", choices=tuple(PHASES))
     args = parser.parse_args()
-    asyncio.run(run(args.root, args.engine, args.adapter, args.phase))
+    asyncio.run(run(args.root, args.adapter, args.phase))

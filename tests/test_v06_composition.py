@@ -23,28 +23,21 @@ def _paths(workspace: Path) -> DataPaths:
     )
 
 
-@pytest.mark.parametrize(
-    "field, selected", [("model_adapter", "langchain"), ("runtime_engine", "langgraph")]
-)
-def test_backend_configuration_is_user_scoped_and_cli_overridable(
-    tmp_path: Path, field: str, selected: str
-) -> None:
+def test_only_user_configuration_can_set_backend_options(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     paths.user_config_file.parent.mkdir(parents=True)
-    paths.user_config_file.write_text(f'{field} = "{selected}"\n', encoding="utf-8")
-    resolved = resolve_configuration(tmp_path, data_paths=paths, environment={})
-    assert getattr(resolved, field) == selected
-    overrides = (
-        CliOverrides(model_adapter="native")
-        if field == "model_adapter"
-        else CliOverrides(runtime_engine="native")
-    )
-    resolved = resolve_configuration(tmp_path, overrides, data_paths=paths, environment={})
-    assert getattr(resolved, field) == "native"
     paths.project_config_file.parent.mkdir(parents=True)
-    paths.project_config_file.write_text(f'{field} = "native"\n', encoding="utf-8")
-    with pytest.raises(ConfigurationError, match=field):
-        resolve_configuration(tmp_path, data_paths=paths, environment={})
+    paths.user_config_file.write_text('model_adapter = "langchain"\n', encoding="utf-8")
+    resolved = resolve_configuration(tmp_path, data_paths=paths, environment={})
+    assert resolved.model_adapter == "langchain"
+    overridden = resolve_configuration(
+        tmp_path, CliOverrides(model_adapter="native"), data_paths=paths, environment={}
+    )
+    assert overridden.model_adapter == "native"
+    for field in ("model_adapter", "runtime_engine"):
+        paths.project_config_file.write_text(f'{field} = "native"\n', encoding="utf-8")
+        with pytest.raises(ConfigurationError, match=field):
+            resolve_configuration(tmp_path, data_paths=paths, environment={})
 
 
 @pytest.mark.parametrize("field", ["model_adapter", "runtime_engine"])
@@ -59,14 +52,10 @@ def test_invalid_backend_is_rejected_as_configuration_error(
         resolve_configuration(tmp_path, data_paths=paths, environment={})
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_fake_provider_does_not_construct_a_network_adapter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str
-) -> None:
-    _forbid_other_runner(monkeypatch, engine)
+def test_fake_provider_does_not_construct_a_network_adapter(tmp_path: Path) -> None:
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", model_adapter="langchain", runtime_engine=engine),
+        CliOverrides(provider="fake", model_adapter="langchain"),
         data_paths=_paths(tmp_path),
         environment={},
     )
@@ -83,22 +72,17 @@ def test_fake_provider_does_not_construct_a_network_adapter(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("model_adapter", ["native", "langchain"])
-@pytest.mark.parametrize("restart_field", ["model_adapter", "runtime_engine"])
-def test_four_combinations_archive_reloaded_settings_and_require_backend_restart(
+def test_adapters_archive_reloaded_settings_and_require_restart_on_adapter_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    engine: str,
     model_adapter: str,
-    restart_field: str,
 ) -> None:
-    _forbid_other_runner(monkeypatch, engine)
     paths = _paths(tmp_path)
     paths.user_config_file.parent.mkdir(parents=True)
     paths.user_config_file.write_text(
         f'provider = "deepseek"\nmodel_adapter = "{model_adapter}"\n'
-        f'runtime_engine = "{engine}"\nbase_url = "https://test"\n',
+        'runtime_engine = "native"\nbase_url = "https://test"\n',
         encoding="utf-8",
     )
     paths.project_config_file.parent.mkdir(parents=True)
@@ -141,6 +125,12 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
             try:
                 assert isinstance(runtime.model, adapter_type)
                 first = await runtime.coordinator.send("first")
+                paths.user_config_file.write_text(
+                    paths.user_config_file.read_text(encoding="utf-8").replace(
+                        'runtime_engine = "native"', 'runtime_engine = "langgraph"'
+                    ),
+                    encoding="utf-8",
+                )
                 project("model-b", 9, 2000)
                 second = await runtime.coordinator.send("second", session_id=first.session_id)
                 assert first.result.stop_reason is second.result.stop_reason is StopReason.COMPLETED
@@ -159,16 +149,11 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
                     assert archived.model == model
                     assert archived.settings.timeout_seconds == timeout
                     assert archived.settings.max_output_tokens == maximum
-                selected_adapter = model_adapter
-                selected_engine = engine
+                selected_adapter = "native" if model_adapter == "langchain" else "langchain"
                 sent_before_restart = len(requests)
-                if restart_field == "model_adapter":
-                    selected_adapter = "native" if model_adapter == "langchain" else "langchain"
-                else:
-                    selected_engine = "native" if engine == "langgraph" else "langgraph"
                 paths.user_config_file.write_text(
                     f'provider = "deepseek"\nmodel_adapter = "{selected_adapter}"\n'
-                    f'runtime_engine = "{selected_engine}"\nbase_url = "https://test"\n',
+                    'base_url = "https://test"\n',
                     encoding="utf-8",
                 )
                 with pytest.raises(ValueError, match="changed; restart"):
@@ -185,15 +170,3 @@ def test_four_combinations_archive_reloaded_settings_and_require_backend_restart
     assert all(json.loads(request.content)["model"] == "model-b" for request in requests[1:])
     assert requests[0].extensions["timeout"]["read"] == 4
     assert all(request.extensions["timeout"]["read"] == 9 for request in requests[1:])
-
-
-def _forbid_other_runner(monkeypatch: pytest.MonkeyPatch, engine: str) -> None:
-    def unexpected(*args: object, **kwargs: object) -> None:
-        del args, kwargs
-        raise AssertionError("Composition selected the wrong execution engine")
-
-    monkeypatch.setattr(
-        composition_module,
-        "AgentLoop" if engine == "langgraph" else "LangGraphTurnRunner",
-        unexpected,
-    )

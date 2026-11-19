@@ -1,4 +1,4 @@
-"""Framework-independent contracts shared by the native and graph turn runners."""
+"""Framework-independent contracts for executing a Turn."""
 
 from dataclasses import dataclass
 from typing import Protocol

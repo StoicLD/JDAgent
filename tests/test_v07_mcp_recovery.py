@@ -23,7 +23,6 @@ from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode, ToolResultStatus
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     "cut",
     [
@@ -35,7 +34,7 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode, Tool
     ],
 )
 def test_resume_uses_durable_mcp_evidence_without_replaying_business(
-    tmp_path: Path, engine: str, cut: str
+    tmp_path: Path, cut: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -52,7 +51,7 @@ def test_resume_uses_durable_mcp_evidence_without_replaying_business(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

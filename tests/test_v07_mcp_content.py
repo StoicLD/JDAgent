@@ -17,10 +17,9 @@ from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("mode", ["schema", "business_error", "mixed"])
 def test_complete_structured_data_is_validated_and_content_support_is_explicit(
-    tmp_path: Path, engine: str, mode: str
+    tmp_path: Path, mode: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -38,7 +37,7 @@ def test_complete_structured_data_is_validated_and_content_support_is_explicit(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

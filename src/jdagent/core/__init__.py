@@ -1,1 +1,1 @@
-"""Provider- and adapter-independent agent loop."""
+"""Framework-independent contracts for the Turn lifecycle."""

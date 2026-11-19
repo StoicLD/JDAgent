@@ -49,10 +49,9 @@ def sdk_url(request: pytest.FixtureRequest, tmp_path: Path) -> Generator[str | N
         process.communicate(timeout=5)
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("sdk_url", ["stdio", "json", "sse"], indirect=True)
 def test_sdk_server_tools_resources_and_prompts_share_the_real_runtime(
-    tmp_path: Path, engine: str, sdk_url: str | None
+    tmp_path: Path, sdk_url: str | None
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -73,7 +72,7 @@ def test_sdk_server_tools_resources_and_prompts_share_the_real_runtime(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

@@ -13,9 +13,8 @@ from jdagent.domain.mcp import MCPDirectoryLimits
 from jdagent.domain.tools import ApprovalDecision
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_session_discovers_only_enabled_capabilities_and_reconnects_after_release(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -32,7 +31,7 @@ def test_session_discovers_only_enabled_capabilities_and_reconnects_after_releas
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

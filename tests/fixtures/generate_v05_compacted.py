@@ -8,7 +8,12 @@ import json
 import sys
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, tzinfo
+from importlib import import_module
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from jdagent.core.contracts import TurnRunner
 from unittest.mock import patch
 from uuid import UUID
 
@@ -30,7 +35,6 @@ async def generate(source: Path, destination: Path) -> None:
     from jdagent.context import ContextBuilder
     from jdagent.context_budget import ContextBudget
     from jdagent.context_runtime import ContextService
-    from jdagent.core.loop import AgentLoop
     from jdagent.domain.errors import StopReason
     from jdagent.domain.events import (
         AssistantMessageCompletedPayload,
@@ -124,7 +128,11 @@ async def generate(source: Path, destination: Path) -> None:
             budget=ContextBudget(64000, output_tokens=1024),
         )
         service.request_compaction()
-        loop = AgentLoop(model, builder, FakeToolRuntime(()), journal, context_service=service)
+        # Load the pinned v0.5 implementation from the supplied source tree.
+        native_runner = import_module("jdagent.core.loop").AgentLoop
+        loop: TurnRunner = native_runner(
+            model, builder, FakeToolRuntime(()), journal, context_service=service
+        )
         result = await loop.run("old", ToolExecutionContext("v05-compacted", "old", destination))
         assert result.stop_reason is StopReason.COMPLETED
         commits = [

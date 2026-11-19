@@ -102,12 +102,11 @@ def test_repeated_cancel_reaches_mcp_cleanup_but_keeps_local_transaction_ownersh
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     "boundary", ["registered", "result", "ordinary", "persist", "persist_task"]
 )
 def test_cancellation_after_receipt_keeps_the_received_handle_or_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, boundary: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, boundary: str
 ) -> None:
     publishing, release = threading.Event(), threading.Event()
     original_link = os.link
@@ -136,7 +135,7 @@ def test_cancellation_after_receipt_keeps_the_received_handle_or_result(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -228,10 +227,9 @@ def test_cancellation_after_receipt_keeps_the_received_handle_or_result(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("timeout", ["default", "server", "tool"])
 def test_ordinary_mcp_call_can_outlive_builtin_timeout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, timeout: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timeout: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -253,7 +251,7 @@ def test_ordinary_mcp_call_can_outlive_builtin_timeout(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

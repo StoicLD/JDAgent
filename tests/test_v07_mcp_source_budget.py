@@ -6,8 +6,6 @@ import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-import pytest
-
 from jdagent.adapters.fake import FakeApproval
 from jdagent.composition import build_runtime
 from jdagent.domain.events import MCPInvocationFinishedPayload
@@ -24,9 +22,8 @@ from tests.test_v07_mcp_http import wire_server
 from tests.test_v07_mcp_task_management import task_configuration
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_long_resource_identity_is_bounded_in_preview_and_readback_but_preserved_in_history(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     uri = "docs://" + "a" * 20000
 
@@ -58,7 +55,7 @@ def test_long_resource_identity_is_bounded_in_preview_and_readback_but_preserved
             yield ResponseCompleted("tool_calls")
 
     with wire_server("2026-07-28", "json", materials=True, tools_capability=False) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(path.read_text(encoding="utf-8") + "resources = true\n", encoding="utf-8")
         model = Reader()

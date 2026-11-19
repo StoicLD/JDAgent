@@ -88,7 +88,7 @@ def test_every_call_kind_is_reserved_before_http_and_blocked_when_shared_calls_a
         ) as client:
             adapter = adapter_type("dummy-key", base_url="https://test", client=client)
             try:
-                model = BudgetedModel(adapter, ledger, "native/native", 1)
+                model = BudgetedModel(adapter, ledger, "langgraph/native", 1)
                 events = await collect(model.stream(request("allowed", kind)))
                 assert not any(isinstance(event, ModelFailed) for event in events)
                 reopened = ExperimentLedger(ledger.path, "fixed", ledger.limits)
@@ -129,7 +129,7 @@ def test_token_limit_blocks_transport_before_first_request(
             adapter = adapter_type("dummy-key", base_url="https://test", client=client)
             try:
                 events = await collect(
-                    BudgetedModel(adapter, ledger, "native/native", 1).stream(request("blocked"))
+                    BudgetedModel(adapter, ledger, "langgraph/native", 1).stream(request("blocked"))
                 )
                 assert len(events) == 1 and isinstance(events[0], ModelFailed)
                 assert attempts == 0 and not ledger.entries()
@@ -168,7 +168,7 @@ def test_unknown_usage_keeps_reservation_across_reopen_without_hidden_retry(
         ) as client:
             adapter = adapter_type("dummy-key", base_url="https://test", client=client)
             try:
-                model = BudgetedModel(adapter, ledger, "native/native", 1)
+                model = BudgetedModel(adapter, ledger, "langgraph/native", 1)
                 # A transport exception may be returned as ModelFailed or raised by an SDK.
                 try:
                     await collect(model.stream(request("unknown")))
@@ -200,7 +200,7 @@ def test_crash_reservation_duplicate_id_and_settlement_are_not_refunded_or_doubl
     path = tmp_path / "budget.sqlite"
     limits = ExperimentLimits(3, 10000, 1000)
     ledger = ExperimentLedger(path, "fixed", limits)
-    ledger.reserve(request("crashed"), "native/native", 1)
+    ledger.reserve(request("crashed"), "langgraph/native", 1)
     reopened = ExperimentLedger(path, "fixed", limits)
     assert reopened.entries()[0].status == "reserved"
     with pytest.raises(ExperimentBudgetError, match="already admitted"):
@@ -224,7 +224,7 @@ def test_concurrent_instances_cannot_reserve_the_same_last_slot(tmp_path: Path) 
 
     async def scenario() -> None:
         results = await asyncio.gather(
-            asyncio.to_thread(first.reserve, request("one"), "native/native", 1),
+            asyncio.to_thread(first.reserve, request("one"), "langgraph/native", 1),
             asyncio.to_thread(second.reserve, request("two"), "langgraph/langchain", 2),
             return_exceptions=True,
         )
@@ -247,12 +247,12 @@ def test_partial_usage_does_not_release_reservation_and_overage_stops_later_call
     tmp_path: Path,
 ) -> None:
     ledger = ExperimentLedger(tmp_path / "budget.sqlite", "fixed", ExperimentLimits(3, 200, 100))
-    ledger.reserve(request("partial"), "native/native", 1)
+    ledger.reserve(request("partial"), "langgraph/native", 1)
     assert not ledger.finish("partial", Usage(10, 1), drained=False)
     assert ledger.entries()[0].status == "unknown"
     assert ledger.entries()[0].output_tokens == 100
     with pytest.raises(ExperimentBudgetError, match="exhausted"):
-        ledger.reserve(request("next"), "native/native", 2)
+        ledger.reserve(request("next"), "langgraph/native", 2)
 
 
 def test_provider_usage_over_limit_is_retained_and_marks_response_as_failed(tmp_path: Path) -> None:
@@ -260,7 +260,7 @@ def test_provider_usage_over_limit_is_retained_and_marks_response_as_failed(tmp_
     provider = FakeModelPort(
         scripts=((TextDelta("done"), ResponseCompleted("stop"), UsageReported(Usage(101, 2))),)
     )
-    model = BudgetedModel(provider, ledger, "native/native", 1)
+    model = BudgetedModel(provider, ledger, "langgraph/native", 1)
 
     async def scenario() -> None:
         events = await collect(model.stream(request("overage")))
@@ -285,7 +285,7 @@ def test_invalid_request_cannot_bypass_experiment_admission(tmp_path: Path, inva
     model = FakeModelPort(scripts=((ResponseCompleted("stop"),),))
 
     async def scenario() -> None:
-        events = await collect(BudgetedModel(model, ledger, "native/native", 1).stream(bad))
+        events = await collect(BudgetedModel(model, ledger, "langgraph/native", 1).stream(bad))
         assert isinstance(events[0], ModelFailed)
         assert not model.requests and not ledger.entries()
 
@@ -321,7 +321,7 @@ def test_cancellation_closes_http_and_preserves_unknown_reservation(
             base_url="https://test", transport=httpx.MockTransport(handler)
         ) as client:
             adapter = adapter_type("dummy-key", base_url="https://test", client=client)
-            model = BudgetedModel(adapter, ledger, "native/native", 1)
+            model = BudgetedModel(adapter, ledger, "langgraph/native", 1)
             task = asyncio.create_task(collect(model.stream(request("cancelled"))))
             try:
                 await asyncio.wait_for(entered.wait(), timeout=2)

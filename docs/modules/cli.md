@@ -1,6 +1,6 @@
 # CLI 与配置
 
-核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`；历史运行结果保留原日期与 revision。
 
 状态：`Implemented`（实现说明）
 
@@ -69,10 +69,9 @@ MCP 管理等待也使用同一控制入口；首次对话前发现目录可创�
 `--model-context-window`、`--max-output-tokens` 和 `--max-context-tokens` 分别控制模型容量、
 输出预留和应用上限。后台与总费用配置见[记忆模块](memory.md)。
 
-当前提供 `--runtime-engine native|langgraph` 和 `--model-adapter native|langchain`，
-默认仍为 native/native。对应 `runtime_engine`、`model_adapter` 仅允许用户配置或 CLI 指定，
-项目配置不能覆盖；改变任一后端需退出后重启。Fake 适合检查图执行入口，但不验证真实模型适配器。
-历史真实比较未满足全部目标，见[验证说明](verification.md)。
+所有 Turn 统一进入 LangGraph。DeepSeek 默认用原生适配器，用户配置或 CLI 可指定
+`--model-adapter langchain`，更换适配器后重启。旧引擎参数只参与输入校验与一次 stderr 提示。
+知识管理命令只解析所需的全局参数，`maintain --pending` 恢复已有作业。详见[配置参考](../reference/configuration.md)。
 
 DeepSeek Key 优先读取 `DEEPSEEK_API_KEY`，其次使用用户配置 `api_key_file`，
 最后回退到开发期 `../tmp/keys/deepseek-api-key.txt`。

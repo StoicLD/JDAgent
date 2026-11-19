@@ -17,27 +17,27 @@ from jdagent.application.session_recovery import (
 )
 from jdagent.domain.errors import SessionError, StopReason
 from jdagent.domain.events import RecoverySnapshotPayload, ToolExecutionStartedPayload
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize(
     "phase", ["before_request", "write_started", "result_saved", "turn_completed"]
 )
 def test_crash_recovery_and_native_fallback_never_replay_effects(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    combination: tuple[str, str],
+    model_adapter: str,
     phase: str,
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     process = subprocess.run(
         [
             sys.executable,
             "-m",
             "tests.fixtures.v06_forced_exit",
             str(tmp_path),
-            *combination,
+            model_adapter,
             phase,
         ],
         cwd=Path(__file__).resolve().parents[1],
@@ -110,8 +110,8 @@ def test_crash_recovery_and_native_fallback_never_replay_effects(
             else:
                 assert parent_path.read_bytes().startswith(original)
             preserved = runtime.session.path_for(identity).read_bytes()
-        # Reopen precisely the same data using the fallback combination.
-        async with case.open(handler, combination=("native", "native")) as fallback:
+        # Reopen precisely the same data using the fallback model_adapter.
+        async with case.open(handler, model_adapter="native") as fallback:
             prepared = await prepare_session_resume(
                 session=fallback.session,
                 recovery=SessionRecovery(

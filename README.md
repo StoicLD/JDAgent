@@ -4,7 +4,7 @@ JDAgent 是用于学习和实践 Agent 工程的 Python 命令行程序。它可
 项目文件、执行命令、保存和恢复会话、压缩上下文、检索历史与记忆，并连接 MCP 服务。
 主要运行环境为 Windows，文件写入和进程管理使用 Windows 实现。
 
-当前代码是产品行为的唯一事实来源。本文于 **2026-11-11** 对照 `e23604f` 核对；包版本仍为
+当前代码是产品行为的唯一事实来源。v0.8 的执行路径于 **2026-11-19** 核对，改造前基准为 `9d7cbdc`；包版本仍为
 **0.5.0**，包含后来加入的 LangGraph、LangChain 和 MCP 能力。v0.1–v0.7 是历史开发阶段，
 不能用来推断当前包版本或验收结果。
 
@@ -44,10 +44,11 @@ uv run jdagent --provider deepseek --tool-scope analyze
 | 创建与修改文件 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope edit` |
 | 编辑并运行程序 | `uv run jdagent --workspace 'E:\Projects\Example' --tool-scope execute --command-permission ask` |
 | 单次 JSON 回答 | `uv run jdagent --tool-scope analyze --output json --show-trace "解释项目的启动流程"` |
-| 指定图引擎与模型适配器 | `uv run jdagent --runtime-engine langgraph --model-adapter langchain --tool-scope analyze` |
+| 使用 LangChain 接入 DeepSeek | `uv run jdagent --model-adapter langchain --tool-scope analyze` |
 | 续做已有记忆整理作业 | `uv run jdagent maintain --pending --workspace 'E:\Projects\Example'` |
 
-默认执行引擎和模型适配器为 `native/native`，两项可分别选择，切换后重启。
+每轮统一由 LangGraph 调度。DeepSeek 默认使用原生模型适配器，也可选 LangChain。
+升级到 v0.8 后，删除旧脚本的 `--runtime-engine` 或用户 TOML 中的 `runtime_engine`。两个旧值都会启动 LangGraph，并在 stderr 提示一次。
 默认工具范围为 `execute`，写入与命令需要审批；单次运行不等待人工审批。
 程序在本机执行命令，不提供不可信代码沙箱。
 
@@ -69,7 +70,7 @@ uv run jdagent --provider deepseek --tool-scope analyze
 
 | 范围 | 当前实现 |
 | --- | --- |
-| 执行与模型 | 原生循环或 LangGraph；原生 DeepSeek 或 LangChain 适配器；工具按顺序执行 |
+| 执行与模型 | LangGraph 调度并顺序执行工具。DeepSeek 可选原生或 LangChain 适配器 |
 | 本地工具 | 计算、文件查找／读取／搜索／创建／精确编辑、命令执行及输出分页读取 |
 | 会话与上下文 | JSONL 事件、独占锁、异常恢复、请求归档、预算与压缩；压缩保留原始历史 |
 | 历史与记忆 | 同工作区历史检索、项目／用户记忆、版本与来源、后台整理；未配置 Embedding 时关键词检索 |

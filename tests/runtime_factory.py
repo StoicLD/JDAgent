@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from jdagent.application.coordinator import TurnCoordinator
-from jdagent.composition import ConfiguredLoopFactory
+from jdagent.composition import ConfiguredTurnRunnerFactory
 from jdagent.context_budget import ContextBudget
-from jdagent.core.loop import LoopLimits
+from jdagent.core.contracts import LoopLimits
 from jdagent.domain.model import ModelSettings
 from jdagent.domain.tools import ToolDefinition
 from jdagent.ports import ApprovalPort, EventObserver, ModelPort, SessionPort
@@ -20,7 +20,7 @@ def create_test_coordinator(
     workspace_identity: str | None = None,
     event_observers: tuple[EventObserver, ...] = (),
 ) -> TurnCoordinator:
-    factory = ConfiguredLoopFactory(
+    factory = ConfiguredTurnRunnerFactory(
         model=model,
         model_name="fake",
         provider_name="fake",
@@ -39,7 +39,7 @@ def create_test_coordinator(
     return TurnCoordinator(
         session=session,
         workspace=workspace,
-        loop_factory=factory,
+        runner_factory=factory,
         workspace_identity=workspace_identity,
         event_observers=event_observers,
     )

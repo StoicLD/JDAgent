@@ -1,1 +1,1 @@
-"""Execution engines behind the framework-independent TurnRunner contract."""
+"""LangGraph execution behind the framework-independent TurnRunner contract."""

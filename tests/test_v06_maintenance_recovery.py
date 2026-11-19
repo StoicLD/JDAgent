@@ -18,15 +18,15 @@ from jdagent.domain.events import (
 from jdagent.domain.model import Usage
 from jdagent.eventing import EventJournal
 from jdagent.memory_store import JobLease
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("boundary", ["extraction", "merge", "lease_takeover"])
 def test_reopened_maintenance_reuses_paid_stages_and_stale_lease_cannot_publish(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str], boundary: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_adapter: str, boundary: str
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     source_event = ""
     requests: list[str] = []
 

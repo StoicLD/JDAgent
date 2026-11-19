@@ -25,10 +25,10 @@ from jdagent.domain.events import (
 )
 from jdagent.domain.json import JsonObject, normalize_json, require_array, require_object
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.fixture(params=COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.fixture(params=MODEL_ADAPTERS)
 def case(
     request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> RuntimeCase:

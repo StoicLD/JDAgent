@@ -1,6 +1,6 @@
 # 验证与验收
 
-核对日期：2026-11-11，代码基准：`e23604f`；历史运行结果保留原日期与 revision。
+v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`；历史运行结果保留原日期与 revision。
 
 状态：`Implemented`（证据导航与状态说明）
 
@@ -43,13 +43,15 @@ v0.4 三次真实任务都修复了夹具错误并获得 exit 0，但首次遗�
 Q23 按实际依赖处理跨版本阻塞：相关权限、Session、工具与基础回归问题须处理；
 无关 RAG 质量缺口单独跟踪。既有失败不因此变成通过，新结果也不能覆盖失败尝试。
 
-v0.6 后端已实现：已有真实适配器加假 HTTP 的四组合证据，Windows／Python 3.11 独立安装检查通过
+v0.6 历史验证中，已有真实适配器加假 HTTP 的四组合证据，Windows／Python 3.11 独立安装检查通过
 （[安装证据](../reviews/evidence/v0.6-20261105/implementation-install/README.md)），默认未切换；
 验收映射及本阶段完整回归已记录；[六次实验入口](../archive/2026-11-11/development/v0.6-comparison-runbook.md)已完成
 23 项离线演练，后续[本地自审](../reviews/REV-20261105-002-v0.6-implementation-self-review.md)补追踪隔离
 并修复实验记录校验。首轮获准的 Live 在 B1 暴露相对日志目录问题；修复后的六次对照任务全部通过，
 但目标组仅 T2 满足全部冻结指标，比较门禁尚未通过。独立评审、发布裁定和人工学习出口仍未完成。
 后续新实验继续要求共享总预算、明确授权和目标组开始前冻结的标准，不能改写旧结果。
+
+v0.8 的 CLI、TurnRunner、全量离线、安装与回退结果见[单引擎验证记录](../development/v0.8-langgraph-verification.md)。
 
 ## 测试入口
 
@@ -61,7 +63,7 @@ v0.6 后端已实现：已有真实适配器加假 HTTP 的四组合证据，Win
 | RAG | `test_ingestion.py`、`test_source_revision_regressions.py`、`test_retrieval.py`、`test_citation.py`、`test_v03_eval.py` |
 | v0.5 Context / Memory | `test_v05_*.py`；规模实验与真实模型夹具分别显式 opt-in，见实施记录 |
 | MCP | `test_v07_*.py`；模型工具、CLI、SDK 互操作、Task、原文配额、来源与进程恢复 |
-| v0.6 框架与四组合 | `test_langchain_model.py`、`test_v06_*.py`、`test_model_stream_lifecycle.py`；预算、工具、取消、强退恢复、历史副本和参数快照均有独立入口 |
+| 图引擎与两个 DeepSeek 适配器 | `test_langchain_model.py`、`test_v06_*.py`、`test_model_stream_lifecycle.py`；预算、工具、取消、强退恢复、历史副本和参数快照均有独立入口 |
 
 上述文件都位于 [tests](../../tests)。工具 Eval 使用[v0.4 固定夹具](../../testdata/v0.4-tools/DATASET.md)，
 检索使用[v0.3 Gold](../../testdata/v0.3-gold/DATASET.md)。

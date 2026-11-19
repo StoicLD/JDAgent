@@ -24,9 +24,7 @@ from jdagent.domain.model import (
 from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ModelPort
 
-COMBINATIONS = frozenset(
-    {"native/native", "native/langchain", "langgraph/native", "langgraph/langchain"}
-)
+COMBINATIONS = frozenset({"langgraph/native", "langgraph/langchain"})
 CALL_KINDS = frozenset({"task", "compaction", "citation_repair", "memory"})
 
 

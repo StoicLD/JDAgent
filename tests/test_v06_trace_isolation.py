@@ -12,15 +12,15 @@ from langsmith import (
 
 from jdagent.domain.errors import StopReason
 from jdagent.domain.tools import ToolCall
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS)
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("failure", [False, True])
 def test_ambient_tracing_cannot_construct_or_send_to_a_cloud_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    combination: tuple[str, str],
+    model_adapter: str,
     failure: bool,
 ) -> None:
     for name in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2"):
@@ -36,7 +36,7 @@ def test_ambient_tracing_cannot_construct_or_send_to_a_cloud_client(
 
     for name in ("__init__", "create_run", "update_run", "batch_ingest_runs"):
         monkeypatch.setattr(Client, name, forbidden)
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     case.workspace.mkdir()
     (case.workspace / "note.txt").write_text("Synthetic private task input", encoding="utf-8")
     requests: list[httpx.Request] = []

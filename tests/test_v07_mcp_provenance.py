@@ -24,12 +24,11 @@ from jdagent.domain.model import (
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("history_turn", ["original", "derived_assistant"])
 @pytest.mark.parametrize("history_entry", ["read_history", "search_history"])
 @pytest.mark.parametrize("prompt_entry", ["model", "direct"])
 def test_host_source_survives_prompt_compaction_and_session_reopen(
-    tmp_path: Path, engine: str, history_turn: str, history_entry: str, prompt_entry: str
+    tmp_path: Path, history_turn: str, history_entry: str, prompt_entry: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -46,7 +45,7 @@ def test_host_source_survives_prompt_compaction_and_session_reopen(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

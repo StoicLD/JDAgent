@@ -1,4 +1,4 @@
-"""Exercise real CLI parsing and host wiring with four offline backend combinations."""
+"""Exercise real CLI parsing and host wiring with both offline model adapters."""
 
 import asyncio
 import json
@@ -22,13 +22,11 @@ from jdagent.application.interactive import (
     UserAction,
 )
 from jdagent.cli import main
-from jdagent.core.loop import AgentLoop
 from jdagent.data_paths import DataPaths
 from jdagent.domain.model import ModelEvent, Usage
 from jdagent.domain.tools import ToolCall
 from jdagent.memory_store import MemoryStore
-from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
-from tests.runtime_matrix import COMBINATIONS, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, model_response
 
 
 class IdleCommandsTerminal(ScriptedTerminal):
@@ -92,21 +90,7 @@ class CliCase:
             encoding="utf-8",
         )
 
-    def run(self, combination: tuple[str, str], *arguments: str) -> int:
-        engine, adapter = combination
-
-        def wrong_runner(*args: object, **kwargs: object) -> None:
-            del args, kwargs
-            raise AssertionError("CLI selected the wrong execution engine")
-
-        self.monkeypatch.setattr(
-            composition_module, "AgentLoop", AgentLoop if engine == "native" else wrong_runner
-        )
-        self.monkeypatch.setattr(
-            composition_module,
-            "LangGraphTurnRunner",
-            LangGraphTurnRunner if engine == "langgraph" else wrong_runner,
-        )
+    def run(self, model_adapter: str, *arguments: str) -> int:
         before = len(self.adapters)
         result = main(
             [
@@ -117,14 +101,12 @@ class CliCase:
                 "deepseek",
                 "--base-url",
                 "https://test",
-                "--runtime-engine",
-                engine,
                 "--model-adapter",
-                adapter,
+                model_adapter,
             ]
         )
         assert self.adapters[before:] == [
-            "LangChainModelPort" if adapter == "langchain" else "DeepSeekModelPort"
+            "LangChainModelPort" if model_adapter == "langchain" else "DeepSeekModelPort"
         ]
         return result
 
@@ -146,17 +128,17 @@ def cli_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CliCas
         case.close()
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS)
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("failure", [False, True])
 def test_cli_headless_json_exit_status_and_restart(
     cli_case: CliCase,
     capsys: pytest.CaptureFixture[str],
-    combination: tuple[str, str],
+    model_adapter: str,
     failure: bool,
 ) -> None:
     if failure:
         cli_case.handler = lambda _: httpx.Response(503, json={"error": {"message": "offline"}})
-    assert cli_case.run(combination, "hello", "--output", "json") == (4 if failure else 0)
+    assert cli_case.run(model_adapter, "hello", "--output", "json") == (4 if failure else 0)
     captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
@@ -169,7 +151,7 @@ def test_cli_headless_json_exit_status_and_restart(
         assert payload["answer"] == "CLI answer"
         assert (
             cli_case.run(
-                ("native", "native"),
+                "native",
                 "continue",
                 "--session-id",
                 payload["session_id"],
@@ -184,9 +166,9 @@ def test_cli_headless_json_exit_status_and_restart(
         assert "hello" in cli_case.requests[-1].content.decode()
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS)
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 def test_cli_interactive_context_and_compact_commands_use_selected_backends(
-    cli_case: CliCase, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str]
+    cli_case: CliCase, monkeypatch: pytest.MonkeyPatch, model_adapter: str
 ) -> None:
     (cli_case.workspace / "report.txt").write_text("original report line\n" * 150, encoding="utf-8")
     terminal = IdleCommandsTerminal(
@@ -228,7 +210,7 @@ def test_cli_interactive_context_and_compact_commands_use_selected_backends(
         return model_response("CLI answer")
 
     cli_case.handler = handler
-    assert cli_case.run(combination) == 0
+    assert cli_case.run(model_adapter) == 0
     assert terminal.closed and presenter.closed
     messages = [event.message for event in presenter.events]
     assert sum("input_budget=" in message for message in messages) == 2
@@ -240,13 +222,13 @@ def test_cli_interactive_context_and_compact_commands_use_selected_backends(
     assert not (cli_case.workspace / "protected.txt").exists()
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS)
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 def test_cli_maintain_resumes_jobs_without_creating_sessions_or_repeating_calls(
-    cli_case: CliCase, capsys: pytest.CaptureFixture[str], combination: tuple[str, str]
+    cli_case: CliCase, capsys: pytest.CaptureFixture[str], model_adapter: str
 ) -> None:
     jobs: list[str] = []
     for prompt in ("first source", "second source"):
-        assert cli_case.run(combination, prompt, "--output", "json") == 0
+        assert cli_case.run(model_adapter, prompt, "--output", "json") == 0
         jobs.append(json.loads(capsys.readouterr().out)["maintenance"]["job_id"])
     sessions = sorted(cli_case.paths.sessions_directory.glob("*.jsonl"))
     snapshots = {path: path.read_bytes() for path in sessions}
@@ -260,13 +242,13 @@ def test_cli_maintain_resumes_jobs_without_creating_sessions_or_repeating_calls(
         return model_response('{"candidates":[]}', usage=Usage(12, 4))
 
     cli_case.handler = handler
-    assert cli_case.run(combination, "maintain", "--pending") == 0
+    assert cli_case.run(model_adapter, "maintain", "--pending") == 0
     assert capsys.readouterr().out == ""
     store = MemoryStore(cli_case.paths.project_directory.parent.parent / "memory-v5.sqlite")
     assert all(store.job_status(job) == "succeeded" for job in jobs)
     calls = len(cli_case.requests)
     assert calls > 2
-    assert cli_case.run(combination, "maintain", "--pending") == 0
+    assert cli_case.run(model_adapter, "maintain", "--pending") == 0
     assert capsys.readouterr().out == ""
     assert len(cli_case.requests) == calls
     assert {

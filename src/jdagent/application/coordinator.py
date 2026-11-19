@@ -60,8 +60,8 @@ from jdagent.observability import TraceProjection
 from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 
 
-class AgentLoopFactory(Protocol):
-    """Create a configured loop for a per-session journal."""
+class TurnRunnerFactory(Protocol):
+    """Create a configured TurnRunner for a per-session journal."""
 
     def create(self, journal: RuntimeJournal) -> TurnRunner: ...
 
@@ -142,7 +142,7 @@ class TurnCoordinator:
         *,
         session: SessionPort,
         workspace: Path,
-        loop_factory: AgentLoopFactory,
+        runner_factory: TurnRunnerFactory,
         event_observers: tuple[EventObserver, ...] = (),
         workspace_identity: str | None = None,
         knowledge_catalog: Path | None = None,
@@ -155,7 +155,7 @@ class TurnCoordinator:
     ) -> None:
         self._session = session
         self._workspace = workspace
-        self._loop_factory = loop_factory
+        self._runner_factory = runner_factory
         self._event_observers = event_observers
         self._workspace_identity = workspace_identity
         self._knowledge_catalog = knowledge_catalog
@@ -183,11 +183,11 @@ class TurnCoordinator:
             self.memory.views.clear()
 
     async def context_window(self, session_id: str) -> WindowSnapshot:
-        service = self._loop_factory.context_for(session_id)
+        service = self._runner_factory.context_for(session_id)
         if service is None:
             journal = await EventJournal.open(self._session, session_id, require_existing=True)
-            self._loop_factory.create(journal)
-            service = self._loop_factory.context_for(session_id)
+            self._runner_factory.create(journal)
+            service = self._runner_factory.context_for(session_id)
         assert service is not None
         return await service.preview_window()
 
@@ -196,7 +196,7 @@ class TurnCoordinator:
             raise SessionError(SessionErrorCode.BUSY, "session_busy: MCP operation running")
         if session_id in self._running or session_id in self._compacting:
             self._pending_compactions.add(session_id)
-            service = self._loop_factory.context_for(session_id)
+            service = self._runner_factory.context_for(session_id)
             if service is not None:
                 service.request_compaction()
             return "compaction queued; waiting for the complete tool batch"
@@ -205,8 +205,8 @@ class TurnCoordinator:
             await self._session.acquire(session_id)
             self._owned_sessions.add(session_id)
             journal = await EventJournal.open(self._session, session_id, require_existing=True)
-            self._loop_factory.create(journal)
-            service = self._loop_factory.context_for(session_id)
+            self._runner_factory.create(journal)
+            service = self._runner_factory.context_for(session_id)
             assert service is not None
             snapshot = await service.compact_now()
             return (
@@ -235,7 +235,7 @@ class TurnCoordinator:
         """Read only local state; never connect or reload configuration here."""
         if self._mcp is None:
             return ()
-        return self._mcp.status(session_id, self._loop_factory.mcp_configuration())
+        return self._mcp.status(session_id, self._runner_factory.mcp_configuration())
 
     async def create_session(self) -> str:
         """Create an owned empty Session for explicit commands without starting a Turn."""
@@ -282,7 +282,7 @@ class TurnCoordinator:
         self._mcp_operations.add(session_id)
         try:
             if configure:
-                await asyncio.to_thread(self._loop_factory.prepare_turn)
+                await asyncio.to_thread(self._runner_factory.prepare_turn)
             await self._session.acquire(session_id)
             self._owned_sessions.add(session_id)
             journal = await EventJournal.open(self._session, session_id, require_existing=True)
@@ -293,7 +293,7 @@ class TurnCoordinator:
             ):
                 raise ValueError("MCP Session belongs to a different workspace")
             if configure and self._mcp is not None:
-                await self._mcp.configure(session_id, self._loop_factory.mcp_configuration())
+                await self._mcp.configure(session_id, self._runner_factory.mcp_configuration())
             yield journal
         finally:
             self._mcp_operations.discard(session_id)
@@ -382,7 +382,7 @@ class TurnCoordinator:
         direct_prompt = parse_mcp_prompt(user_text)
         if direct_prompt is not None and self._mcp_prompts is None:
             raise ValueError("MCP Prompt commands are unavailable")
-        await asyncio.to_thread(self._loop_factory.prepare_turn)
+        await asyncio.to_thread(self._runner_factory.prepare_turn)
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
         actual_session_id = session_id or new_session_id or str(uuid4())
@@ -419,7 +419,7 @@ class TurnCoordinator:
                 ),
             )
         if self._mcp is not None:
-            await self._mcp.configure(actual_session_id, self._loop_factory.mcp_configuration())
+            await self._mcp.configure(actual_session_id, self._runner_factory.mcp_configuration())
         user_event = await journal.record(
             turn_id,
             RuntimeEventType.USER_MESSAGE,
@@ -528,7 +528,7 @@ class TurnCoordinator:
 
         cancellation = cancellation or CancellationToken()
         if cancellation.cancelled:
-            result = await self._fail_before_loop(
+            result = await self._fail_before_run(
                 journal,
                 turn_id,
                 "knowledge_preparation_cancelled",
@@ -549,7 +549,7 @@ class TurnCoordinator:
             retrieval_payload(knowledge),
         )
         if cancellation.cancelled:
-            result = await self._fail_before_loop(
+            result = await self._fail_before_run(
                 journal,
                 turn_id,
                 "process_interrupted",
@@ -571,7 +571,7 @@ class TurnCoordinator:
                     ),
                 )
             except asyncio.CancelledError:
-                result = await self._fail_before_loop(journal, turn_id, "mcp_prompt_cancelled")
+                result = await self._fail_before_run(journal, turn_id, "mcp_prompt_cancelled")
                 return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
             clarify = (
                 allow_prompt_clarification
@@ -590,13 +590,13 @@ class TurnCoordinator:
                 )
                 result = TurnResult(reason, prepared.message, 0, 0, category)
                 return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
-        loop = self._loop_factory.create(journal)
+        runner = self._runner_factory.create(journal)
         if actual_session_id in self._pending_compactions:
-            service = self._loop_factory.context_for(actual_session_id)
+            service = self._runner_factory.context_for(actual_session_id)
             assert service is not None
             service.request_compaction()
             self._pending_compactions.discard(actual_session_id)
-        result = await loop.run(
+        result = await runner.run(
             turn_id,
             ToolExecutionContext(
                 actual_session_id,
@@ -633,7 +633,7 @@ class TurnCoordinator:
             actual_session_id, turn_id, result, trace, knowledge, maintenance_job
         )
 
-    async def _fail_before_loop(
+    async def _fail_before_run(
         self, journal: EventJournal, turn_id: str, error_category: str
     ) -> TurnResult:
         await journal.record(

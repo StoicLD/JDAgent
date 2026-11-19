@@ -1,6 +1,6 @@
 # JDAgent 文档地图
 
-状态：`Implemented`（当前实现导航）。核对日期：2026-11-11，代码基准：`e23604f`。
+状态：`Implemented`（当前实现导航）。v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 
 **当前代码是产品行为的唯一事实来源。** 本目录解释代码；历史方案、计划和验收用于追溯，
 不能据此声称代码已有某项能力。发现说明与实现不一致时，核对代码并修订说明。
@@ -17,12 +17,13 @@
 | 修改代码 | [当前状态](context/current.md) → [协作规则](development/agent-collaboration.md) → [开发指南](development/contributing.md) |
 | 查验测试与限制 | [验证与验收](modules/verification.md)及模块内的代码／测试链接 |
 | 查历史取舍、审批和版本证据 | [ADR 索引](decisions/README.md)、[归档索引](archive/README.md) |
+| 查看 v0.8 实现范围 | [LangGraph 单执行引擎的改造规格与实施计划](plans/v0.8-langgraph-turn-runner.md)、[验证记录](development/v0.8-langgraph-verification.md)及 [GitHub Issue #3](https://github.com/StoicLD/JDAgent/issues/3) |
 
 ## 当前模块
 
 | 模块 | 回答的问题 |
 | --- | --- |
-| [运行时](modules/runtime.md) | Coordinator、原生循环与图引擎怎样执行一轮任务 |
+| [运行时](modules/runtime.md) | Coordinator 与图执行器怎样执行一轮任务 |
 | [模型](modules/models.md)／[ModelPort 合同](architecture/model-port.md) | 模型请求、流和错误怎样跨越适配器边界 |
 | [上下文](modules/context.md) | 请求如何构造、计量、归档和压缩 |
 | [历史与记忆](modules/memory.md) | 如何检索旧会话、保存记忆版本、整理和计费 |

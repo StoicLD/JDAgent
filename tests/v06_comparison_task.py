@@ -82,9 +82,15 @@ class Sample:
 
 SAMPLES = tuple(
     Sample(f"{group}{attempt}", engine, adapter, attempt)
-    for group, engine, adapter in (("B", "native", "native"), ("T", "langgraph", "langchain"))
+    for group, engine, adapter in (("B", "langgraph", "native"), ("T", "langgraph", "langchain"))
     for attempt in (1, 2, 3)
 )
+
+
+def require_offline_rehearsal(base_url: str) -> None:
+    """The live dual-engine experiment is reproducible from its pinned v0.6 revision."""
+    if base_url != "https://test":
+        raise ValueError("The v0.6 live comparison requires its original revision c9b5fb0")
 
 
 def fixture_fingerprint() -> JsonObject:
@@ -190,8 +196,9 @@ async def run_fixed_task(
     file is created only once. Cancellation propagates after writing its outcome;
     process death leaves the caller's durable claim and ledger reservations intact.
     """
-    if not api_key.strip():
-        raise ValueError("An explicit experiment credential is required")
+    require_offline_rehearsal(base_url)
+    if api_key != "dummy-key":
+        raise ValueError("Offline endpoint accepts only the synthetic test key")
     if sample not in SAMPLES:
         raise ValueError("Only the six fixed comparison samples are allowed")
     report: JsonObject = {
@@ -210,7 +217,6 @@ async def run_fixed_task(
                 provider="deepseek",
                 model=model,
                 base_url=base_url,
-                runtime_engine=sample.engine,
                 model_adapter=sample.adapter,
                 data_dir=root / "sessions",
             ),

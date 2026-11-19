@@ -25,9 +25,8 @@ from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_direct_prompt_obeys_reloaded_user_result_quota(tmp_path: Path, engine: str) -> None:
-    config = prompt_configuration(tmp_path, engine)
+def test_direct_prompt_obeys_reloaded_user_result_quota(tmp_path: Path) -> None:
+    config = prompt_configuration(tmp_path)
     path = config.data_paths.user_config_file
     original_config = path.read_text(encoding="utf-8")
     model = FakeModelPort(scripts=((TextDelta("Explained."), ResponseCompleted("stop")),))
@@ -65,7 +64,7 @@ def test_direct_prompt_obeys_reloaded_user_result_quota(tmp_path: Path, engine: 
     asyncio.run(scenario())
 
 
-def prompt_configuration(tmp_path: Path, engine: str) -> ResolvedConfiguration:
+def prompt_configuration(tmp_path: Path) -> ResolvedConfiguration:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -81,17 +80,16 @@ def prompt_configuration(tmp_path: Path, engine: str) -> ResolvedConfiguration:
     )
     return resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_headless_direct_prompt_keeps_template_separate_from_user_facts_after_reopen(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
-    config = prompt_configuration(tmp_path, engine)
+    config = prompt_configuration(tmp_path)
     command = '/mcp prompt docs explain topic="MCP connections"'
     model = FakeModelPort(
         scripts=((TextDelta("Explained."), ResponseCompleted("stop")),), repeat_last=True
@@ -137,11 +135,8 @@ def test_headless_direct_prompt_keeps_template_separate_from_user_facts_after_re
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_direct_prompt_wait_can_be_cancelled_before_starting_a_model(
-    tmp_path: Path, engine: str
-) -> None:
-    config = prompt_configuration(tmp_path, engine)
+def test_direct_prompt_wait_can_be_cancelled_before_starting_a_model(tmp_path: Path) -> None:
+    config = prompt_configuration(tmp_path)
     gate = tmp_path / "prompt-call"
     command = f'/mcp prompt docs explain topic="fixture_gate:{gate.as_posix()}"'
     model = FakeModelPort(scripts=((TextDelta("Must not run"), ResponseCompleted("stop")),))
@@ -177,11 +172,10 @@ def test_direct_prompt_wait_can_be_cancelled_before_starting_a_model(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_direct_prompt_preview_fits_remaining_window_and_original_remains_readable(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
-    config = prompt_configuration(tmp_path, engine)
+    config = prompt_configuration(tmp_path)
     config = resolve_configuration(
         tmp_path,
         replace(config.cli_overrides, max_context_tokens=12000, max_output_tokens=512),
@@ -248,12 +242,11 @@ def test_direct_prompt_preview_fits_remaining_window_and_original_remains_readab
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("missing", [False, True])
 def test_interactive_prompt_command_fetches_material_or_asks_for_missing_arguments(
-    tmp_path: Path, engine: str, missing: bool
+    tmp_path: Path, missing: bool
 ) -> None:
-    config = prompt_configuration(tmp_path, engine)
+    config = prompt_configuration(tmp_path)
     command = "/mcp prompt docs explain" + ("" if missing else ' topic="interactive topic"')
     model = FakeModelPort(
         scripts=(
@@ -306,7 +299,6 @@ def test_interactive_prompt_command_fetches_material_or_asks_for_missing_argumen
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     ("command", "category"),
     [
@@ -315,9 +307,9 @@ def test_interactive_prompt_command_fetches_material_or_asks_for_missing_argumen
     ],
 )
 def test_headless_prompt_errors_are_explicit_without_waiting_for_input_or_model(
-    tmp_path: Path, engine: str, command: str, category: str
+    tmp_path: Path, command: str, category: str
 ) -> None:
-    config = prompt_configuration(tmp_path, engine)
+    config = prompt_configuration(tmp_path)
     model = FakeModelPort(scripts=((TextDelta("Must not run"), ResponseCompleted("stop")),))
 
     async def scenario() -> None:

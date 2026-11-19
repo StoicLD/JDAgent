@@ -38,7 +38,7 @@ from jdagent.mcp_task_management import MCPTaskAction
 from tests.test_v07_mcp_http import TaskPeerState, wire_server
 
 
-def task_configuration(tmp_path: Path, url: str, engine: str) -> ResolvedConfiguration:
+def task_configuration(tmp_path: Path, url: str) -> ResolvedConfiguration:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -52,7 +52,7 @@ def task_configuration(tmp_path: Path, url: str, engine: str) -> ResolvedConfigu
     )
     return resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -100,13 +100,12 @@ async def leave_running_task(config: ResolvedConfiguration) -> tuple[str, str]:
         await runtime.aclose()
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_management_cancellation_after_terminal_receipt_preserves_result_across_restart(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -161,13 +160,12 @@ def test_management_cancellation_after_terminal_receipt_preserves_result_across_
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_repeated_management_queries_respect_updated_poll_hint_across_restart(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -191,13 +189,12 @@ def test_repeated_management_queries_respect_updated_poll_hint_across_restart(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_management_retains_result_when_unsupported_input_finishes_during_cancel(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -226,14 +223,13 @@ def test_management_retains_result_when_unsupported_input_finishes_during_cancel
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("terminal", ["failed", "cancelled", "working"])
 def test_only_confirmed_terminal_management_releases_unused_business_result_reservation(
-    tmp_path: Path, engine: str, terminal: str
+    tmp_path: Path, terminal: str
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -284,14 +280,13 @@ def test_only_confirmed_terminal_management_releases_unused_business_result_rese
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("honor_cancel", [True, False])
 def test_explicit_cancel_distinguishes_remote_terminal_from_acknowledgement(
-    tmp_path: Path, engine: str, honor_cancel: bool
+    tmp_path: Path, honor_cancel: bool
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -331,7 +326,7 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, "native")
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -376,13 +371,12 @@ def test_management_validates_workspace_and_private_object_before_any_task_reque
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_original_task_management_does_not_unlock_a_session_with_uncertain_local_write(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -438,13 +432,12 @@ def test_original_task_management_does_not_unlock_a_session_with_uncertain_local
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_management_result_after_crash_is_used_when_closing_the_original_model_call(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -493,12 +486,11 @@ def test_management_result_after_crash_is_used_when_closing_the_original_model_c
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("action", ["query", "cancel"])
 def test_stdio_restart_reports_lost_task_without_creating_replacement(
-    tmp_path: Path, engine: str, action: MCPTaskAction
+    tmp_path: Path, action: MCPTaskAction
 ) -> None:
-    config = task_configuration(tmp_path, "http://127.0.0.1:1/mcp", engine)
+    config = task_configuration(tmp_path, "http://127.0.0.1:1/mcp")
     peer = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
     config.data_paths.user_config_file.write_text(
         "[memory]\nauto_consolidation = false\n"
@@ -527,14 +519,13 @@ def test_stdio_restart_reports_lost_task_without_creating_replacement(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("updated_ttl", [1, None])
 def test_latest_retention_survives_restart_without_resetting_the_creation_time(
-    tmp_path: Path, engine: str, updated_ttl: int | None
+    tmp_path: Path, updated_ttl: int | None
 ) -> None:
     state = TaskPeerState(created_at="2020-01-01T00:00:00Z", ttl_ms=10**15)
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -565,14 +556,13 @@ def test_latest_retention_survives_restart_without_resetting_the_creation_time(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("change", ["account", "endpoint", "tool_removed", "disabled", "missing"])
 def test_original_task_binding_is_checked_before_remote_management(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, change: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         configuration_file = config.data_paths.user_config_file
         configuration_file.write_text(
             configuration_file.read_text(encoding="utf-8")
@@ -637,9 +627,8 @@ def test_original_task_binding_is_checked_before_remote_management(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_reopened_session_queries_original_task_without_restarting_agent_or_repeating_tool(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
@@ -656,7 +645,7 @@ def test_reopened_session_queries_original_task_without_restarting_agent_or_repe
         )
         config = resolve_configuration(
             tmp_path,
-            CliOverrides(provider="fake", runtime_engine=engine),
+            CliOverrides(provider="fake"),
             data_paths=paths,
             environment={},
         )
@@ -776,14 +765,13 @@ def test_reopened_session_queries_original_task_without_restarting_agent_or_repe
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("fault", ["changed_id", "changed_creation", "missing_cancel"])
 def test_management_rejects_substituted_handles_and_reports_rejected_cancel(
-    tmp_path: Path, engine: str, fault: str
+    tmp_path: Path, fault: str
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)

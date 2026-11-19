@@ -1,13 +1,13 @@
 # 当前实现术语
 
-状态：`Implemented`。核对日期：2026-11-11，代码基准：`e23604f`。
+状态：`Implemented`。v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 
 | 术语 | 在当前代码中的含义 |
 | --- | --- |
 | Workspace | 已存在的目标目录；规范绝对路径的 SHA-256 决定项目数据身份 |
 | Session | 追加事件组成的持久对话，由 OS 独占锁保护，可包含多轮输入 |
 | Turn | 一次普通输入或直接 Prompt 所触发的执行，可多次调用模型与工具 |
-| TurnRunner | 一轮调度的接口，由 AgentLoop 或 LangGraphTurnRunner 实现 |
+| TurnRunner | 一轮调度的接口，由 LangGraphTurnRunner 实现 |
 | ModelPort | 统一请求与异步模型事件流的接口；适配器负责 Provider 协议转换 |
 | Runtime Event | 已保存的用户、模型、工具、权限、费用和终态等事实 |
 | Context | 某次模型请求实际看到的消息、指令、工具和证据，不是完整 Session 文件 |

@@ -12,17 +12,17 @@ from jdagent.adapters.jsonl_recovery import JsonlRecoveryStore
 from jdagent.application.session_recovery import SessionRecovery, prepare_session_resume
 from jdagent.domain.errors import SessionError, StopReason
 from jdagent.domain.events import RecoverySnapshotPayload, ToolExecutionStartedPayload
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 FIXTURE = Path(__file__).resolve().parents[1] / "testdata" / "v0.5-sessions"
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("mode", ["complete", "safe", "unknown_started", "unknown_result"])
-def test_v05_session_copy_opens_in_selected_backend_and_native_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str], mode: str
+def test_v05_session_copy_opens_with_selected_adapter_then_native_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_adapter: str, mode: str
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     case.workspace.mkdir()
     identity = f"v05-{mode}"
     original = (FIXTURE / f"{identity}.jsonl").read_bytes()
@@ -79,7 +79,7 @@ def test_v05_session_copy_opens_in_selected_backend_and_native_fallback(
                 isinstance(e.payload, ToolExecutionStartedPayload) for e in after[len(before) :]
             )
             preserved = runtime.session.path_for(resumed).read_bytes()
-        async with case.open(handler, combination=("native", "native")) as runtime:
+        async with case.open(handler, model_adapter="native") as runtime:
             assert runtime.session.path_for(resumed).read_bytes() == preserved
             prepared = await prepare_session_resume(
                 session=runtime.session,

@@ -1,4 +1,4 @@
-"""Direct memory intent, versions and suppression through all four compositions."""
+"""Direct memory intent, versions and suppression through both model adapters."""
 
 import asyncio
 import json
@@ -12,15 +12,15 @@ from jdagent.domain.errors import StopReason
 from jdagent.domain.events import ToolExecutionCompletedPayload
 from jdagent.domain.json import normalize_json, require_object
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("forged", [False, True], ids=["bound_intent", "forged_statement"])
 def test_memory_intent_versions_disable_and_expiry_survive_backend_choice(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str], forged: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_adapter: str, forged: bool
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     approval = FakeApproval(ApprovalDecision.REJECT)
     requests = 0
     prefix = "Current direct user memory intent; use update_memory with exactly these arguments: "

@@ -13,7 +13,7 @@ from jdagent.application.session_recovery import (
     close_interrupted_turn,
 )
 from jdagent.context import ContextBuilder, ContextLimitError, project_messages
-from jdagent.core.loop import AgentLoop, LoopLimits
+from jdagent.core.contracts import LoopLimits
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -43,6 +43,7 @@ from jdagent.domain.tools import (
     ToolOutcome,
 )
 from jdagent.eventing import EventJournal
+from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 from jdagent.tools.builtins import create_builtin_tools
 from jdagent.tools.command_output import CommandLogs
 from jdagent.tools.commands import create_command_tools
@@ -251,7 +252,7 @@ def test_stop_pairs_pending_calls_without_executing_them(tmp_path: Path) -> None
             FakeApproval(ApprovalDecision.APPROVE),
             recorder=journal,
         )
-        result = await AgentLoop(
+        result = await LangGraphTurnRunner(
             model, ContextBuilder(model="fake", tools=(tool,)), runtime, journal
         ).run("t", ToolExecutionContext("s", "t", tmp_path))
         assert result.stop_reason is StopReason.LIMIT_REACHED
@@ -325,7 +326,7 @@ def test_failure_recovery_budget_stops_after_two_retries(tmp_path: Path) -> None
                 for i in range(4)
             )
         )
-        result = await AgentLoop(
+        result = await LangGraphTurnRunner(
             model,
             ContextBuilder(model="fake", tools=(tool,)),
             ToolRuntime(

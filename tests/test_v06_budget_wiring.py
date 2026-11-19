@@ -31,10 +31,9 @@ from jdagent.ports import ModelPort
 from tests.experiment_budget import BudgetedModel, ExperimentLedger, ExperimentLimits
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("adapter_name", ["native", "langchain"])
 def test_task_compaction_repair_and_memory_share_one_experiment_ledger(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, adapter_name: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adapter_name: str
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -52,7 +51,6 @@ def test_task_compaction_repair_and_memory_share_one_experiment_ledger(
         CliOverrides(
             provider="deepseek",
             base_url="https://test",
-            runtime_engine=engine,
             model_adapter=adapter_name,
         ),
         data_paths=paths,
@@ -123,7 +121,7 @@ def test_task_compaction_repair_and_memory_share_one_experiment_ledger(
 
             def wrap(model: ModelPort) -> ModelPort:
                 assert isinstance(model, adapter_type)
-                return BudgetedModel(model, ledger, f"{engine}/{adapter_name}", 1)
+                return BudgetedModel(model, ledger, f"langgraph/{adapter_name}", 1)
 
             runtime = build_runtime(
                 config, FakeApproval(ApprovalDecision.APPROVE), model_wrapper=wrap
@@ -190,7 +188,7 @@ def test_task_compaction_repair_and_memory_share_one_experiment_ledger(
     assert set(captured_kinds) == {"task", "compaction", "citation_repair", "memory"}
     assert len(entries) == len(captured_kinds)
     assert [entry.call_kind for entry in entries] == captured_kinds
-    assert all(entry.combination == f"{engine}/{adapter_name}" for entry in entries)
+    assert all(entry.combination == f"langgraph/{adapter_name}" for entry in entries)
     assert all(
         (entry.input_tokens, entry.output_tokens, entry.status) == (12, 4, "settled")
         for entry in entries

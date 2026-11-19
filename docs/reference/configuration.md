@@ -1,6 +1,6 @@
 # 配置参考
 
-状态：`Implemented`。核对日期：2026-11-11，代码基准：`e23604f`。
+状态：`Implemented`。v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 字段以 [configuration.py](../../src/jdagent/configuration.py)、CLI 参数以 [cli.py](../../src/jdagent/cli.py) 为准。
 首次运行见[使用教程](../guides/usage.md)，MCP 的嵌套结构见[MCP 教程](../guides/mcp.md)。
 
@@ -23,7 +23,7 @@ MCP 有专门的逐 Server 收窄规则，不使用普通覆盖逻辑。
 | --- | --- | --- | --- |
 | `provider` | `deepseek`（也支持 `fake`） | 用户 | `--provider` |
 | `model_adapter` | `native`（也支持 `langchain`） | 用户 | `--model-adapter` |
-| `runtime_engine` | `native`（也支持 `langgraph`） | 用户 | `--runtime-engine` |
+| `runtime_engine`（v0.8 兼容项） | 省略，统一由 LangGraph 执行 | 仅用户，旧值 `native`、`langgraph` 均接受 | `--runtime-engine`（已弃用） |
 | `model` | `deepseek-v4-flash` | 两层 | `--model` |
 | `base_url` | `https://api.deepseek.com` | 用户 | `--base-url` |
 | `api_key_file` | 未设置，使用开发期兼容路径作为最后回退 | 用户 | 无 |
@@ -46,6 +46,7 @@ MCP 有专门的逐 Server 收窄规则，不使用普通覆盖逻辑。
 
 `--workspace`、`--session-id`、`--data-dir`、`--output text|json`、`--show-trace` 是 CLI 入口参数，
 不能直接写成 TOML 顶层字段。`--output` 需要同时提供单次 Prompt。
+显式提供旧引擎值时 stderr 提示一次。删除该字段即可，逐轮重读旧值也会去重。
 普通 CLI 没有 `--write-permission`；通过 TOML 管理文件写权限。
 
 **现有接线限制**：上述三个调用／失败次数字段可以被配置解析器接受，但普通 CLI 的
@@ -84,7 +85,7 @@ stdio MCP 的相对 cwd 相对于用户配置目录，省略 cwd 使用 workspac
 ## 配置何时生效
 
 Turn 开始重读配置；当前轮的指令和已建立请求保持快照。模型名、预算、工具范围等在下一轮生效。
-Provider、base_url、执行引擎、模型适配器或记忆 Embedding Profile 变化需要重启。
+Provider、base_url、模型适配器或记忆 Embedding Profile 变化需要重启。
 MCP 配置和结果配额在空闲后的下一次相关操作重读；正在执行的操作保留开始时限额。
 
 ## 数据位置

@@ -14,10 +14,9 @@ from tests.test_v07_mcp_http import wire_server
 from tests.test_v07_mcp_task_management import task_configuration
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("version", ["2025-11-25", "2026-07-28"])
 def test_tool_arguments_emit_versioned_headers_from_the_loaded_definition(
-    tmp_path: Path, engine: str, version: str
+    tmp_path: Path, version: str
 ) -> None:
     schema: dict[str, object] = {
         "type": "object",
@@ -33,7 +32,7 @@ def test_tool_arguments_emit_versioned_headers_from_the_loaded_definition(
     }
     headers: list[dict[str, str]] = []
     with wire_server(version, "json", tool_schema=schema, parameter_headers=headers) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             model = FakeModelPort(
@@ -87,10 +86,9 @@ def test_tool_arguments_emit_versioned_headers_from_the_loaded_definition(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("invalid", ["root", "duplicate", "number"])
 def test_invalid_header_annotations_are_isolated_before_model_exposure(
-    tmp_path: Path, engine: str, invalid: str
+    tmp_path: Path, invalid: str
 ) -> None:
     schema: dict[str, object] = {"type": "object"}
     if invalid == "root":
@@ -110,7 +108,7 @@ def test_invalid_header_annotations_are_isolated_before_model_exposure(
         requests=methods,
         extra_tools=({"name": "small", "inputSchema": {"type": "object"}},),
     ) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(
             path.read_text(encoding="utf-8").replace(

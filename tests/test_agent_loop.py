@@ -1,12 +1,10 @@
 import asyncio
 from pathlib import Path
 
-import pytest
-
 from jdagent.adapters.fake import FakeModelPort, FakeToolRuntime
 from jdagent.adapters.memory import InMemorySession
 from jdagent.context import ContextBuilder
-from jdagent.core.loop import AgentLoop, CancellationToken, LoopLimits
+from jdagent.core.contracts import CancellationToken, LoopLimits
 from jdagent.domain.errors import StopReason
 from jdagent.domain.events import (
     RuntimeEventType,
@@ -29,9 +27,6 @@ from jdagent.domain.tools import (
 from jdagent.eventing import EventJournal
 from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 
-RunnerType = type[AgentLoop] | type[LangGraphTurnRunner]
-pytestmark = pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
-
 
 async def _journal_with_user() -> tuple[InMemorySession, EventJournal]:
     session = InMemorySession()
@@ -41,11 +36,11 @@ async def _journal_with_user() -> tuple[InMemorySession, EventJournal]:
     return session, journal
 
 
-def test_agent_loop_completes_text_turn(tmp_path: Path, runner_type: RunnerType) -> None:
+def test_agent_loop_completes_text_turn(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, EventJournal]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(scripts=((TextDelta("hello"), ResponseCompleted("stop")),))
-        loop = runner_type(
+        loop = LangGraphTurnRunner(
             model,
             ContextBuilder(model="fake"),
             FakeToolRuntime(()),
@@ -61,9 +56,7 @@ def test_agent_loop_completes_text_turn(tmp_path: Path, runner_type: RunnerType)
     assert journal.events[-1].event_type is RuntimeEventType.TURN_COMPLETED
 
 
-def test_agent_loop_completes_serial_tool_round_trip(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_agent_loop_completes_serial_tool_round_trip(tmp_path: Path) -> None:
     call = ToolCall("call-1", "calculator", {"expression": "2 + 3"})
 
     async def scenario() -> tuple[StopReason, FakeModelPort, EventJournal]:
@@ -77,7 +70,7 @@ def test_agent_loop_completes_serial_tool_round_trip(
         tools = FakeToolRuntime(
             (ToolResult("call-1", "calculator", ToolResultStatus.SUCCESS, output="5"),)
         )
-        loop = runner_type(model, ContextBuilder(model="fake"), tools, journal)
+        loop = LangGraphTurnRunner(model, ContextBuilder(model="fake"), tools, journal)
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, model, journal
 
@@ -91,13 +84,15 @@ def test_agent_loop_completes_serial_tool_round_trip(
     )
 
 
-def test_agent_loop_stops_when_cancelled(tmp_path: Path, runner_type: RunnerType) -> None:
+def test_agent_loop_stops_when_cancelled(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, FakeModelPort]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(scripts=((TextDelta("unexpected"), ResponseCompleted("stop")),))
         cancellation = CancellationToken()
         cancellation.cancel()
-        loop = runner_type(model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal)
+        loop = LangGraphTurnRunner(
+            model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal
+        )
         result = await loop.run("turn-1", _tool_context(tmp_path), cancellation=cancellation)
         return result.stop_reason, model
 
@@ -107,11 +102,13 @@ def test_agent_loop_stops_when_cancelled(tmp_path: Path, runner_type: RunnerType
     assert model.requests == []
 
 
-def test_agent_loop_classifies_model_timeout(tmp_path: Path, runner_type: RunnerType) -> None:
+def test_agent_loop_classifies_model_timeout(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, str | None]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(scripts=((ModelFailed(ModelErrorCategory.TIMEOUT, "safe timeout"),),))
-        loop = runner_type(model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal)
+        loop = LangGraphTurnRunner(
+            model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal
+        )
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, result.error_category
 
@@ -121,15 +118,15 @@ def test_agent_loop_classifies_model_timeout(tmp_path: Path, runner_type: Runner
     assert error_category == "timeout"
 
 
-def test_agent_loop_records_scripted_provider_error(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_agent_loop_records_scripted_provider_error(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, str | None]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(
             scripts=((ModelFailed(ModelErrorCategory.RATE_LIMIT, "safe retry later"),),)
         )
-        loop = runner_type(model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal)
+        loop = LangGraphTurnRunner(
+            model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal
+        )
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, result.error_category
 
@@ -139,7 +136,7 @@ def test_agent_loop_records_scripted_provider_error(
     assert error_category == "rate_limit"
 
 
-def test_agent_loop_stops_at_call_limit(tmp_path: Path, runner_type: RunnerType) -> None:
+def test_agent_loop_stops_at_call_limit(tmp_path: Path) -> None:
     async def scenario() -> StopReason:
         _, journal = await _journal_with_user()
         call = ToolCall("call-1", "calculator", {"expression": "1"})
@@ -150,7 +147,7 @@ def test_agent_loop_stops_at_call_limit(tmp_path: Path, runner_type: RunnerType)
         tools = FakeToolRuntime(
             (ToolResult("call-1", "calculator", ToolResultStatus.SUCCESS, output="1"),)
         )
-        loop = runner_type(
+        loop = LangGraphTurnRunner(
             model,
             ContextBuilder(model="fake"),
             tools,
@@ -163,9 +160,7 @@ def test_agent_loop_stops_at_call_limit(tmp_path: Path, runner_type: RunnerType)
     assert asyncio.run(scenario()) is StopReason.LIMIT_REACHED
 
 
-def test_duplicate_tool_call_ids_fail_before_any_tool_execution(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_duplicate_tool_call_ids_fail_before_any_tool_execution(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, int]:
         _, journal = await _journal_with_user()
         first = ToolCall("duplicate", "calculator", {"expression": "1"})
@@ -185,7 +180,7 @@ def test_duplicate_tool_call_ids_fail_before_any_tool_execution(
                 ToolResult("duplicate", "calculator", ToolResultStatus.SUCCESS, output="2"),
             )
         )
-        loop = runner_type(model, ContextBuilder(model="fake"), tools, journal)
+        loop = LangGraphTurnRunner(model, ContextBuilder(model="fake"), tools, journal)
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, len(tools.calls)
 
@@ -195,9 +190,7 @@ def test_duplicate_tool_call_ids_fail_before_any_tool_execution(
     assert execution_count == 0
 
 
-def test_agent_loop_executes_multiple_calls_in_stable_order(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_agent_loop_executes_multiple_calls_in_stable_order(tmp_path: Path) -> None:
     async def scenario() -> list[str]:
         _, journal = await _journal_with_user()
         first = ToolCall("call-1", "first", {})
@@ -218,20 +211,20 @@ def test_agent_loop_executes_multiple_calls_in_stable_order(
                 ToolResult("call-2", "second", ToolResultStatus.SUCCESS, output="two"),
             )
         )
-        loop = runner_type(model, ContextBuilder(model="fake"), tools, journal)
+        loop = LangGraphTurnRunner(model, ContextBuilder(model="fake"), tools, journal)
         await loop.run("turn-1", _tool_context(tmp_path))
         return [call.name for call, _ in tools.calls]
 
     assert asyncio.run(scenario()) == ["first", "second"]
 
 
-def test_agent_loop_maps_length_finish_to_limit_reached(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_agent_loop_maps_length_finish_to_limit_reached(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, str | None]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(scripts=((TextDelta("partial"), ResponseCompleted("length")),))
-        loop = runner_type(model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal)
+        loop = LangGraphTurnRunner(
+            model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal
+        )
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, result.error_category
 
@@ -241,13 +234,13 @@ def test_agent_loop_maps_length_finish_to_limit_reached(
     assert category == "model_finish_length"
 
 
-def test_agent_loop_rejects_tool_finish_without_tool_call(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_agent_loop_rejects_tool_finish_without_tool_call(tmp_path: Path) -> None:
     async def scenario() -> tuple[StopReason, str | None]:
         _, journal = await _journal_with_user()
         model = FakeModelPort(scripts=((ResponseCompleted("tool_calls"),),))
-        loop = runner_type(model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal)
+        loop = LangGraphTurnRunner(
+            model, ContextBuilder(model="fake"), FakeToolRuntime(()), journal
+        )
         result = await loop.run("turn-1", _tool_context(tmp_path))
         return result.stop_reason, result.error_category
 

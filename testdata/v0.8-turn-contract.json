@@ -1,0 +1,2233 @@
+{
+  "text": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "done"}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "late_usage": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "model_usage_recorded",
+        {
+          "provider": "unknown",
+          "model": "fake",
+          "usage": {"input_tokens": 8, "output_tokens": 2, "cached_tokens": 0, "reasoning_tokens": 0},
+          "request_id": null,
+          "call_kind": "task"
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      ["TextDelta", {"text": "done"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}],
+      [
+        "UsageReported",
+        {
+          "usage": {"input_tokens": 8, "output_tokens": 2, "cached_tokens": 0, "reasoning_tokens": 0}
+        }
+      ]
+    ],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "two_tool_rounds": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "read ",
+            "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "read ",
+            "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "assistant",
+            "content": "then ",
+            "tool_calls": [{"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "read ",
+          "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {
+          "content": "then ",
+          "tool_calls": [{"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 3,
+          "tool_calls": 2,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [
+      {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+      {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+    ],
+    "displayed": [
+      ["TextDelta", {"text": "read "}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "then "}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "done"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "read then done",
+      "model_calls": 3,
+      "tool_calls": 2,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "failure_keeps_completed_prelude": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "read ",
+            "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "read ",
+          "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model stream ended without a valid completion",
+          "model_calls": 2,
+          "tool_calls": 1,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+    "displayed": [
+      ["TextDelta", {"text": "read "}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "unfinished"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "read ",
+      "model_calls": 2,
+      "tool_calls": 1,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "batch_duplicate": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model reused a tool call ID",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      ["TextDelta", {"text": "explain"}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "explain",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "prior_turn_duplicate": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [
+          {
+            "role": "user",
+            "content": "earlier",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "earlier"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model reused a tool call ID",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "same_turn_duplicate": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model reused a tool call ID",
+          "model_calls": 2,
+          "tool_calls": 1,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 1,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "skipped_id_can_be_replanned_in_same_turn": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+              {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+            ],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": false, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": \"not_executed\", \"message\": \"New directory rules require replanning the batch\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+              {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+            ],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": false, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": \"not_executed\", \"message\": \"New directory rules require replanning the batch\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          },
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [
+            {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+            {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+          ],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "error",
+            "output": "read",
+            "error_code": "instructions_discovered",
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "error",
+            "output": "",
+            "error_code": "not_executed",
+            "error_message": "New directory rules require replanning the batch",
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": false,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": "not_executed",
+              "message": "New directory rules require replanning the batch",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [{"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 3,
+          "tool_calls": 3,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [
+      {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+      {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+    ],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "done"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 3,
+      "tool_calls": 3,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "discovered_rules_consume_batch_limit": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+              {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+            ],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": false, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": \"not_executed\", \"message\": \"New directory rules require replanning the batch\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [
+            {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+            {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+          ],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "error",
+            "output": "read",
+            "error_code": "instructions_discovered",
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "error",
+            "output": "",
+            "error_code": "not_executed",
+            "error_message": "New directory rules require replanning the batch",
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": false,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": "not_executed",
+              "message": "New directory rules require replanning the batch",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [{"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "limit_reached",
+          "error_category": "tool_call_limit",
+          "message": "Maximum tool calls reached",
+          "model_calls": 2,
+          "tool_calls": 2,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [{"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}]
+    ],
+    "result": {
+      "stop_reason": "limit_reached",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 2,
+      "error_category": "tool_call_limit",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "denied_call_counts_but_does_not_stop": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+              {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+            ],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": false, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [
+            {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+            {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+          ],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "error",
+            "output": "read",
+            "error_code": "permission_denied",
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": false,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 2,
+          "tool_calls": 2,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [
+      {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+      {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+    ],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "done"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 2,
+      "tool_calls": 2,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "failure_budget_allows_exactly_two": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+              {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+            ],
+            "tool_call_id": null,
+            "name": null
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": true, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "first",
+            "name": "read_file"
+          },
+          {
+            "role": "tool",
+            "content": "{\"data\": {}, \"completed\": true, \"effect\": \"none\", \"observed_failure\": true, \"error_code\": null, \"message\": \"\", \"cancelled\": false, \"requires_stop\": false}",
+            "tool_calls": [],
+            "tool_call_id": "second",
+            "name": "read_file"
+          }
+        ],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [
+            {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+            {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+          ],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": true,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": true,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 2,
+          "tool_calls": 2,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [
+      {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+      {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}
+    ],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}],
+      ["TextDelta", {"text": "done"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 2,
+      "tool_calls": 2,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "failure_budget_stops_third": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {
+          "content": "",
+          "tool_calls": [
+            {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+            {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}},
+            {"call_id": "third", "name": "read_file", "arguments": {}}
+          ],
+          "citations": [],
+          "model_supplement": ""
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "first",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": true,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "tool_call_requested",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "second",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": true,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      ["tool_call_requested", {"call": {"call_id": "third", "name": "read_file", "arguments": {}}}],
+      [
+        "tool_execution_completed",
+        {
+          "result": {
+            "call_id": "third",
+            "tool_name": "read_file",
+            "status": "success",
+            "output": "read",
+            "error_code": null,
+            "error_message": null,
+            "duration_ms": 0,
+            "metadata": {},
+            "outcome": {
+              "data": {},
+              "completed": true,
+              "effect": "none",
+              "observed_failure": true,
+              "error_code": null,
+              "message": "",
+              "cancelled": false,
+              "requires_stop": false,
+              "derived_from_mcp": false
+            }
+          }
+        }
+      ],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "limit_reached",
+          "error_category": "failure_recovery_limit",
+          "message": "Failure recovery budget exhausted",
+          "model_calls": 1,
+          "tool_calls": 3,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [
+      {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}},
+      {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}},
+      {"call_id": "third", "name": "read_file", "arguments": {}}
+    ],
+    "displayed": [
+      ["TextDelta", {"text": ""}],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "second", "name": "read_file", "arguments": {"path": "b.txt"}}}
+      ],
+      ["ToolCallCompleted", {"call": {"call_id": "third", "name": "read_file", "arguments": {}}}],
+      ["ResponseCompleted", {"finish_reason": "tool_calls"}]
+    ],
+    "result": {
+      "stop_reason": "limit_reached",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 3,
+      "error_category": "failure_recovery_limit",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "unfinished_tool_delta": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model stream ended without a valid completion",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      ["ToolCallDelta", {"call_id": "partial", "name_fragment": "read", "arguments_fragment": "{"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "duplicate_completion": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model emitted more than one completion event",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      ["TextDelta", {"text": "discard"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "incompatible_finish": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model emitted tool calls with an incompatible finish reason",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [
+      [
+        "ToolCallCompleted",
+        {"call": {"call_id": "first", "name": "read_file", "arguments": {"path": "a.txt"}}}
+      ],
+      ["ResponseCompleted", {"finish_reason": "stop"}]
+    ],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "filtered_output": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "model_finish_content_filter",
+          "message": "Model response did not finish normally",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "discard"}], ["ResponseCompleted", {"finish_reason": "content_filter"}]],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "model_finish_content_filter",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_duplicate_completion_preserves_native_semantics": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "assistant_message_completed",
+        {"content": "done", "tool_calls": [], "citations": [], "model_supplement": ""}
+      ],
+      [
+        "turn_completed",
+        {
+          "stop_reason": "completed",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "completed",
+      "assistant_text": "done",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": null,
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_length_is_invalid_response": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Model stream ended without a valid completion",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_never_requests_tools": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_response",
+          "message": "Citation repair cannot request tools",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": "invalid_response",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_only_once": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "invalid_citation",
+          "message": "Assistant citations were invalid after repair",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": "invalid_citation",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_has_no_context_retry": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      },
+      {
+        "model": "fake",
+        "messages": [
+          {"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null},
+          {
+            "role": "user",
+            "content": "Your previous answer used an invalid evidence reference. Reply again using only these machine references, without tools: (none)",
+            "tool_calls": [],
+            "tool_call_id": null,
+            "name": null
+          }
+        ],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "model_error",
+          "error_category": "context_length",
+          "message": "too long",
+          "model_calls": 2,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "model_error",
+      "assistant_text": "",
+      "model_calls": 2,
+      "tool_calls": 0,
+      "error_category": "context_length",
+      "citations": [],
+      "model_supplement": ""
+    }
+  },
+  "repair_respects_model_limit": {
+    "requests": [
+      {
+        "model": "fake",
+        "messages": [{"role": "user", "content": "hello", "tool_calls": [], "tool_call_id": null, "name": null}],
+        "system_parts": [
+          {
+            "content": "Knowledge retrieval outcome is not_configured. No evidence is available this turn. Do not invent machine references of the form K:<token>:E<n>.",
+            "source": "untrusted_evidence"
+          }
+        ],
+        "tools": [],
+        "settings": {"temperature": null, "max_output_tokens": null, "timeout_seconds": 30.0},
+        "metadata": {"session_id": "session", "turn_id": "turn"},
+        "provider_options": {}
+      }
+    ],
+    "events": [
+      ["session_started", {"name": null, "workspace_identity": null}],
+      ["user_message", {"content": "hello"}],
+      [
+        "turn_failed",
+        {
+          "stop_reason": "limit_reached",
+          "error_category": "model_call_limit",
+          "message": "Citation repair cannot start",
+          "model_calls": 1,
+          "tool_calls": 0,
+          "provider": "unknown",
+          "model": "unknown"
+        }
+      ]
+    ],
+    "calls": [],
+    "displayed": [["TextDelta", {"text": "See K:other:E1."}], ["ResponseCompleted", {"finish_reason": "stop"}]],
+    "result": {
+      "stop_reason": "limit_reached",
+      "assistant_text": "",
+      "model_calls": 1,
+      "tool_calls": 0,
+      "error_category": "model_call_limit",
+      "citations": [],
+      "model_supplement": ""
+    }
+  }
+}

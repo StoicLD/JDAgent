@@ -5,8 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
 from jdagent.composition import build_runtime
 from jdagent.configuration import CliOverrides, resolve_configuration
@@ -15,9 +13,8 @@ from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_large_loaded_schema_yields_to_input_budget_before_history_compaction(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -35,7 +32,7 @@ def test_large_loaded_schema_yields_to_input_budget_before_history_compaction(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

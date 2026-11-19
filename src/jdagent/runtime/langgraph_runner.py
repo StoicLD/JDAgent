@@ -27,11 +27,8 @@ from jdagent.domain.events import (
 )
 from jdagent.domain.model import (
     ModelErrorCategory,
+    ModelFailed,
     ModelRequest,
-    ResponseCompleted,
-    TextDelta,
-    ToolCallCompleted,
-    ToolCallDelta,
     UsageReported,
 )
 from jdagent.domain.tools import ToolCall, ToolErrorCode, ToolExecutionContext
@@ -40,6 +37,7 @@ from jdagent.knowledge.citation import finalize_answer, repair_message
 from jdagent.knowledge.ptk import PreparedTurnKnowledge
 from jdagent.model_stream import closing_model_stream
 from jdagent.ports import ModelPort, RuntimeJournal, ToolRuntimePort
+from jdagent.runtime.model_response import ModelResponse, ResponseProtocolError
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,11 +318,7 @@ class _Execution:
         request = state["request"]
         assert request is not None
         state["model_calls"] += 1
-        text_parts: list[str] = []
-        calls: list[ToolCall] = []
-        completed = False
-        unfinished_delta = False
-        finish: str | None = None
+        response = ModelResponse(repair=repair)
         try:
             async with asyncio.timeout(request.settings.timeout_seconds):
                 async with closing_model_stream(self.d.model.stream(request)) as stream:
@@ -335,17 +329,7 @@ class _Execution:
                         else:
                             for observer in self.d.observers:
                                 await observer.observe(event)
-                        if isinstance(event, TextDelta):
-                            text_parts.append(event.text)
-                        elif isinstance(event, (ToolCallDelta, ToolCallCompleted)):
-                            if repair:
-                                return self._invalid(state, "Citation repair cannot request tools")
-                            if isinstance(event, ToolCallDelta):
-                                unfinished_delta = True
-                            else:
-                                unfinished_delta = False
-                                calls.append(event.call)
-                        elif isinstance(event, UsageReported):
+                        if isinstance(event, UsageReported):
                             if self.d.context is not None:
                                 await self.d.context.observe_usage(request, event.usage)
                             await self.d.journal.record(
@@ -361,21 +345,14 @@ class _Execution:
                                     else request.metadata.get("call_kind", "task"),
                                 ),
                             )
-                        elif isinstance(event, ResponseCompleted):
-                            if completed and not repair:
-                                return self._invalid(
-                                    state, "Model emitted more than one completion event"
-                                )
-                            completed = event.finish_reason == "stop" if repair else True
-                            finish = event.finish_reason
-                        else:
+                        elif isinstance(event, ModelFailed):
                             if (
                                 not repair
                                 and event.category is ModelErrorCategory.CONTEXT_LENGTH
                                 and self.d.context is not None
                                 and not state["context_retried"]
-                                and not calls
-                                and not text_parts
+                                and not response.calls
+                                and not response.text_parts
                             ):
                                 self.d.context.reject_window(request)
                                 state["context_retried"] = True
@@ -384,6 +361,11 @@ class _Execution:
                             return self._failure(
                                 state, StopReason.MODEL_ERROR, event.category.value, event.message
                             )
+                        else:
+                            response.accept(event)
+            response.validate()
+        except ResponseProtocolError as error:
+            return self._failure(state, error.reason, error.category, str(error))
         except SessionError:
             raise
         except TimeoutError:
@@ -396,33 +378,8 @@ class _Execution:
                 "provider_internal",
                 f"{prefix}: {type(error).__name__}",
             )
-        if not completed or unfinished_delta:
-            return self._invalid(state, "Model stream ended without a valid completion")
-        if not repair:
-            if finish == "length":
-                return self._failure(
-                    state,
-                    StopReason.LIMIT_REACHED,
-                    "model_finish_length",
-                    "Model response reached its output limit",
-                )
-            if finish == "tool_calls" and not calls:
-                return self._invalid(
-                    state, "Model reported tool_calls without a complete tool call"
-                )
-            if calls and finish != "tool_calls":
-                return self._invalid(
-                    state, "Model emitted tool calls with an incompatible finish reason"
-                )
-            if not calls and finish != "stop":
-                return self._failure(
-                    state,
-                    StopReason.MODEL_ERROR,
-                    f"model_finish_{finish or 'unknown'}",
-                    "Model response did not finish normally",
-                )
-        state["response_text"] = "".join(text_parts)
-        state["pending_calls"] = tuple(calls)
+        state["response_text"] = "".join(response.text_parts)
+        state["pending_calls"] = tuple(response.calls)
         state["next_node"] = "citations"
         return state
 
@@ -454,7 +411,7 @@ class _Execution:
 
     async def persist(self, state: _TurnState) -> _TurnState:
         text, calls = state["response_text"], state["pending_calls"]
-        # Preserve the native result's tool prelude even if its IDs are rejected.
+        # Keep the model's tool prelude in the result even when its call IDs are rejected.
         state["turn_text_parts"].append(text)
         ids = [call.call_id for call in calls]
         if len(ids) != len(set(ids)) or any(call_id in state["seen_call_ids"] for call_id in ids):

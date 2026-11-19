@@ -23,10 +23,9 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
 from jdagent.mcp_definitions import MCPDefinitionLimits
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("version", ["2026-07-28", "2025-11-25"])
 def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_them(
-    tmp_path: Path, engine: str, version: str
+    tmp_path: Path, version: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -43,7 +42,7 @@ def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -124,9 +123,8 @@ def test_model_search_loads_complete_definitions_on_the_next_request_and_reuses_
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_tool_batch_keeps_its_snapshot_while_one_slot_cache_replaces_next_request(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -142,7 +140,7 @@ def test_tool_batch_keeps_its_snapshot_while_one_slot_cache_replaces_next_reques
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -198,10 +196,7 @@ def test_tool_batch_keeps_its_snapshot_while_one_slot_cache_replaces_next_reques
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_result_quota_rejects_before_publishing_a_possible_send(
-    tmp_path: Path, engine: str
-) -> None:
+def test_result_quota_rejects_before_publishing_a_possible_send(tmp_path: Path) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -217,7 +212,7 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -285,9 +280,8 @@ def test_result_quota_rejects_before_publishing_a_possible_send(
 
 
 @pytest.mark.parametrize("window", [64000, 13000])
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_large_result_preserves_original_and_supports_session_scoped_readback(
-    tmp_path: Path, engine: str, window: int
+    tmp_path: Path, window: int
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -306,7 +300,7 @@ def test_large_result_preserves_original_and_supports_session_scoped_readback(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

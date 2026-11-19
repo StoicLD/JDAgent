@@ -36,7 +36,7 @@
 核对 revision：`21a5aa4066dc0ea318f8949b8c0bd8cc4e62c909`。以下为代码与现有测试的静态核对，
 本次未运行测试，不构成新验收证据。
 
-- [AgentLoop](../../../src/jdagent/core/loop.py) 通过 `ToolRuntimePort.execute()` 串行分派工具，
+- [AgentLoop](https://github.com/StoicLD/JDAgent/blob/21a5aa4066dc0ea318f8949b8c0bd8cc4e62c909/src/jdagent/core/loop.py) 通过 `ToolRuntimePort.execute()` 串行分派工具，
   没有按工具名分支；请求与结果写入规范事件。
 - [Composition Root](../../../src/jdagent/composition.py) 将 Registry 全量定义交给 ContextBuilder；
   [ToolRuntime](../../../src/jdagent/tools/runtime.py) 按注册名称查找，再校验参数与权限，没有独立的

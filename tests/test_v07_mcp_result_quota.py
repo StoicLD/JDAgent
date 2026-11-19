@@ -6,6 +6,7 @@ import sys
 import threading
 from pathlib import Path
 
+import httpx
 import pytest
 
 from jdagent.adapters.fake import FakeApproval, FakeModelPort
@@ -17,13 +18,13 @@ from jdagent.domain.json import require_object, require_string
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted
 from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode
 from jdagent.mcp_execution import MCPResultLimits
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 from tests.test_v07_mcp_http import TaskPeerState, wire_server
 from tests.test_v07_mcp_task_management import leave_running_task, task_configuration
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_identical_originals_share_capacity_across_distinct_calls_and_restart(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -40,7 +41,7 @@ def test_identical_originals_share_capacity_across_distinct_calls_and_restart(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -100,13 +101,15 @@ def test_identical_originals_share_capacity_across_distinct_calls_and_restart(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 def test_result_metadata_consumes_capacity_even_when_every_original_is_identical(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    model_adapter: str,
 ) -> None:
-    paths = DataPaths.for_workspace(
-        tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
-    )
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
+    case.workspace.mkdir()
+    paths = case.paths
     paths.user_config_file.parent.mkdir(parents=True)
     peer = Path(__file__).parent / "fixtures" / "mcp_stdio_server.py"
     paths.user_config_file.write_text(
@@ -117,39 +120,25 @@ def test_result_metadata_consumes_capacity_even_when_every_original_is_identical
         'tools = ["read"]\n',
         encoding="utf-8",
     )
-    config = resolve_configuration(
-        tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
-        data_paths=paths,
-        environment={},
-    )
-    model = FakeModelPort(
-        scripts=(
-            (
-                ToolCallCompleted(ToolCall("find", "search_tools", {"query": "read"})),
-                ResponseCompleted("tool_calls"),
-            ),
+    responses = iter(
+        [
+            model_response("", (ToolCall("find", "search_tools", {"query": "read"}),)),
             *(
-                (
-                    ToolCallCompleted(ToolCall(f"tiny-{index}", "mcp__docs__read", {})),
-                    ResponseCompleted("tool_calls"),
-                )
+                model_response("", (ToolCall(f"tiny-{index}", "mcp__docs__read", {}),))
                 for index in range(12)
             ),
-            (TextDelta("Read repeated originals."), ResponseCompleted("stop")),
-        )
+            model_response("Read repeated originals."),
+        ]
     )
 
+    def handler(request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
     async def scenario() -> None:
-        runtime = build_runtime(
-            config,
-            FakeApproval(ApprovalDecision.APPROVE),
-            model_wrapper=lambda _: model,
-            runtime_options=RuntimeOptions(
-                mcp_result_limits=MCPResultLimits(session_bytes=70_000, reservation_bytes=4096)
-            ),
+        options = RuntimeOptions(
+            mcp_result_limits=MCPResultLimits(session_bytes=70_000, reservation_bytes=4096)
         )
-        try:
+        async with case.open(handler, options=options) as runtime:
             turn = await runtime.coordinator.send("Read the same tiny result several times")
             events = [event async for event in runtime.session.read(turn.session_id)]
             reads = [
@@ -168,20 +157,17 @@ def test_result_metadata_consumes_capacity_even_when_every_original_is_identical
             ]
             assert len({result.original_hash for result in stored}) == 1
             assert all(result.original_bytes < 128 for result in stored)
-        finally:
-            await runtime.aclose()
 
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("different", [False, True])
 def test_task_originals_remain_charged_and_readable_after_later_results_and_restart(
-    tmp_path: Path, engine: str, different: bool
+    tmp_path: Path, different: bool
 ) -> None:
     state = TaskPeerState(result_text="a" * 600_000)
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(
             "[mcp]\nresult_quota_mib = 5\n" + path.read_text(encoding="utf-8"), encoding="utf-8"
@@ -262,17 +248,14 @@ def test_task_originals_remain_charged_and_readable_after_later_results_and_rest
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_interrupted_task_refetch_retains_its_reservation_after_restart(
-    tmp_path: Path, engine: str
-) -> None:
+def test_interrupted_task_refetch_retains_its_reservation_after_restart(tmp_path: Path) -> None:
     state = TaskPeerState(result_text="a" * 600_000)
     arrived, release = threading.Event(), threading.Event()
     release.set()
     with wire_server(
         "2026-07-28", "json", task_state=state, task_query_gate=(arrived, release)
     ) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(
             "[mcp]\nresult_quota_mib = 5\n" + path.read_text(encoding="utf-8"), encoding="utf-8"
@@ -347,13 +330,12 @@ def test_interrupted_task_refetch_retains_its_reservation_after_restart(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 def test_task_refetch_reserves_capacity_before_rpc_but_local_result_and_cancel_remain_available(
-    tmp_path: Path, engine: str
+    tmp_path: Path,
 ) -> None:
     state = TaskPeerState(result_text="a" * 600_000)
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)

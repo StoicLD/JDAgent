@@ -1,8 +1,9 @@
-"""Compare observable native/graph contracts and exercise graph-only failure boundaries."""
+"""Check the observable Turn contract and graph failure behavior."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,6 @@ from jdagent.adapters.fake import FakeModelPort, FakeToolRuntime
 from jdagent.adapters.memory import InMemorySession
 from jdagent.context import ContextBuilder
 from jdagent.core.contracts import LoopLimits, TurnResult
-from jdagent.core.loop import AgentLoop
 from jdagent.domain.errors import SessionError, SessionErrorCode, StopReason
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
@@ -49,7 +49,6 @@ from jdagent.eventing import EventJournal
 from jdagent.knowledge.ptk import empty_prepared_knowledge
 from jdagent.runtime.langgraph_runner import LangGraphTurnRunner
 
-RunnerType = type[AgentLoop] | type[LangGraphTurnRunner]
 FIRST = ToolCall("first", "read_file", {"path": "a.txt"})
 SECOND = ToolCall("second", "read_file", {"path": "b.txt"})
 FINAL = (TextDelta("done"), ResponseCompleted("stop"))
@@ -279,7 +278,7 @@ async def _journal() -> EventJournal:
     return journal
 
 
-async def _run(case: Case, runner_type: RunnerType, workspace: Path) -> Observed:
+async def _run(case: Case, workspace: Path) -> Observed:
     await asyncio.to_thread(workspace.mkdir)
     journal = await _journal()
     if case.prior_calls:
@@ -301,7 +300,7 @@ async def _run(case: Case, runner_type: RunnerType, workspace: Path) -> Observed
     model = FakeModelPort(scripts=case.scripts)
     tools = FakeToolRuntime(case.results)
     display = Display()
-    runner = runner_type(
+    runner = LangGraphTurnRunner(
         model,
         ContextBuilder(model="fake"),
         tools,
@@ -339,14 +338,21 @@ async def _run(case: Case, runner_type: RunnerType, workspace: Path) -> Observed
 
 
 @pytest.mark.parametrize("name", CASES)
-def test_graph_matches_native_requests_events_results_and_tool_order(
-    tmp_path: Path, name: str
-) -> None:
+def test_turn_requests_events_results_and_tool_order(tmp_path: Path, name: str) -> None:
     async def scenario() -> None:
         case = CASES[name]
-        native = await _run(case, AgentLoop, tmp_path / "native")
-        graph = await _run(case, LangGraphTurnRunner, tmp_path / "graph")
-        assert graph == native
+        graph = await _run(case, tmp_path / "graph")
+        # Both v0.7 runners produced these same records at revision 9d7cbdc.
+        fixture = Path(__file__).parents[1] / "testdata" / "v0.8-turn-contract.json"
+        expected = json.loads(fixture.read_text(encoding="utf-8"))[name]
+        actual = {
+            "requests": [asdict(request) for request in graph.requests],
+            "events": [(kind.value, asdict(payload)) for kind, payload in graph.events],
+            "calls": [asdict(call) for call in graph.calls],
+            "displayed": [(type(event).__name__, asdict(event)) for event in graph.displayed],
+            "result": asdict(graph.result),
+        }
+        assert json.loads(json.dumps(actual)) == expected
         if case.knowledge and len(graph.requests) == 2:
             assert not graph.requests[1].tools
             assert len(graph.displayed) == len(case.scripts[0])
@@ -371,9 +377,7 @@ def test_graph_step_limit_allows_full_business_budget(tmp_path: Path) -> None:
     )
 
     async def scenario() -> None:
-        assert await _run(case, LangGraphTurnRunner, tmp_path / "graph") == await _run(
-            case, AgentLoop, tmp_path / "native"
-        )
+        await _run(case, tmp_path / "graph")
 
     asyncio.run(scenario())
 
@@ -391,7 +395,7 @@ def test_graph_step_guard_records_one_failure_without_running_a_tool(
         case = Case(
             (_batch(FIRST),), stop=StopReason.INTERNAL_ERROR, category="graph_step_limit", text=""
         )
-        await _run(case, LangGraphTurnRunner, tmp_path / "graph")
+        await _run(case, tmp_path / "graph")
 
     asyncio.run(scenario())
 
@@ -500,15 +504,12 @@ def test_model_task_cancellation_waits_for_stream_close_and_records_one_failure(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
-def test_skipped_id_is_rejected_in_next_turn_and_run_counters_reset(
-    tmp_path: Path, runner_type: RunnerType
-) -> None:
+def test_skipped_id_is_rejected_in_next_turn_and_run_counters_reset(tmp_path: Path) -> None:
     async def scenario() -> None:
         journal = await _journal()
         model = FakeModelPort(scripts=(_batch(FIRST, SECOND), FINAL, _batch(SECOND)))
         tools = FakeToolRuntime((_result(FIRST, ToolErrorCode.INSTRUCTIONS_DISCOVERED),))
-        runner = runner_type(model, ContextBuilder(model="fake"), tools, journal)
+        runner = LangGraphTurnRunner(model, ContextBuilder(model="fake"), tools, journal)
         await journal.record("one", RuntimeEventType.USER_MESSAGE, UserMessagePayload("first"))
         first = await runner.run("one", ToolExecutionContext("session", "one", tmp_path))
         assert first.stop_reason is StopReason.COMPLETED

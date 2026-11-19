@@ -1,31 +1,24 @@
-"""Opt-in controller for six ordered, immutable v0.6 comparison attempts."""
+"""Offline rehearsal of the sealed v0.6 comparison workflow using current adapters."""
 
-# The timestamp must precede runtime imports to measure their startup cost.
-# ruff: noqa: E402
-
-import argparse
 import asyncio
 import hashlib
 import importlib.metadata
 import json
 import math
-import os
 import platform
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-ENTRY_TIME = time.perf_counter()
-
 from jdagent.adapters.session_lock import SessionLease
-from jdagent.composition import load_deepseek_api_key
 from jdagent.domain.json import JsonObject, normalize_json, require_object, require_string
 from tests.experiment_budget import ExperimentLedger, ExperimentLimits
 from tests.v06_comparison_task import (
     SAMPLES,
     Sample,
     fixture_fingerprint,
+    require_offline_rehearsal,
     run_fixed_task,
     write_json,
 )
@@ -103,14 +96,13 @@ def prepare(
 ) -> None:
     if not experiment_id.strip() or not model.strip():
         raise ValueError("Experiment ID and explicit model are required")
-    if base_url not in {"https://api.deepseek.com", "https://api.deepseek.com/v1", "https://test"}:
-        raise ValueError("Use the fixed DeepSeek endpoint (or the offline test endpoint)")
+    require_offline_rehearsal(base_url)
     snapshot = repository_snapshot()
     inputs = fixture_fingerprint()
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=False)
     plan: JsonObject = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment_id": experiment_id,
         "directory": str(root),
         "model": model,
@@ -122,7 +114,7 @@ def prepare(
             "input_tokens": limits.input_tokens,
             "output_tokens": limits.output_tokens,
         },
-        "samples": [s.label for s in SAMPLES],
+        "samples": {s.label: s.combination for s in SAMPLES},
     }
     write_json(root / "plan.json", plan)
     (root / "plan.sha256").write_text(_hash(root / "plan.json"), encoding="ascii")
@@ -133,7 +125,7 @@ def _plan(root: Path, *, current: bool = True) -> JsonObject:
     if _hash(root / "plan.json") != (root / "plan.sha256").read_text(encoding="ascii"):
         raise ValueError("Prepared experiment plan changed")
     plan = _read(root / "plan.json")
-    if plan.get("directory") != str(root.resolve()) or plan.get("schema_version") != 1:
+    if plan.get("directory") != str(root.resolve()) or plan.get("schema_version") != 2:
         raise ValueError("Experiment directory or schema changed")
     if current and (
         plan["environment"] != repository_snapshot() or plan["fixture"] != fixture_fingerprint()
@@ -203,7 +195,7 @@ def _baseline_hashes(root: Path) -> JsonObject:
     for sample in SAMPLES[:3]:
         completion = _completed(root, sample)
         if completion.get("status") != "passed":
-            raise ValueError("All three native baselines must pass before targets")
+            raise ValueError("All three adapter baselines must pass before targets")
         metrics = require_object(completion["metrics"], "baseline metrics")
         for metric in METRICS:
             _number(metrics.get(metric), metric)
@@ -300,7 +292,8 @@ async def execute(
     lease = await _acquire_lease(root / "controller.lock")
     try:
         plan = await asyncio.to_thread(_plan, root)
-        if plan["base_url"] == "https://test" and api_key != "dummy-key":
+        require_offline_rehearsal(require_string(plan, "base_url"))
+        if api_key != "dummy-key":
             raise ValueError("Offline endpoint accepts only the synthetic test key")
         ledger = await asyncio.to_thread(_ledger, root, plan)
         sample = _sample(label)
@@ -308,7 +301,7 @@ async def execute(
             await asyncio.to_thread(_completed, root, preceding)
         criteria = (
             await asyncio.to_thread(_criteria, root, startup_scope)
-            if sample.engine == "langgraph"
+            if sample.label.startswith("T")
             else None
         )
         directory = root / sample.label
@@ -404,58 +397,8 @@ def record_interruption(root: Path, label: str) -> None:
         lease.close()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    prepare_parser = commands.add_parser("prepare")
-    prepare_parser.add_argument("root", type=Path)
-    prepare_parser.add_argument("--experiment-id", required=True)
-    prepare_parser.add_argument("--model", required=True)
-    prepare_parser.add_argument("--base-url", default="https://api.deepseek.com")
-    prepare_parser.add_argument("--calls", type=int, required=True)
-    prepare_parser.add_argument("--input-tokens", type=int, required=True)
-    prepare_parser.add_argument("--output-tokens", type=int, required=True)
-    run_parser = commands.add_parser("run")
-    run_parser.add_argument("root", type=Path)
-    run_parser.add_argument("sample", choices=[s.label for s in SAMPLES])
-    run_parser.add_argument("--allow-live", action="store_true")
-    freeze_parser = commands.add_parser("freeze-criteria")
-    freeze_parser.add_argument("root", type=Path)
-    freeze_parser.add_argument("criteria", type=Path)
-    recover_parser = commands.add_parser("record-interruption")
-    recover_parser.add_argument("root", type=Path)
-    recover_parser.add_argument("sample", choices=[s.label for s in SAMPLES])
-    args = parser.parse_args()
-    if args.command == "prepare":
-        prepare(
-            args.root,
-            experiment_id=args.experiment_id,
-            model=args.model,
-            base_url=args.base_url,
-            limits=ExperimentLimits(args.calls, args.input_tokens, args.output_tokens),
-        )
-    elif args.command == "freeze-criteria":
-        freeze_criteria(args.root, _read(args.criteria))
-    elif args.command == "record-interruption":
-        record_interruption(args.root, args.sample)
-    else:
-        if not args.allow_live or os.environ.get("JDAGENT_RUN_V06_LIVE") != "1":
-            raise ValueError("Set JDAGENT_RUN_V06_LIVE=1 and --allow-live only after authorization")
-        plan = _plan(args.root)  # Verify fixed inputs before discovering a credential.
-        if plan["base_url"] == "https://test":
-            raise ValueError("The offline endpoint is for injected test transports only")
-        key = load_deepseek_api_key(os.environ.get("DEEPSEEK_API_KEY"))
-        if key is None:
-            raise ValueError("DeepSeek credential is unavailable")
-        result = asyncio.run(
-            execute(
-                args.root, args.sample, api_key=key, authorized=True, process_started=ENTRY_TIME
-            )
-        )
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        return 0 if result["status"] == "passed" else 1
-    return 0
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(
+        "Reproduce the live v0.6 comparison at revision c9b5fb0. "
+        "For offline rehearsal, run pytest tests/test_v06_comparison_controller.py."
+    )

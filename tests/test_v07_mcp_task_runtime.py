@@ -24,7 +24,6 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolErrorCode, Tool
 from jdagent.mcp_execution import MCPResultLimits
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     "case",
     [
@@ -44,7 +43,7 @@ from jdagent.mcp_execution import MCPResultLimits
     ],
 )
 def test_task_is_registered_then_waited_without_exposing_its_handle_to_the_model(
-    tmp_path: Path, engine: str, case: str
+    tmp_path: Path, case: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -65,7 +64,7 @@ def test_task_is_registered_then_waited_without_exposing_its_handle_to_the_model
             stream.write("timeout_seconds = 1\n")
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

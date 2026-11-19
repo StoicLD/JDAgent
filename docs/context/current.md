@@ -1,15 +1,14 @@
 # 当前项目状态
 
-状态：`Implemented`（代码现状摘要）。更新：2026-11-11。
+状态：`Implemented`（代码现状摘要）。更新：2026-11-19。
 
-当前产品行为以代码为唯一事实来源。本页对照 `main` 的 `e23604fcc4660fa393d65f07215d6ac220532e2f`
-整理；具体实现从[架构总览](../architecture/overview.md)和[模块地图](../map.md)进入。
+本页记录基于 `9d7cbdc` 开发的 v0.8 单引擎改造；具体实现从[架构总览](../architecture/overview.md)和[模块地图](../map.md)进入。
 历史批准与实施流水已移至[整理前快照](../archive/2026-11-11/context/current.md)。
 
 ## 当前可运行内容
 
 - Python 包版本 `0.5.0`；Session 事件 schema `4`，默认目录 `sessions-v5`；Headless JSON schema `2`。
-- 默认 DeepSeek、`deepseek-v4-flash`、原生执行引擎和原生适配器。LangGraph 与 LangChain 已可分别选择。
+- 默认 DeepSeek、`deepseek-v4-flash`、LangGraph 调度和原生 DeepSeek 适配器。可选择 LangChain 接入 DeepSeek。
 - 本地工具、权限审批、持久会话、上下文压缩、历史与长期记忆均已接入正常 CLI。
 - MCP 已接入工具、Resources、Prompts、双传输、检索和缓存、长调用及原 Task 管理。
 - 知识库有管理、摄取、索引与引用实现；正常 CLI 的真实 RAG 配置链仍有缺口。
@@ -28,9 +27,11 @@
 
 ## 验证与遗留事项
 
-历史最近完整离线记录为 2026-11-06、`f747299`：934 passed、1 failed、14 skipped。
+v0.8 的全量基线、候选实现、安装与回退见[工程验证](../development/v0.8-langgraph-verification.md)。
+
+更早的完整离线记录为 2026-11-06、`f747299`：934 passed、1 failed、14 skipped。
 失败为 RAG 词项 Recall `0.8125 < 0.85`。此后到 `c412174` 的 MCP 修复有定向回归和独立复核，
-`e23604f` 更新验收文档。以上是历史证据；本次实际检查见[文档核对记录](../development/documentation-refresh-2026-11-11.md)。
+`e23604f` 更新验收文档。该次文档检查见[文档核对记录](../development/documentation-refresh-2026-11-11.md)。
 
 | 历史阶段 | 尚未关闭的事项 |
 | --- | --- |
@@ -43,8 +44,8 @@
 每项的 revision、测试入口和报告见[验证与验收](../modules/verification.md)。
 归档旧方案不关闭遗留项，也不把历史实施授权当作新的功能、提交或外部调用授权。
 
-## 本轮文档维护
+## v0.8 阅读入口
 
-用户要求按现有代码归档过时材料、修订设计说明，并完善架构、教程和 README。
-本轮只更新文档、导航与代码事实优先规则；源代码、依赖和测试保持原样。
-新功能需要单独定义范围和验收。恢复工作按 [AGENTS.md](../../AGENTS.md) 的启动顺序进行。
+先读[运行时主线](../modules/runtime.md)，从 Coordinator 跟到图的模型、工具与终态节点。
+[ADR-0009](../decisions/ADR-0009-langgraph-only.md) 记录边界与取舍。
+[验证记录](../development/v0.8-langgraph-verification.md) 包含学习者的闭卷练习与延迟复测。

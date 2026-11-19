@@ -22,7 +22,7 @@ from jdagent.application.session_recovery import (
     SessionRecovery,
     prepare_session_resume,
 )
-from jdagent.core.loop import CancellationToken
+from jdagent.core.contracts import CancellationToken
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.errors import SessionError, StopReason
 from jdagent.domain.events import RuntimeEvent, RuntimeEventType

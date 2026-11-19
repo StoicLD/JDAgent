@@ -25,7 +25,7 @@ RAG 可选依赖用 `uv sync --locked --extra rag` 安装；基础环境和可�
 | 配置或 CLI | `test_configuration.py`、`test_cli_entrypoint.py`、`test_interactive_cli.py`及相关 v05/v06/v07 用例 |
 | 模型或 Runner | `test_agent_loop.py`、`test_langchain_model.py`、`test_v06_composition.py`、`test_v06_graph_runner.py` |
 | 文件与命令 | `test_v04_files.py`、`test_v04_commands.py`、`test_v04_contracts.py`；使用临时工作区 |
-| 上下文／记忆／恢复 | 对应 `test_v05_*.py`，同时检查两种 Runner 的 `test_v06_*.py` |
+| 上下文／记忆／恢复 | 对应 `test_v05_*.py`，同时检查图执行器与两个适配器的 `test_v06_*.py` |
 | MCP | 对应 `test_v07_*.py`；目录、发送／保存、取消、配额和重启边界按变更选择 |
 | 知识库 | 摄取、来源 revision、检索、引用与 `test_v03_eval.py` |
 

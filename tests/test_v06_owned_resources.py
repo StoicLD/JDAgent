@@ -15,15 +15,15 @@ from jdagent.data_paths import DataPaths
 from jdagent.domain.errors import StopReason
 from jdagent.domain.tools import ApprovalDecision
 from jdagent.maintenance import MemoryMaintenance
-from tests.runtime_matrix import COMBINATIONS, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS)
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 @pytest.mark.parametrize("failure", [False, True])
 def test_owned_clients_close_after_application_resources_even_when_cleanup_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    combination: tuple[str, str],
+    model_adapter: str,
     failure: bool,
 ) -> None:
     order: list[str] = []
@@ -69,7 +69,7 @@ def test_owned_clients_close_after_application_resources_even_when_cleanup_fails
     monkeypatch.setattr(httpx.Client, "close", sync_close)
     monkeypatch.setattr(MemoryMaintenance, "close", maintenance_close)
     monkeypatch.setattr(TurnCoordinator, "aclose", coordinator_close)
-    engine, adapter = combination
+    adapter = model_adapter
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -78,7 +78,6 @@ def test_owned_clients_close_after_application_resources_even_when_cleanup_fails
         CliOverrides(
             provider="deepseek",
             base_url="https://test",
-            runtime_engine=engine,
             model_adapter=adapter,
             model_context_window=120000,
         ),

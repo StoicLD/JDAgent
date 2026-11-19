@@ -22,10 +22,7 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall, ToolResultStatus
 from tests.test_v07_mcp_http import wire_server
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
-def test_safe_repeat_uses_at_most_three_sends_for_one_logical_call(
-    tmp_path: Path, engine: str
-) -> None:
+def test_safe_repeat_uses_at_most_three_sends_for_one_logical_call(tmp_path: Path) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
     )
@@ -41,7 +38,7 @@ def test_safe_repeat_uses_at_most_three_sends_for_one_logical_call(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -94,10 +91,9 @@ def test_safe_repeat_uses_at_most_three_sends_for_one_logical_call(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("error", ["http504", "server_timeout"])
 def test_http_status_cannot_authorize_retry_without_a_server_timeout_response(
-    tmp_path: Path, engine: str, error: str
+    tmp_path: Path, error: str
 ) -> None:
     requests: list[str] = []
     with wire_server("2026-07-28", "json", tool_error=error, requests=requests) as url:
@@ -114,7 +110,7 @@ def test_http_status_cannot_authorize_retry_without_a_server_timeout_response(
         )
         config = resolve_configuration(
             tmp_path,
-            CliOverrides(provider="fake", runtime_engine=engine),
+            CliOverrides(provider="fake"),
             data_paths=paths,
             environment={},
         )
@@ -156,12 +152,11 @@ def test_http_status_cannot_authorize_retry_without_a_server_timeout_response(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     "case", ["exhausted", "unsafe", "text_error", "deadline", "client_wait", "successful_reads"]
 )
 def test_retry_conditions_and_call_identity_do_not_expand_the_send_allowance(
-    tmp_path: Path, engine: str, case: str
+    tmp_path: Path, case: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -180,7 +175,7 @@ def test_retry_conditions_and_call_identity_do_not_expand_the_send_allowance(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

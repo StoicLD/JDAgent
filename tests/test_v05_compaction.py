@@ -11,7 +11,6 @@ from jdagent.context import ContextBuilder
 from jdagent.context_archive import decode_object
 from jdagent.context_budget import ContextBudget
 from jdagent.context_runtime import ContextService
-from jdagent.core.loop import AgentLoop
 from jdagent.domain.events import (
     AssistantMessageCompletedPayload,
     CompactionCommittedPayload,
@@ -165,10 +164,7 @@ def test_statement_is_distinct_from_execution_and_failed_response_is_auditable(s
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("runner_type", [AgentLoop, LangGraphTurnRunner])
-def test_one_turn_continues_after_three_compactions_without_replaying_tools(
-    tmp_path: Path, runner_type: type[AgentLoop] | type[LangGraphTurnRunner]
-) -> None:
+def test_one_turn_continues_after_three_compactions_without_replaying_tools(tmp_path: Path) -> None:
     class BatchModel:
         capabilities = ModelCapabilities(context_window=4096)
 
@@ -224,7 +220,7 @@ def test_one_turn_continues_after_three_compactions_without_replaying_tools(
             objects=InMemoryContextObjects(),
             budget=ContextBudget(4096, output_tokens=200, safety_tokens=20),
         )
-        loop = runner_type(model, builder, tools, journal, context_service=service)
+        loop = LangGraphTurnRunner(model, builder, tools, journal, context_service=service)
         result = await loop.run("turn", ToolExecutionContext("session", "turn", tmp_path))
         assert result.assistant_text == "done"
         assert result.model_calls == 4

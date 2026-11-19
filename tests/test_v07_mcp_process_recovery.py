@@ -21,7 +21,6 @@ from tests.test_v07_mcp_http import TaskPeerState, wire_server
 from tests.test_v07_mcp_task_management import task_configuration
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     "cut",
     [
@@ -35,7 +34,7 @@ from tests.test_v07_mcp_task_management import task_configuration
     ],
 )
 def test_abrupt_host_exit_preserves_evidence_and_never_resubmits_remote_work(
-    tmp_path: Path, engine: str, cut: str
+    tmp_path: Path, cut: str
 ) -> None:
     arrived, release = threading.Event(), threading.Event()
     state = TaskPeerState(status="completed")
@@ -45,11 +44,11 @@ def test_abrupt_host_exit_preserves_evidence_and_never_resubmits_remote_work(
         task_state=state,
         tool_gate=(arrived, release) if cut == "after_send" else None,
     ) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         session_id = str(uuid4())
         host = Path(__file__).parent / "fixtures" / "mcp_crashing_client.py"
         process = subprocess.Popen(
-            [sys.executable, str(host), engine, cut, session_id, str(tmp_path)],
+            [sys.executable, str(host), cut, session_id, str(tmp_path)],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

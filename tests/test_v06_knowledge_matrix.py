@@ -25,14 +25,14 @@ from jdagent.knowledge.ptk import (
     empty_prepared_knowledge,
 )
 from jdagent.knowledge.store import ContentAddressedStore
-from tests.runtime_matrix import COMBINATIONS, RuntimeCase, model_response
+from tests.runtime_matrix import MODEL_ADAPTERS, RuntimeCase, model_response
 
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda pair: "/".join(pair))
+@pytest.mark.parametrize("model_adapter", MODEL_ADAPTERS)
 def test_replaced_or_deleted_knowledge_cannot_be_revived_by_backend_state_or_archive(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, combination: tuple[str, str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_adapter: str
 ) -> None:
-    case = RuntimeCase(tmp_path, monkeypatch, combination)
+    case = RuntimeCase(tmp_path, monkeypatch, model_adapter)
     case.workspace.mkdir()
     phase = "old"
     current: Evidence | None = None

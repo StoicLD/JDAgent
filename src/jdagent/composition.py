@@ -20,7 +20,6 @@ from jdagent.context_archive import reconstruct_request
 from jdagent.context_budget import ContextBudget, InputEstimator
 from jdagent.context_runtime import ContextService
 from jdagent.core.contracts import LoopLimits, ModelEventObserver, TurnRunner
-from jdagent.core.loop import AgentLoop
 from jdagent.data_paths import workspace_identity
 from jdagent.domain.json import JsonObject
 from jdagent.domain.mcp import MCPDirectoryLimits
@@ -144,8 +143,8 @@ class RuntimeComposition:
 
 
 @dataclass(slots=True)
-class ConfiguredLoopFactory:
-    """Create per-turn loops from dependencies chosen by the composition root."""
+class ConfiguredTurnRunnerFactory:
+    """Create per-turn runners from dependencies chosen by the composition root."""
 
     model: ModelPort
     model_name: str
@@ -176,7 +175,6 @@ class ConfiguredLoopFactory:
     runtime_limits: LoopLimits | None = None
     maintenance: MemoryMaintenance | None = None
     model_adapter: str = "native"
-    runtime_engine: str = "native"
     mcp_servers: tuple[MCPServerConfiguration, ...] = ()
     mcp: MCPService | None = None
     mcp_result_limits: MCPResultLimits = field(default_factory=MCPResultLimits)
@@ -189,8 +187,6 @@ class ConfiguredLoopFactory:
         if self.reload_configuration is None:
             return
         config = self.reload_configuration()
-        if config.runtime_engine != self.runtime_engine:
-            raise ValueError("Runtime engine changed; restart before beginning the next Turn")
         if config.model_adapter != self.model_adapter:
             raise ValueError("Model adapter changed; restart before beginning the next Turn")
         if config.provider != self.provider_name:
@@ -246,7 +242,7 @@ class ConfiguredLoopFactory:
 
     def create(self, journal: RuntimeJournal) -> TurnRunner:
         if not journal.events:
-            raise ValueError("Session journal must contain session_started before loop creation")
+            raise ValueError("Session journal must contain session_started before runner creation")
         session_id = journal.events[0].session_id
         instructions = TurnInstructions(self.workspace, global_file=self.global_instructions)
         registry = (
@@ -306,8 +302,7 @@ class ConfiguredLoopFactory:
             request_tools=registry if self.mcp is not None else None,
         )
         self.contexts[session_id] = context
-        runner_type = LangGraphTurnRunner if self.runtime_engine == "langgraph" else AgentLoop
-        return runner_type(
+        return LangGraphTurnRunner(
             self.model,
             context_builder,
             tools,
@@ -336,8 +331,6 @@ def build_runtime(
     """
 
     options = runtime_options or RuntimeOptions()
-    if configuration.runtime_engine not in {"native", "langgraph"}:
-        raise ValueError("Unsupported runtime engine")
     if configuration.model_adapter not in {"native", "langchain"}:
         raise ValueError("Unsupported model adapter")
     close_resources: list[Callable[[], Awaitable[None]]] = []
@@ -456,7 +449,7 @@ def build_runtime(
         limits=options.mcp_directory_limits,
         definition_limits=options.mcp_definition_limits,
     )
-    loop_factory = ConfiguredLoopFactory(
+    runner_factory = ConfiguredTurnRunnerFactory(
         model=scheduled_model,
         model_name=configuration.model,
         provider_name=configuration.provider,
@@ -487,7 +480,6 @@ def build_runtime(
         initial_base_url=configuration.base_url,
         maintenance=maintenance,
         model_adapter=configuration.model_adapter,
-        runtime_engine=configuration.runtime_engine,
         mcp_servers=configuration.mcp_servers,
         mcp=mcp if options.include_tools else None,
         mcp_result_limits=options.mcp_result_limits
@@ -500,7 +492,7 @@ def build_runtime(
     coordinator = TurnCoordinator(
         session=session,
         workspace=workspace,
-        loop_factory=loop_factory,
+        runner_factory=runner_factory,
         event_observers=event_observers,
         workspace_identity=workspace_identity(workspace),
         knowledge_catalog=configuration.data_paths.knowledge_catalog,
@@ -513,9 +505,9 @@ def build_runtime(
         memory=memory,
         mcp=mcp,
         mcp_task_management=MCPTaskManagement(
-            mcp, objects, lambda: loop_factory.mcp_result_limits, workspace
+            mcp, objects, lambda: runner_factory.mcp_result_limits, workspace
         ),
-        mcp_prompts=MCPDirectPrompts(mcp, objects, lambda: loop_factory.mcp_result_limits),
+        mcp_prompts=MCPDirectPrompts(mcp, objects, lambda: runner_factory.mcp_result_limits),
     )
     coordinator.after_output = maintenance.start
     return RuntimeComposition(coordinator, model, session, maintenance, tuple(close_resources))

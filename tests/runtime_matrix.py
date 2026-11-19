@@ -1,4 +1,4 @@
-"""Four-backend runtime fixtures with real adapters and an offline HTTP boundary."""
+"""LangGraph runtime fixtures with real adapters and an offline HTTP boundary."""
 
 import json
 from collections.abc import AsyncGenerator, Callable
@@ -21,12 +21,7 @@ from jdagent.domain.model import Usage
 from jdagent.domain.tools import ApprovalDecision, ToolCall
 from jdagent.ports import EventObserver
 
-COMBINATIONS = (
-    ("native", "native"),
-    ("native", "langchain"),
-    ("langgraph", "native"),
-    ("langgraph", "langchain"),
-)
+MODEL_ADAPTERS = ("native", "langchain")
 
 
 def model_response(
@@ -71,7 +66,7 @@ def model_response(
 class RuntimeCase:
     root: Path
     monkeypatch: pytest.MonkeyPatch
-    combination: tuple[str, str]
+    model_adapter: str
 
     @property
     def workspace(self) -> Path:
@@ -90,17 +85,16 @@ class RuntimeCase:
         *,
         approval: FakeApproval | None = None,
         options: RuntimeOptions | None = None,
-        combination: tuple[str, str] | None = None,
+        model_adapter: str | None = None,
         observers: tuple[EventObserver, ...] = (),
     ) -> AsyncGenerator[RuntimeComposition]:
         self.workspace.mkdir(exist_ok=True)
-        engine, adapter_name = combination or self.combination
+        adapter_name = model_adapter or self.model_adapter
         config = resolve_configuration(
             self.workspace,
             CliOverrides(
                 provider="deepseek",
                 base_url="https://test",
-                runtime_engine=engine,
                 model_adapter=adapter_name,
                 model_context_window=120000,
             ),

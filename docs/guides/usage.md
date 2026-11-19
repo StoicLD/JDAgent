@@ -1,8 +1,8 @@
 # JDAgent 安装与使用教程
 
-状态：`Implemented`（当前操作说明），更新：2026-11-11；代码基准：`e23604f`。
+状态：`Implemented`（当前操作说明），v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 
-按当前包版本 0.5.0、双后端和 MCP 实现核对，面向 Windows PowerShell。`powershell` 代码块在终端执行，`text` 中的
+按当前包版本 0.5.0、LangGraph、两个模型适配器和 MCP 实现核对，面向 Windows PowerShell。`powershell` 代码块在终端执行，`text` 中的
 命令和对话示例在 JDAgent 交互界面输入。尖括号中的 ID 是占位符，使用前替换为实际值。
 
 ## 安装与更新
@@ -77,42 +77,26 @@ api_key_file = 'C:\Users\YourName\.secrets\deepseek-key.txt'
 `api_key_file`、开发期兼容路径 `../tmp/keys/deepseek-api-key.txt`。新安装无需创建兼容文件。
 `api_key_file` 不能放进项目配置。
 
-## 选择执行引擎与模型适配器
+## 选择模型适配器与升级旧配置
 
-两种执行引擎和模型适配器已实现，默认仍是 native/native。执行引擎负责模型与工具之间的调度，模型
-适配器负责请求与流的转换；下面四种组合都可选择，其他命令、权限和数据位置沿用原行为。
-
-| 组合 | CLI 参数 | 用途 |
-| --- | --- | --- |
-| 原生执行与原生接入 | `--runtime-engine native --model-adapter native` | 当前默认及回退入口 |
-| 原生执行与 LangChain 接入 | `--runtime-engine native --model-adapter langchain` | 单独试模型适配器 |
-| LangGraph 执行与原生接入 | `--runtime-engine langgraph --model-adapter native` | 单独试图调度 |
-| LangGraph 执行与 LangChain 接入 | `--runtime-engine langgraph --model-adapter langchain` | 同时使用图调度与 LangChain |
-
-例如，已按上一节设置 DeepSeek Key 后启动目标组合：
+每轮由 LangGraph 调度。默认的原生 DeepSeek 适配器负责与模型通信。如果要通过 LangChain 接入 DeepSeek，设置好 Key 后运行
 
 ```powershell
-uv run jdagent --provider deepseek --runtime-engine langgraph --model-adapter langchain --tool-scope analyze
+uv run jdagent --provider deepseek --model-adapter langchain --tool-scope analyze
 ```
 
-仅做离线启动检查：
+也可以在用户配置的顶层设置 `model_adapter = "langchain"`。更换模型适配器后重启进程。
+使用 Fake 离线走一遍同样的图调度，可以直接运行
 
 ```powershell
-uv run jdagent --provider fake --runtime-engine langgraph --output json "离线测试"
+uv run jdagent --provider fake --output json "离线测试"
 ```
 
-Fake 总是使用固定脚本，不能用它证明 LangChain 的网络接入、真实问答或压缩质量通过。
-两项选择也可放在 `%APPDATA%\JDAgent\config.toml` 的顶层；不能放项目 `.jdagent/config.toml`：
-
-```toml
-runtime_engine = "langgraph"
-model_adapter = "langchain"
-```
-
-切换任一后端必须退出并重新启动，CLI 可覆盖用户配置。model、timeout、输出上限等仍按每轮重读，
-已经建立的请求保留自己的参数。回退时显式传 native/native，再用原来的 `/resume <名称或ID>`
-入口继续会话；遇到 unknown 副作用仍需按恢复提示核查，后端切换不使未知结果自动变成已完成。
-当前两个后端共用 v0.5 数据格式，不需要清空会话。版本验收和已知限制见[v0.6 实施记录](../archive/2026-11-11/plans/v0.6-implementation.md)。
+升级时删除脚本中的 `--runtime-engine` 或用户 TOML 中的 `runtime_engine`。
+旧值 `native` 和 `langgraph` 都会进入 LangGraph，每个进程在 stderr 提示一次。
+原来使用 `--model-adapter native` 的脚本可以继续使用。项目 TOML 写入引擎字段会报配置错误。
+恢复已有会话继续使用 `/resume <名称或ID>`。需要回退版本时，退出进程，备份会话和关联对象，
+在副本上用旧构建恢复并核对事件。原任务的未知副作用按已有恢复规则处理。
 
 ## 工作区、文件操作与权限
 
@@ -289,9 +273,9 @@ total_output_token_limit = 3000000
 
 普通配置优先级为 CLI > 项目 > 用户 > 默认值；DENY 另有不能放宽的限制。
 `memory` 表按层整体替换，不逐键合并；完整字段、作用域与路径解析见[配置参考](../reference/configuration.md)。
-`provider`、`base_url`、`api_key_file`、`runtime_engine`、`model_adapter` 只能放用户配置，
+`provider`、`base_url`、`api_key_file`、`model_adapter` 只能放用户配置，
 除 `api_key_file` 外都可用 CLI 覆盖。未知或不允许的字段会报错。
-每轮开始重读配置；Provider、端点或上述后端选择变化应重启。
+每轮开始重读配置；Provider、端点或模型适配器变化应重启。
 当前普通 CLI 的任务次数为 16 次模型、32 次工具、2 次失败恢复；虽能解析 `max_model_calls` 等配置，
 宿主组装会覆盖这三个值，暂不能靠 TOML 调整。具体原因见[配置参考](../reference/configuration.md#顶层字段)。
 
@@ -348,5 +332,5 @@ $LASTEXITCODE
 开发检查见[验证与验收](../modules/verification.md)。固定三次 DeepSeek 通过不代表完整故障
 矩阵、语义质量、RAG Recall 或人工学习出口均已通过。
 
-本次示例参数、配置与离线运行的核对见[文档维护记录](../development/documentation-refresh-2026-11-11.md)。
+v0.8 升级验证见[单引擎验证记录](../development/v0.8-langgraph-verification.md)。早期示例的核对见[文档维护记录](../development/documentation-refresh-2026-11-11.md)。
 历史真实对照见[验证说明](../modules/verification.md)，不把已有环境检查当作新机器安装或真实服务验收。

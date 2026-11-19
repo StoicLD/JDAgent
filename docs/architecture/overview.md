@@ -1,6 +1,6 @@
 # JDAgent 当前架构
 
-状态：`Implemented`（实现说明）。核对日期：2026-11-11，代码基准：`e23604f`。
+状态：`Implemented`（实现说明）。v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 
 JDAgent 是本机 Python CLI。应用层持有会话和用户交互，Runner 调度模型与工具，独立服务处理
 上下文、知识、记忆和 MCP。端口隔离模型与存储实现；持久事件记录执行事实，模型消息由这些事实投影而来。
@@ -15,7 +15,7 @@ flowchart TD
     HOST --> APP["交互应用 / Headless"]
     APP --> COORD["TurnCoordinator 会话与一轮用例"]
     COMPOSE --> COORD
-    COORD --> RUN["TurnRunner: AgentLoop 或 LangGraphTurnRunner"]
+    COORD --> RUN["LangGraphTurnRunner"]
     COORD --> KB["知识准备 / MCP 管理 / 记忆意图"]
     RUN --> CTX["ContextService 请求与压缩"]
     RUN --> MODEL["ModelPort: DeepSeek / LangChain / Fake"]
@@ -28,7 +28,7 @@ flowchart TD
 ```
 
 组合根是依赖组装入口，图中的边表示调用或持有关系，并非严格的单向包分层。
-当前 Coordinator 直接组装知识 Catalog／Index；两种 Runner 都包含引用校验与修复。
+当前 Coordinator 直接组装知识 Catalog／Index；图执行器调用知识模块校验与修复引用。
 讨论未来拆分时需要从这些真实依赖出发。
 
 | 代码位置 | 当前职责 |
@@ -36,7 +36,7 @@ flowchart TD
 | [cli.py](../../src/jdagent/cli.py)、[host.py](../../src/jdagent/host.py) | 参数解析、知识子命令、交互／Headless／维护启动与资源收尾 |
 | [composition.py](../../src/jdagent/composition.py) | 选择适配器、创建 Session／记忆／MCP 服务、按轮构造 Runner |
 | [application/](../../src/jdagent/application) | 用户输入、审批、会话列表与恢复、MCP 直接 Prompt 等用例 |
-| [core/](../../src/jdagent/core)、[runtime/](../../src/jdagent/runtime) | TurnRunner 合同，原生循环与 StateGraph 实现 |
+| [core/](../../src/jdagent/core)、[runtime/](../../src/jdagent/runtime) | TurnRunner 合同与唯一的 StateGraph 实现 |
 | [ports.py](../../src/jdagent/ports.py)、[domain/](../../src/jdagent/domain) | 类型、协议、事件和工具结果合同 |
 | [adapters/](../../src/jdagent/adapters) | 模型协议、JSONL、Windows 文件与进程、终端、MCP SDK |
 | `context*.py`、`memory*.py`、[maintenance.py](../../src/jdagent/maintenance.py) | 输入预算、原文／摘要、记忆版本、后台整理和费用 |
@@ -57,11 +57,11 @@ flowchart TD
 单个模型响应结束不等于任务结束，`completed` 也不表示用户任务经过独立验收。
 错误、取消和未知副作用见[运行时](../modules/runtime.md)与[会话](../modules/sessions.md)。
 
-## 两个可独立选择的后端
+## 图调度与模型接入
 
-`runtime_engine=native|langgraph` 决定调度；`model_adapter=native|langchain` 决定 DeepSeek 接入。
-默认均为 `native`。Fake 使用脚本适配器，与 model_adapter 选择无关。
-后端、Provider 和端点在进程内固定，变更后重启；模型名、超时等可在下一轮重读。
+组合根直接为当前会话构造 `LangGraphTurnRunner`。DeepSeek 默认使用原生适配器，
+也可以用 `model_adapter = "langchain"` 选择 LangChain。Fake 使用脚本适配器。
+Provider、端点或模型适配器变更需要重启。模型名、超时和输出上限在下一轮重读。
 
 LangGraph 使用自建 StateGraph，节点调用既有服务，`compile(checkpointer=False)`。
 当前没有持久 checkpoint、interrupt、ToolNode 自动执行、副作用节点重试或并行工具调度。

@@ -1,6 +1,6 @@
 # ModelPort 当前合同
 
-状态：`Implemented`（实现说明）。核对日期：2026-11-11，代码基准：`e23604f`。
+状态：`Implemented`（实现说明）。v0.8 执行路径核对日期为 2026-11-19，改造前基准为 `9d7cbdc`。
 
 `ModelPort` 将模型协议与 Runner 隔开。接口在 [ports.py](../../src/jdagent/ports.py)，
 字段与事件在 [domain/model.py](../../src/jdagent/domain/model.py)。它不执行工具、审批、保存会话或决定任务完成。
@@ -55,4 +55,4 @@ context_length、invalid_request、invalid_response、provider_internal、cancel
 错误分类本身不自动授权重新执行整个 Turn。
 
 合同验证见 [DeepSeek 测试](../../tests/test_deepseek_adapter.py)、[LangChain 测试](../../tests/test_langchain_model.py)、
-[模型流生命周期](../../tests/test_model_stream_lifecycle.py)、[四组合接线](../../tests/test_v06_composition.py)。
+[模型流生命周期](../../tests/test_model_stream_lifecycle.py)、[双适配器接线](../../tests/test_v06_composition.py)。

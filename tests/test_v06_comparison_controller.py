@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import sqlite3
-import sys
 import threading
 import time
 from pathlib import Path
@@ -120,7 +119,7 @@ def test_controller_runs_ordered_samples_and_enforces_frozen_ceilings(
                 report = await comparison.execute(
                     experiment, sample.label, api_key="dummy-key", authorized=True
                 )
-            expected = "failed" if reject_target and sample.engine == "langgraph" else "passed"
+            expected = "failed" if reject_target and sample.label.startswith("T") else "passed"
             assert report["status"] == expected, report
             if expected == "failed":
                 assert report["exceeded"] == ["total_ms"]
@@ -202,7 +201,7 @@ def test_interrupted_claim_is_consumed_without_resetting_budget(experiment: Path
             messages=(ModelMessage(MessageRole.USER, "synthetic interrupted request"),),
             metadata={"request_id": "interrupted", "call_kind": "task"},
         ),
-        "native/native",
+        "langgraph/native",
         1,
     )
     before = ledger.entries()
@@ -269,26 +268,17 @@ def test_completed_measurement_edit_is_rejected_before_next_attempt(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("flag, environment", [(False, "1"), (True, "0")])
-def test_cli_rejects_missing_opt_in_before_reading_any_key(
-    experiment: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    flag: bool,
-    environment: str,
-) -> None:
-    def forbidden_key(*args: object) -> str:
-        del args
-        raise AssertionError("Credentials must remain unread")
-
-    monkeypatch.setattr(comparison, "load_deepseek_api_key", forbidden_key)
-    monkeypatch.setenv("JDAGENT_RUN_V06_LIVE", environment)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["comparison", "run", str(experiment), "B1", *(["--allow-live"] if flag else [])],
-    )
-    with pytest.raises(ValueError, match="only after authorization"):
-        comparison.main()
+def test_live_comparison_requires_the_historical_revision(tmp_path: Path) -> None:
+    root = tmp_path / "experiment"
+    with pytest.raises(ValueError, match="original revision"):
+        comparison.prepare(
+            root,
+            experiment_id="historical",
+            model="model",
+            base_url="https://api.deepseek.com",
+            limits=ExperimentLimits(1, 100, 100),
+        )
+    assert not root.exists()
 
 
 def test_cancellation_during_os_lock_acquisition_does_not_leak_ownership(

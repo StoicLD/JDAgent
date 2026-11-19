@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from jdagent.application.headless import ExitStatus
-from jdagent.configuration import ConfigurationError
+from jdagent.configuration import LEGACY_RUNTIME_ENGINES, ConfigurationError, accept_legacy_engine
 from jdagent.domain.errors import SessionError
 from jdagent.host import CliStartup, run_cli, run_maintenance
 from jdagent.host import run_single_turn as run_single_turn
@@ -66,7 +66,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=("fake", "deepseek"))
     parser.add_argument("--model")
     parser.add_argument("--model-adapter", choices=("native", "langchain"))
-    parser.add_argument("--runtime-engine", choices=("native", "langgraph"))
+    parser.add_argument(
+        "--runtime-engine",
+        choices=LEGACY_RUNTIME_ENGINES,
+        help="Deprecated compatibility option. All turns use LangGraph.",
+    )
     parser.add_argument("--base-url")
     parser.add_argument("--model-timeout-seconds", type=float)
     parser.add_argument("--tool-timeout-seconds", type=float)
@@ -98,6 +102,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
     namespace = _parser().parse_args(argv)
+    if namespace.runtime_engine is not None:
+        accept_legacy_engine(namespace.runtime_engine)
     workspace = cast(Path, namespace.workspace)
     supplied_data_dir = cast(Path | None, namespace.data_dir)
     return CliStartup(
@@ -106,7 +112,6 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
         provider=cast(str, namespace.provider),
         model=cast(str, namespace.model),
         model_adapter=cast(str | None, namespace.model_adapter),
-        runtime_engine=cast(str | None, namespace.runtime_engine),
         base_url=cast(str, namespace.base_url),
         model_timeout_seconds=cast(float, namespace.model_timeout_seconds),
         tool_timeout_seconds=cast(float, namespace.tool_timeout_seconds),

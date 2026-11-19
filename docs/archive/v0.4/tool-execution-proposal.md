@@ -415,6 +415,6 @@ RAG 失败与本版新回归，不能以旧失败清单为由降低新改动的�
 [模块交付工作流](../../development/module-delivery-workflow.md)、
 [工具领域类型](../../../src/jdagent/domain/tools.py)、
 [Session 编解码](../../../src/jdagent/adapters/jsonl_session.py)、
-[通用 Loop](../../../src/jdagent/core/loop.py)、
+[通用 Loop](https://github.com/StoicLD/JDAgent/blob/21a5aa4066dc0ea318f8949b8c0bd8cc4e62c909/src/jdagent/core/loop.py)、
 [路径解析](../../../src/jdagent/tools/workspace.py)。外部平台实现资料在详细机制选型时补充，本文
 未据未经核验的 Windows API 行为作实现承诺。

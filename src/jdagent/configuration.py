@@ -2,10 +2,12 @@
 
 import math
 import os
+import sys
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+from threading import Lock
 from typing import cast
 
 from jdagent.data_paths import DataPaths
@@ -15,6 +17,8 @@ from jdagent.mcp_configuration import (
     MCPServerConfiguration,
     resolve_mcp_configuration,
 )
+
+LEGACY_RUNTIME_ENGINES = ("native", "langgraph")
 
 _CONTEXT_FIELDS = frozenset(
     {
@@ -129,9 +133,27 @@ class ResolvedConfiguration:
     memory_embedding: EmbeddingProfile | None = None
     cli_overrides: CliOverrides = field(default_factory=CliOverrides, repr=False)
     model_adapter: str = "native"
-    runtime_engine: str = "native"
     mcp_servers: tuple[MCPServerConfiguration, ...] = ()
     mcp_result_quota_mib: int = 100
+
+
+_legacy_notice_lock = Lock()
+_legacy_notice_emitted = False
+
+
+def accept_legacy_engine(value: object) -> None:
+    """Validate an old selector and issue one migration notice across concurrent reloads."""
+    if not isinstance(value, str) or value.strip() not in LEGACY_RUNTIME_ENGINES:
+        raise ConfigurationError("runtime_engine must be native or langgraph")
+    global _legacy_notice_emitted
+    with _legacy_notice_lock:
+        if not _legacy_notice_emitted:
+            print(
+                "jdagent: remove --runtime-engine or runtime_engine from your configuration; "
+                "LangGraph now executes all turns, including those previously set to native.",
+                file=sys.stderr,
+            )
+            _legacy_notice_emitted = True
 
 
 def _read_layer(path: Path, *, layer: str, allowed: frozenset[str]) -> dict[str, object]:
@@ -197,9 +219,6 @@ def _validate(values: dict[str, object]) -> None:
     values["model_adapter"] = _non_empty_string(values, "model_adapter")
     if values["model_adapter"] not in {"native", "langchain"}:
         raise ConfigurationError("model_adapter must be native or langchain")
-    values["runtime_engine"] = _non_empty_string(values, "runtime_engine")
-    if values["runtime_engine"] not in {"native", "langgraph"}:
-        raise ConfigurationError("runtime_engine must be native or langgraph")
     values["model"] = _non_empty_string(values, "model")
     values["base_url"] = _non_empty_string(values, "base_url")
     _positive_number(values, "model_timeout_seconds")
@@ -249,7 +268,6 @@ def resolve_configuration(
     values: dict[str, object] = {
         "provider": "deepseek",
         "model_adapter": "native",
-        "runtime_engine": "native",
         "model": "deepseek-v4-flash",
         "base_url": "https://api.deepseek.com",
         "model_timeout_seconds": 30.0,
@@ -274,6 +292,10 @@ def resolve_configuration(
     }
     user = _read_layer(paths.user_config_file, layer="user", allowed=_USER_FIELDS)
     project = _read_layer(paths.project_config_file, layer="project", allowed=_PROJECT_FIELDS)
+    if "runtime_engine" in user:
+        accept_legacy_engine(user.pop("runtime_engine"))
+    if overrides.runtime_engine is not None:
+        accept_legacy_engine(overrides.runtime_engine)
     try:
         mcp_configuration = resolve_mcp_configuration(
             user.pop("mcp", {}),
@@ -299,7 +321,7 @@ def resolve_configuration(
     _apply_layer(values, user)
     _apply_layer(values, project)
     for item in fields(overrides):
-        if item.name == "data_dir":
+        if item.name in {"data_dir", "runtime_engine"}:
             continue
         value = getattr(overrides, item.name)
         if value is not None:
@@ -382,7 +404,6 @@ def resolve_configuration(
     return ResolvedConfiguration(
         provider=cast(str, values["provider"]),
         model_adapter=cast(str, values["model_adapter"]),
-        runtime_engine=cast(str, values["runtime_engine"]),
         model=cast(str, values["model"]),
         base_url=cast(str, values["base_url"]),
         model_timeout_seconds=float(cast(float, values["model_timeout_seconds"])),

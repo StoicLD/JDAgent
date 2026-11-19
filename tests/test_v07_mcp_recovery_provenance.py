@@ -33,11 +33,10 @@ from jdagent.domain.tools import ApprovalDecision, RiskLevel, ToolCall
 from jdagent.eventing import EventJournal
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("compact_parent", [False, True])
 @pytest.mark.parametrize("child_tool", [False, True])
 def test_recovery_child_and_nested_child_keep_mcp_provenance_after_restart(
-    tmp_path: Path, engine: str, compact_parent: bool, child_tool: bool
+    tmp_path: Path, compact_parent: bool, child_tool: bool
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -54,7 +53,7 @@ def test_recovery_child_and_nested_child_keep_mcp_provenance_after_restart(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

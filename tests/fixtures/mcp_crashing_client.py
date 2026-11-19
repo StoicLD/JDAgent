@@ -24,14 +24,14 @@ from jdagent.domain.tools import ApprovalDecision, ToolCall
 
 
 async def main() -> None:
-    engine, cut, session_id, workspace_text = sys.argv[1:]
+    cut, session_id, workspace_text = sys.argv[1:]
     workspace = Path(workspace_text)
     paths = DataPaths.for_workspace(
         workspace, config_root=workspace / "config", data_root=workspace / "data"
     )
     config = resolve_configuration(
         workspace,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )

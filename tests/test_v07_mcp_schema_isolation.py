@@ -59,7 +59,7 @@ def test_directory_resolves_local_references_before_exposing_tools(
     tmp_path: Path, version: str, schema: JsonObject, accepted: bool
 ) -> None:
     with wire_server(version, "json", tool_schema=dict(schema)) as url:
-        config = task_configuration(tmp_path, url, "native")
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             runtime = build_runtime(config, FakeApproval(ApprovalDecision.APPROVE))
@@ -94,7 +94,7 @@ def test_unidentifiable_entries_duplicates_and_invalid_envelopes_keep_distinct_o
     elif fault == "cursor":
         overrides = {"tools": [valid], "nextCursor": 42}
     with wire_server(version, "json", directory_overrides={"tools/list": overrides}) as url:
-        config = task_configuration(tmp_path, url, "native")
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(
             path.read_text(encoding="utf-8").replace(
@@ -126,7 +126,6 @@ def test_unidentifiable_entries_duplicates_and_invalid_envelopes_keep_distinct_o
 
 
 @pytest.mark.parametrize("version", ["2025-11-25", "2026-07-28"])
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize(
     ("method", "key", "valid", "broken"),
     [
@@ -154,7 +153,6 @@ def test_unidentifiable_entries_duplicates_and_invalid_envelopes_keep_distinct_o
 def test_malformed_entry_does_not_hide_healthy_capabilities_or_prevent_execution(
     tmp_path: Path,
     version: str,
-    engine: str,
     method: str,
     key: str,
     valid: JsonObject,
@@ -167,7 +165,7 @@ def test_malformed_entry_does_not_hide_healthy_capabilities_or_prevent_execution
         materials=True,
         directory_overrides={method: {key: [valid, broken]}},
     ) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
         path = config.data_paths.user_config_file
         path.write_text(
             path.read_text(encoding="utf-8").replace(

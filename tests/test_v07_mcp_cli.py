@@ -39,10 +39,9 @@ from tests.test_v07_mcp_http import TaskPeerState, wire_server
 from tests.test_v07_mcp_task_management import leave_running_task, task_configuration
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("finish", ["approve", "cancel", "exit"])
 def test_status_compaction_cancel_and_exit_do_not_consume_the_approval_answer(
-    tmp_path: Path, engine: str, finish: str
+    tmp_path: Path, finish: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -51,7 +50,7 @@ def test_status_compaction_cancel_and_exit_do_not_consume_the_approval_answer(
     paths.user_config_file.write_text("[memory]\nauto_consolidation = false\n", encoding="utf-8")
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -157,10 +156,9 @@ def test_status_compaction_cancel_and_exit_do_not_consume_the_approval_answer(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("catalog_case", ["catalog_once", "catalog_invalid"])
 def test_cli_can_discover_and_refresh_three_capability_kinds_before_any_prompt(
-    tmp_path: Path, engine: str, catalog_case: str
+    tmp_path: Path, catalog_case: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -177,7 +175,7 @@ def test_cli_can_discover_and_refresh_three_capability_kinds_before_any_prompt(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
@@ -232,14 +230,13 @@ def test_cli_can_discover_and_refresh_three_capability_kinds_before_any_prompt(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("action", ["query", "cancel"])
 def test_cli_manages_a_reopened_original_task_without_starting_an_agent_turn(
-    tmp_path: Path, engine: str, action: str
+    tmp_path: Path, action: str
 ) -> None:
     state = TaskPeerState()
     with wire_server("2026-07-28", "json", task_state=state) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -290,18 +287,15 @@ def test_cli_manages_a_reopened_original_task_without_starting_an_agent_turn(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("finish", ["cancel", "exit"])
-def test_remote_task_management_itself_remains_controllable(
-    tmp_path: Path, engine: str, finish: str
-) -> None:
+def test_remote_task_management_itself_remains_controllable(tmp_path: Path, finish: str) -> None:
     state = TaskPeerState()
     arrived, release = threading.Event(), threading.Event()
     release.set()
     with wire_server(
         "2026-07-28", "json", task_state=state, task_query_gate=(arrived, release)
     ) as url:
-        config = task_configuration(tmp_path, url, engine)
+        config = task_configuration(tmp_path, url)
 
         async def scenario() -> None:
             session_id, task_ref = await leave_running_task(config)
@@ -371,10 +365,9 @@ def test_remote_task_management_itself_remains_controllable(
         asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("engine", ["native", "langgraph"])
 @pytest.mark.parametrize("finish", ["cancel", "exit"])
 def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
-    tmp_path: Path, engine: str, finish: str
+    tmp_path: Path, finish: str
 ) -> None:
     paths = DataPaths.for_workspace(
         tmp_path, config_root=tmp_path / "config", data_root=tmp_path / "data"
@@ -391,7 +384,7 @@ def test_long_mcp_call_accepts_local_controls_and_closes_before_cli_exit(
     )
     config = resolve_configuration(
         tmp_path,
-        CliOverrides(provider="fake", runtime_engine=engine),
+        CliOverrides(provider="fake"),
         data_paths=paths,
         environment={},
     )
