@@ -14,6 +14,7 @@
 | 接入 MCP | [配置与操作](guides/mcp.md) → [实现说明](modules/mcp.md) |
 | 导入知识材料 | [知识库教程](guides/knowledge.md)，先阅读可用范围 |
 | 理解整体设计 | [架构总览](architecture/overview.md) → 下表的模块 |
+| 系统读完详细设计、准备技术面试 | [JDAgent 详细设计、架构与 20 组面试问答](architecture/jdagent-design-and-interview.md) |
 | 修改代码 | [当前状态](context/current.md) → [协作规则](development/agent-collaboration.md) → [开发指南](development/contributing.md) |
 | 查验测试与限制 | [验证与验收](modules/verification.md)及模块内的代码／测试链接 |
 | 查历史取舍、审批和版本证据 | [ADR 索引](decisions/README.md)、[归档索引](archive/README.md) |
