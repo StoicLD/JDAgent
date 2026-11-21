@@ -1,14 +1,14 @@
-"""Canonical workspace path resolution shared by file tools."""
+"""为文件工具解析并校验工作区内的规范路径。"""
 
 from pathlib import Path
 
 
 class WorkspacePathError(ValueError):
-    """A requested path cannot be proven to remain inside the workspace."""
+    """表示无法确认请求路径位于工作区内。"""
 
 
 class WorkspacePathResolver:
-    """Resolve existing reads and potential writes without prefix comparisons."""
+    """将工具提供的相对路径解析到工作区，读取已有文件和创建新文件分别检查真实祖先路径。"""
 
     def __init__(self, workspace: Path) -> None:
         try:
@@ -23,7 +23,7 @@ class WorkspacePathResolver:
         return self._root
 
     def resolve_read(self, requested: str) -> Path:
-        """Resolve an existing file while rejecting every workspace escape."""
+        """校验读取目标的实际位置，拒绝工作区外部的目标。"""
 
         candidate = self._candidate(requested)
         try:
@@ -36,7 +36,7 @@ class WorkspacePathResolver:
         return resolved
 
     def resolve_write(self, requested: str) -> Path:
-        """Resolve a possibly missing file through its real existing ancestors."""
+        """对尚未创建的路径先检查已存在的祖先，确保写入目标仍在工作区内。"""
 
         candidate = self._candidate(requested)
         try:

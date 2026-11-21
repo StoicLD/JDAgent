@@ -1,4 +1,4 @@
-"""Turn-scoped citation validation, display rewrite, and repair copy."""
+"""校验本轮回答的证据引用，将有效标记改写为展示格式，并生成修正提示。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ _SUPPLEMENT = re.compile(r"(?is)\n+---\s*model[ _-]?supplement\s*---\s*(.*)\Z")
 
 @dataclass(frozen=True, slots=True)
 class FinalizedAnswer:
+    """保存转换为展示格式的回答、已验证的引用和补充文本，并标记是否出现非法引用。"""
+
     display_text: str
     citations: tuple[CitationRecord, ...]
     model_supplement: str
@@ -26,6 +28,8 @@ class FinalizedAnswer:
 
 
 class CitationTarget(StrEnum):
+    """表示引用目标的状态：原文可打开、来源已移除，或原文数据损坏。"""
+
     OPENABLE = "openable"
     TOMBSTONE = "tombstone"
     CORRUPT = "corrupt"
@@ -44,7 +48,7 @@ def resolve_source_citation_target(
     store: ContentAddressedStore,
     source_id: str,
 ) -> CitationTarget:
-    """Resolve a historical citation against Catalog lifecycle, then the object store."""
+    """根据来源的生命周期及当前版本原文是否缺失，判断引用目标能否打开。"""
 
     try:
         source = catalog.get_source(source_id)
@@ -62,6 +66,7 @@ def resolve_source_citation_target(
 
 
 def finalize_answer(text: str, knowledge: PreparedTurnKnowledge) -> FinalizedAnswer:
+    """将合法的本轮机器引用转换为展示编号，保留证据映射；跨轮或不存在的引用标记为无效。"""
     supplement = ""
     body = text
     match = _SUPPLEMENT.search(text)
@@ -104,6 +109,7 @@ def finalize_answer(text: str, knowledge: PreparedTurnKnowledge) -> FinalizedAns
 
 
 def repair_message(knowledge: PreparedTurnKnowledge) -> str:
+    """根据本轮证据清单生成修复指令，使模型可以重新提交可核验的引用。"""
     refs = ", ".join(item.reference for item in knowledge.evidence) or "(none)"
     return (
         "Your previous answer used an invalid evidence reference. "
@@ -113,6 +119,7 @@ def repair_message(knowledge: PreparedTurnKnowledge) -> str:
 
 
 def evidence_system_part(knowledge: PreparedTurnKnowledge) -> str:
+    """将检索材料作为带来源的外部证据置入请求，并说明可使用的引用形式。"""
     if not knowledge.evidence:
         return (
             "Knowledge retrieval outcome is "

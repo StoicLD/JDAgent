@@ -1,4 +1,4 @@
-"""JSON-compatible types and the single validation entry point for adapters."""
+"""定义项目允许的 JSON 值，并在接收外部数据时检查类型。"""
 
 from typing import TypeAlias, cast
 
@@ -7,7 +7,7 @@ JsonObject: TypeAlias = dict[str, JsonValue]
 
 
 def normalize_json(value: object) -> JsonValue:
-    """Recursively validate an untyped decoder result as JSON-compatible data."""
+    """递归检查解码后的值，确保后续组件只接收受支持的 JSON 类型。"""
 
     if value is None or isinstance(value, (str, int, float, bool)):
         return value

@@ -1,4 +1,4 @@
-"""Interactive CLI actions, command routing, and application lifecycle."""
+"""解析交互命令，管理输入、执行、取消与退出时的界面状态。"""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ _OperationResult = TypeVar("_OperationResult")
 
 
 class CommandName(StrEnum):
-    """The complete built-in command set."""
+    """列出交互界面支持的内置命令。"""
 
     HELP = "help"
     STATUS = "status"
@@ -60,16 +60,20 @@ class CommandName(StrEnum):
 
 
 class CommandError(ValueError):
-    """An unknown command or invalid command syntax."""
+    """表示输入了未知命令或命令参数不符合语法。"""
 
 
 @dataclass(frozen=True, slots=True)
 class PromptAction:
+    """表示需要交给协调器执行的一条用户输入。"""
+
     text: str
 
 
 @dataclass(frozen=True, slots=True)
 class CommandAction:
+    """表示由交互界面处理的命令及其参数。"""
+
     name: CommandName
     arguments: tuple[str, ...] = ()
 
@@ -88,6 +92,8 @@ UserAction: TypeAlias = PromptAction | CommandAction | CancelAction | ExitAction
 
 
 class InteractionState(StrEnum):
+    """表示界面当前处于等待输入、执行任务或等待用户决定等哪个阶段。"""
+
     STARTING = "starting"
     IDLE = "idle"
     RUNNING_TURN = "generating"
@@ -109,12 +115,16 @@ class UiEventKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class UiEvent:
+    """应用交给展示层的一次输出，例如状态变化、助手回答或错误提示。"""
+
     kind: UiEventKind
     message: str
     state: InteractionState | None = None
 
 
 class TerminalPort(Protocol):
+    """约定应用如何从终端读取输入、接收控制信号并关闭终端资源。"""
+
     async def next_action(self, state: InteractionState) -> UserAction: ...
 
     async def update_status(self, status: TerminalStatus) -> None: ...
@@ -123,11 +133,13 @@ class TerminalPort(Protocol):
 
 
 class PresenterPort(Protocol):
+    """约定界面如何展示对话、状态和命令结果，使交互逻辑独立于具体终端。"""
+
     async def publish(self, event: UiEvent) -> None: ...
 
 
 class InteractionRuntimeObserver:
-    """Feed persisted runtime lifecycle facts back into the application state machine."""
+    """将已持久化的工具和审批事件传给交互应用，使界面状态与执行记录一致。"""
 
     def __init__(self) -> None:
         self._application: InteractiveApplication | None = None
@@ -144,6 +156,8 @@ class InteractionRuntimeObserver:
 
 @dataclass(frozen=True, slots=True)
 class InteractiveContext:
+    """保存交互命令需要展示或查询的模型、工作区、权限及数据位置。"""
+
     provider: str
     model: str
     workspace: Path
@@ -158,6 +172,8 @@ class InteractiveContext:
 
 @dataclass(frozen=True, slots=True)
 class TerminalStatus:
+    """提供一次界面状态快照，供终端绘制当前会话和执行状态。"""
+
     state: InteractionState
     session: str
     model: str
@@ -166,7 +182,7 @@ class TerminalStatus:
 
 
 def parse_user_action(raw: str) -> UserAction:
-    """Route controls separately, retaining explicit Prompt triggers as user input."""
+    """区分普通输入和交互控制命令；显式触发的 MCP 提示仍作为本轮用户输入处理。"""
 
     stripped = raw.strip()
     if not stripped:
@@ -239,7 +255,7 @@ def _mcp_status_text(servers: Sequence[MCPServerStatus]) -> str:
 
 
 class InteractiveApplication:
-    """Own the REPL state and delegate facts to existing application seams."""
+    """管理交互会话的读入、展示与取消，把需要执行的输入交给协调器。"""
 
     def __init__(
         self,
@@ -276,7 +292,7 @@ class InteractiveApplication:
         return self._active_turn_task is not None
 
     def cancel_current_turn(self) -> bool:
-        """Cancel the active coordinator task without exiting the REPL."""
+        """取消正在运行的对话轮次，保留交互界面以接收下一条输入。"""
 
         task = self._active_turn_task
         cancellation = self._active_cancellation
@@ -287,7 +303,7 @@ class InteractiveApplication:
         return True
 
     async def observe_runtime_event(self, event: RuntimeEvent) -> None:
-        """Project persisted tool and approval lifecycle facts into UI state."""
+        """根据已保存的工具和审批事件更新界面状态。"""
 
         if not self.turn_running:
             return
@@ -322,7 +338,7 @@ class InteractiveApplication:
         )
 
     async def run(self) -> int:
-        """Run until an explicit exit action while always closing the terminal."""
+        """持续读取用户操作直到退出，并在离开时关闭终端。"""
 
         try:
             await self._set_state(InteractionState.STARTING)
@@ -361,6 +377,7 @@ class InteractiveApplication:
             await self._terminal.close()
 
     async def _run_prompt(self, action: PromptAction) -> None:
+        """启动一轮对话，同时接收取消等控制信号，收尾后回到等待输入的状态。"""
         if not action.text.strip():
             return
         new_session_id: str | None = None
@@ -430,6 +447,7 @@ class InteractiveApplication:
     async def _consume_controls(
         self, operation: asyncio.Task[_OperationResult]
     ) -> _OperationResult:
+        """在前台任务执行期间读取控制事件，按当前状态处理取消和其他输入。"""
         while not operation.done():
             control = asyncio.create_task(self._terminal.next_action(self._state))
             try:
@@ -487,6 +505,7 @@ class InteractiveApplication:
         return await operation
 
     async def _handle_command(self, action: CommandAction) -> bool:
+        """分派会话、权限、知识和 MCP 等交互命令，使管理操作可以独立于普通对话执行。"""
         try:
             if action.name is CommandName.EXIT:
                 self._require_arity(action.arguments, 0, "/exit")
@@ -655,6 +674,7 @@ class InteractiveApplication:
         return False
 
     async def _mcp_command(self, arguments: tuple[str, ...]) -> None:
+        """处理 MCP 状态、目录和远程任务命令；需要等待的操作同时监听终端取消信号。"""
         if arguments in {(), ("status",)}:
             await self._presenter.publish(
                 UiEvent(

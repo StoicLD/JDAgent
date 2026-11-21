@@ -1,4 +1,4 @@
-"""Deterministic terminal and presenter adapters for application tests."""
+"""用预设输入和可检查的输出替代交互终端，供应用测试使用。"""
 
 import asyncio
 from collections.abc import Iterable
@@ -15,7 +15,7 @@ from jdagent.application.interactive import (
 
 
 class ScriptedTerminal:
-    """Return prearranged user actions through the production terminal seam."""
+    """按预设顺序向交互应用提供用户操作，使测试可走与真实终端相同的接口。"""
 
     def __init__(self, actions: Iterable[UserAction]) -> None:
         self._actions = list(actions)
@@ -47,7 +47,7 @@ class ScriptedTerminal:
 
 
 class CapturePresenter:
-    """Capture semantic UI events without terminal rendering details."""
+    """记录应用发出的界面事件，测试可据此核对提示与状态变化。"""
 
     def __init__(self) -> None:
         self.events: list[UiEvent] = []

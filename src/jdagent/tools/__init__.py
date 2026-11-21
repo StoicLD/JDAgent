@@ -1,1 +1,1 @@
-"""Built-in tool registry, policy, and execution runtime."""
+"""提供内置工具注册、权限判断和执行能力。"""

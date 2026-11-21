@@ -1,3 +1,4 @@
+# 用本地文件索引和哈希向量检查检索证据，可按需调用模型生成回答。
 """Inspect local RAG evidence; optionally run a real-model answer for manual review.
 
 This diagnostic uses FileKnowledgeIndex and HashEmbedding. It is not the default
@@ -25,6 +26,7 @@ from jdagent.knowledge.preparation import CatalogBaseResolver, TurnKnowledgePrep
 
 
 async def inspect(args: argparse.Namespace) -> None:
+    """读取指定工作区的知识库，展示本轮检索证据，并按参数决定是否生成回答。"""
     paths = DataPaths.for_workspace(args.workspace)
     index_path = paths.knowledge_directory / "index.sqlite"
     if not paths.knowledge_catalog.is_file() or not index_path.is_file():

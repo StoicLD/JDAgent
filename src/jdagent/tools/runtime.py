@@ -1,4 +1,4 @@
-"""Deep tool execution module: validation, permission, timeout, and normalization."""
+"""统一校验工具参数、判断权限、执行调用并整理结果。"""
 
 import asyncio
 import hashlib
@@ -47,7 +47,7 @@ def _approval_argument_summary(
     *,
     target: str | None,
 ) -> JsonObject:
-    """Describe argument shape without retaining user content or secret values."""
+    """仅说明参数的结构，供审批记录展示，避免保存用户正文或密钥值。"""
 
     summary: JsonObject = {}
     for name in sorted(arguments):
@@ -66,7 +66,7 @@ def _approval_argument_summary(
 
 
 class ToolRegistry:
-    """Own the unique definition for each registered tool name."""
+    """按名称管理工具定义，并保存特定模型请求实际可见的工具集合。"""
 
     def __init__(
         self,
@@ -84,6 +84,7 @@ class ToolRegistry:
         self._exposure_capability = exposure_capability
         self._dynamic_definitions: dict[str, ToolDefinition] = {}
         self._request_id = ""
+        # 保存模型实际收到的工具定义，执行返回的调用时按对应请求核对。
         self._snapshot: dict[str, ToolDefinition] = {}
 
     def get(self, name: str) -> ToolDefinition | None:
@@ -108,7 +109,7 @@ class ToolRegistry:
             self._dynamic.used(definition)
 
     async def prepare_request(self) -> tuple[ToolDefinition, ...]:
-        # Reached only after the previous response's complete tool batch.
+        """在上一次响应的整批工具执行完后准备下一次请求可见的定义。"""
         self._snapshot, self._request_id = {}, ""
         if self._dynamic is not None:
             definitions = await self._dynamic.prepare_tools()
@@ -120,7 +121,7 @@ class ToolRegistry:
         return self.definitions(self._exposure_capability)
 
     def reduce_tools(self, request: ModelRequest) -> ModelRequest:
-        """Omit one least recently used remote schema before the request is bound."""
+        """绑定请求前优先移除近期最少使用的远端定义，为上下文腾出空间。"""
         if self._request_id:
             raise ValueError("Cannot unload a definition from a bound tool batch")
         if self._dynamic is None:
@@ -149,6 +150,7 @@ class ToolRegistry:
         )
 
     def bind_request(self, request: ModelRequest) -> ModelRequest:
+        """固定该请求实际包含的动态工具定义与来源，执行调用时据此核对。"""
         definitions = {item.name: item for item in self.definitions()}
         snapshot: dict[str, ToolDefinition] = {}
         for visible in request.tools:
@@ -196,7 +198,7 @@ class ToolRegistry:
 
 
 class ToolRuntime:
-    """Execute one tool call while enforcing every pre-side-effect check."""
+    """将工具名称和参数解析为一次受控操作，在产生副作用前完成校验、权限判定与必要的审批。"""
 
     def __init__(
         self,
@@ -222,6 +224,7 @@ class ToolRuntime:
         self._rejected: set[tuple[str, str, str]] = set()
 
     async def execute(self, call: ToolCall, context: ToolExecutionContext) -> ToolResult:
+        """检查本次请求可用的定义、参数和权限，记录执行开始，运行处理函数并将返回值或故障转换为工具结果。"""
         started = time.perf_counter()
         identity = (context.session_id, call.call_id)
         if identity in self._executed:
@@ -286,6 +289,7 @@ class ToolRuntime:
                     "New directory instructions must be read before replanning this batch",
                     started,
                 )
+        # 用规范化后的完整参数识别同一操作，也用这份快照检查批准后参数是否变化。
         prepared_snapshot = json.dumps(prepared_arguments, sort_keys=True, ensure_ascii=False)
         approval_identity = (context.turn_id, call.name, prepared_snapshot)
         if approval_identity in self._rejected:
@@ -401,9 +405,7 @@ class ToolRuntime:
         operation = definition.handler(
             prepared_arguments, replace(context, call_id=call.call_id, tool_name=call.name)
         )
-        # MCP owns its logical deadline and bounded transport cleanup. Running it
-        # inline lets cancellation reach that owner; the local transaction wait
-        # below must not become an additional unbounded MCP cleanup layer.
+        # MCP 自行管理截止时间和传输收尾。在当前任务中等待，使取消能传到连接所有者。
         task = asyncio.ensure_future(operation) if definition.origin.kind == "builtin" else None
         try:
             if task is None:
@@ -495,7 +497,7 @@ class ToolRuntime:
 
     @staticmethod
     async def _settle(task: asyncio.Future[str | ToolOutcome]) -> str | ToolOutcome:
-        """Retain task ownership even when the caller repeatedly cancels cleanup."""
+        """取消期间仍持有已启动的本地任务并等待它收尾，避免后台操作在会话记录结束后继续写入。"""
         while True:
             try:
                 return await asyncio.shield(task)

@@ -1,4 +1,4 @@
-"""Tool, permission, and approval domain types."""
+"""定义工具、权限判断和用户授权的公共数据类型。"""
 
 import hashlib
 from collections.abc import Awaitable, Callable
@@ -15,12 +15,12 @@ def _empty_json_object() -> JsonObject:
 
 
 def command_log_id(call_id: str) -> str:
-    """Derive the opaque log reference recoverable from a durable start event."""
+    """从工具调用标识生成命令日志引用，恢复时可根据已保存的开始事件重新计算。"""
     return hashlib.sha256(call_id.encode("utf-8")).hexdigest()
 
 
 class RiskLevel(StrEnum):
-    """Risk attached to a registered tool."""
+    """标记宿主注册工具时指定的风险级别，供后续策略判断使用。"""
 
     PURE = "pure"
     READ = "read"
@@ -29,7 +29,7 @@ class RiskLevel(StrEnum):
 
 
 class ToolCapability(StrEnum):
-    """Host-selected cumulative tool availability for one turn."""
+    """定义本轮允许使用的工具能力范围，较高范围包含较低范围的能力。"""
 
     ANALYZE = "analyze"
     EDIT = "edit"
@@ -44,7 +44,7 @@ class ToolCapability(StrEnum):
 
 
 class PermissionDecision(StrEnum):
-    """A policy decision made before a tool side effect."""
+    """宿主在产生副作用之前作出的策略判断，区分放行、询问和拒绝。"""
 
     ALLOW = "allow"
     ASK = "ask"
@@ -52,7 +52,7 @@ class PermissionDecision(StrEnum):
 
 
 class PermissionTargetKind(StrEnum):
-    """The path scope of a persistent session permission rule."""
+    """描述会话许可匹配操作目标时使用的范围类型。"""
 
     FILE = "file"
     DIRECTORY = "directory"
@@ -61,7 +61,7 @@ class PermissionTargetKind(StrEnum):
 
 
 class ApprovalDecision(StrEnum):
-    """A user's answer to an approval request."""
+    """表示用户针对具体审批请求作出的决定。"""
 
     APPROVE = "approve"
     REJECT = "reject"
@@ -69,7 +69,7 @@ class ApprovalDecision(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SessionPermissionRule:
-    """A narrow, workspace-relative permission granted to one session."""
+    """保存仅对当前会话有效的有限授权，按工具和操作目标匹配后续请求。"""
 
     rule_id: str
     session_id: str
@@ -83,7 +83,7 @@ class SessionPermissionRule:
 
 @dataclass(frozen=True, slots=True)
 class ApprovalOutcome:
-    """One approval decision plus an optional persistent Session rule."""
+    """包含本次审批决定，以及用户选择持续授权时生成的会话规则。"""
 
     decision: ApprovalDecision
     granted_rule: SessionPermissionRule | None = None
@@ -94,14 +94,14 @@ class ApprovalOutcome:
 
 
 class ToolResultStatus(StrEnum):
-    """Whether a tool call completed successfully."""
+    """标记一次工具调用的结果状态，供模型和界面读取。"""
 
     SUCCESS = "success"
     ERROR = "error"
 
 
 class ToolErrorCode(StrEnum):
-    """Stable failures at the tool seam."""
+    """将工具错误归入稳定类别，使调用方能区分权限、参数、容量和执行故障。"""
 
     UNKNOWN_TOOL = "unknown_tool"
     TOOL_UNAVAILABLE = "tool_unavailable"
@@ -122,7 +122,7 @@ class ToolErrorCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ToolOutcome:
-    """Execution facts, independent of whether the user's task passed."""
+    """保存实际观察到的执行事实，可用于统计失败次数和决定是否继续。"""
 
     data: JsonObject = field(default_factory=_empty_json_object)
     completed: bool = True
@@ -158,7 +158,7 @@ class ToolOutcome:
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
-    """A complete model-requested tool invocation."""
+    """模型提交的一次完整工具请求，包含调用标识、工具名称与参数。"""
 
     call_id: str
     name: str
@@ -167,7 +167,7 @@ class ToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ToolExecutionContext:
-    """Host-controlled context made available to a tool handler."""
+    """宿主提供的执行上下文，限定工具可使用的工作区、会话、轮次及相关授权信息。"""
 
     session_id: str
     turn_id: str
@@ -186,7 +186,7 @@ ToolPreflight = Callable[[JsonObject, ToolExecutionContext], JsonObject]
 
 @dataclass(frozen=True, slots=True)
 class ToolOrigin:
-    """Host-registered provenance; never read from model or Server arguments."""
+    """工具注册时由宿主确定的来源，用于区分本地和外部工具，调用参数不能改写它。"""
 
     kind: Literal["builtin", "mcp", "mcp_control"] = "builtin"
     server_id: str | None = None
@@ -198,7 +198,7 @@ class ToolOrigin:
 
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
-    """The single registry record for one tool."""
+    """工具在宿主注册表中的定义，把模型可见的参数结构与实际处理函数、权限属性关联起来。"""
 
     name: str
     description: str
@@ -214,7 +214,7 @@ class ToolDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
-    """A normalized tool execution outcome."""
+    """对一次工具调用的统一答复，通过调用标识与请求配对，可携带输出、错误和执行事实。"""
 
     call_id: str
     tool_name: str
@@ -233,7 +233,7 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class ApprovalRequest:
-    """Information required for a human approval decision."""
+    """供用户判断是否授权的一次操作说明，包括工具名称与本次实际操作的目标。"""
 
     tool_name: str
     arguments: JsonObject

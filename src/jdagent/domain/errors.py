@@ -1,10 +1,10 @@
-"""Runtime-level stop and session error types."""
+"""定义对话停止原因以及可供上层识别的会话错误。"""
 
 from enum import StrEnum
 
 
 class StopReason(StrEnum):
-    """Stable reason why a complete agent turn stopped."""
+    """描述整轮对话结束的原因，调用方据此区分正常完成、取消、预算耗尽和故障。"""
 
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -17,7 +17,7 @@ class StopReason(StrEnum):
 
 
 class SessionErrorCode(StrEnum):
-    """Stable failures at the session seam."""
+    """会话存储与恢复错误的稳定分类，供上层决定如何处理。"""
 
     NOT_FOUND = "not_found"
     CORRUPT_EVENT = "corrupt_event"
@@ -28,7 +28,7 @@ class SessionErrorCode(StrEnum):
 
 
 class SessionError(RuntimeError):
-    """A classified session adapter failure."""
+    """携带错误分类的会话异常，用于报告读取、追加或取得会话所有权失败。"""
 
     def __init__(self, code: SessionErrorCode, message: str) -> None:
         super().__init__(message)

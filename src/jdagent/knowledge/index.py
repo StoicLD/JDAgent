@@ -1,4 +1,4 @@
-"""Knowledge index adapters with revision filtering before top-K."""
+"""定义知识索引及本地实现，在选择排名靠前的片段前筛选可见版本。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 
 @dataclass(frozen=True, slots=True)
 class IndexChunk:
+    """索引中的一个子片段，关联父段、来源版本、向量和可见的修订区间。"""
+
     chunk_id: str
     source_id: str
     source_version_id: str
@@ -25,6 +27,7 @@ class IndexChunk:
     content_hash: str
     text: str
     vector: tuple[float, ...]
+    # 起始修订号包含在可见范围内，终止修订号不包含在内。终止值为 0 表示目前仍可见。
     valid_from_revision: int
     valid_to_revision: int = 0
     parent_text: str = ""
@@ -34,6 +37,8 @@ class IndexChunk:
 
 @dataclass(frozen=True, slots=True)
 class IndexHit:
+    """单个检索命中，包含排名得分及还原来源片段、父段和引用所需的信息。"""
+
     chunk_id: str
     source_id: str
     source_version_id: str
@@ -49,6 +54,8 @@ class IndexHit:
 
 
 class KnowledgeIndex(Protocol):
+    """定义写入片段、按修订关闭可见性及检索的接口，使同一检索流程可使用不同后端。"""
+
     def upsert_chunks(self, generation_id: str, chunks: tuple[IndexChunk, ...]) -> None: ...
 
     def close_chunks(
@@ -104,6 +111,7 @@ def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
 
 
 def bm25_score(query: tuple[str, ...], text: str) -> float:
+    """本地词项检索按查询词在片段中的出现次数累加得分；重复的查询词会重复计入。"""
     tokens = tokenize(text)
     if not tokens:
         return 0.0
@@ -134,7 +142,7 @@ def _hits(chunks: list[IndexChunk], scores: list[float], top_k: int) -> tuple[In
 
 
 class InMemoryKnowledgeIndex:
-    """Process-local index used by deterministic tests."""
+    """在当前进程内保存片段并执行检索，用于可重复的离线验证。"""
 
     def __init__(self) -> None:
         self._chunks: dict[str, dict[str, IndexChunk]] = {}
@@ -199,7 +207,7 @@ class InMemoryKnowledgeIndex:
 
 
 class FileKnowledgeIndex:
-    """SQLite-backed local index used when Milvus is not configured."""
+    """用本地 SQLite 保存和检索带修订范围的片段。"""
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -239,6 +247,7 @@ class FileKnowledgeIndex:
     def close_chunks(
         self, generation_id: str, chunk_ids: tuple[str, ...], valid_to_revision: int
     ) -> None:
+        """为指定片段设置可见区间的终点，使已有修订仍可按原范围查询。"""
         with self._lock:
             for chunk_id in chunk_ids:
                 row = self._db.execute(

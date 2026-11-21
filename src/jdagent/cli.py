@@ -1,4 +1,4 @@
-"""Text CLI adapter: parse input, render events, and call the application seam."""
+"""解析命令行输入，将对话、知识管理和后台维护交给各自的入口。"""
 
 import argparse
 import asyncio
@@ -40,6 +40,7 @@ _VALUE_FLAGS = frozenset(
 
 
 def _split_knowledge_argv(argv: Sequence[str]) -> tuple[list[str], list[str]] | None:
+    """划分知识子命令前后的参数。全局选项的参数值也可能是普通单词，需要一起跳过。"""
     global_argv: list[str] = []
     index = 0
     while index < len(argv):
@@ -129,7 +130,7 @@ def _parse_arguments(argv: Sequence[str] | None) -> CliStartup:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the CLI with a composition root selected from explicit arguments."""
+    """分派一次命令行调用，把配置错误、会话故障和用户中断转换成约定的进程退出码。"""
 
     raw = list(sys.argv[1:] if argv is None else argv)
     knowledge_split = _split_knowledge_argv(raw)

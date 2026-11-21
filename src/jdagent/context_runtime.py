@@ -1,4 +1,4 @@
-"""Bounded compaction transactions over immutable session facts."""
+"""在保留原始会话事件的前提下压缩上下文，并记录新视图何时生效。"""
 
 import asyncio
 import hashlib
@@ -65,7 +65,7 @@ _CONVERSATION = (
 
 @dataclass(frozen=True, slots=True)
 class WindowSnapshot:
-    """The last complete request estimate, including its measurement identity."""
+    """保存最近一次完整请求的窗口、估算值和计量依据，供状态查询。"""
 
     budget: ContextBudget
     estimate: InputEstimate
@@ -77,11 +77,11 @@ class WindowSnapshot:
 
 
 class CompactionError(ValueError):
-    """A rejected maintenance candidate leaves the previous projection intact."""
+    """表示压缩候选无法提交，先前有效的上下文投影仍可使用。"""
 
 
 class ContextService:
-    """Own request admission, immutable segments and durable projection replacement."""
+    """管理每次模型请求的输入预算、归档和历史压缩；只有写入提交事件的摘要才用于后续投影。"""
 
     def __init__(
         self,
@@ -125,6 +125,7 @@ class ContextService:
         self._recovery_external = False
 
     async def _recovery_parts(self) -> tuple[SystemPart, ...]:
+        """从父会话快照中恢复允许引用的历史材料，保留未知操作及其核实状态。"""
         parts: list[SystemPart] = []
         self._recovery_external = False
         pending = [
@@ -265,7 +266,7 @@ class ContextService:
         )
 
     async def preview_window(self) -> WindowSnapshot:
-        """Read the latest complete snapshot, or project history without model calls or writes."""
+        """返回最近的完整快照，缺少快照时根据历史估算窗口；预览无需调用模型或写入会话。"""
         if self._snapshot is not None:
             return self.inspect_window()
         base = self._builder.build(
@@ -303,6 +304,7 @@ class ContextService:
         return calls <= results
 
     async def _checkpoint(self) -> tuple[int, JsonObject | None]:
+        """找到可用于当前历史的压缩提交，并读取它引用的摘要对象。"""
         events = self._journal.events
         for event in reversed(events):
             payload = event.payload
@@ -324,6 +326,7 @@ class ContextService:
     def _project(
         self, base: ModelRequest, through: int, checkpoint: JsonObject | None
     ) -> ModelRequest:
+        """将已提交摘要、其后发生的事件和需要保留的约束合并成当前模型的上下文。"""
         revoked = {
             event.payload.constraint_sequence
             for event in self._journal.events
@@ -381,7 +384,7 @@ class ContextService:
             and event.sequence not in revoked
             and event.sequence != fallback_sequence
         ]
-        # Preserve source statements until an explicit lifecycle event supersedes them.
+        # 在出现明确的来源状态变更事件前，继续保留原记录对来源的描述。
         parts = (
             *(part for part in base.system_parts if part.source != "recovery_history"),
             SystemPart(
@@ -409,6 +412,7 @@ class ContextService:
         repair_message: str | None = None,
         record_request: bool = True,
     ) -> ModelRequest:
+        """为一次模型调用选择上下文与工具，按预算缩短材料或压缩历史，归档最终获准发送的请求。"""
         definitions = (
             await self._request_tools.prepare_request()
             if self._request_tools is not None and record_request
@@ -473,7 +477,7 @@ class ContextService:
         request = self._bound_external(self._project(base, through, checkpoint))
         if record_request:
             request = self._bound_tools(request)
-            # Compaction may rebuild from base; it must not reintroduce omitted schemas.
+            # 压缩可能从基础请求重建上下文，此前为控制大小而移除的工具定义应继续省略。
             base = replace(base, tools=request.tools, metadata=request.metadata)
         estimate = self._estimator.measure(request)
         cutoff = max(
@@ -515,7 +519,7 @@ class ContextService:
                             tuple(self._response_hashes),
                         ),
                     )
-                    # The old projection remains authoritative until a commit succeeds.
+                    # 只有新视图成功提交后才能替换旧视图；失败时仍可沿用原请求。
         if repair_message:
             request = replace(
                 request,
@@ -567,7 +571,7 @@ class ContextService:
         return request
 
     def _bound_tools(self, request: ModelRequest) -> ModelRequest:
-        """Release complete dynamic definitions before compacting protected conversation facts."""
+        """在压缩对话前先尝试移除可释放的动态工具定义，以保留更多用户历史。"""
         if self._request_tools is None:
             return request
         target = int(self._budget.input_limit * self._budget.trigger_ratio) - 1
@@ -579,7 +583,7 @@ class ContextService:
         return request
 
     def _bound_external(self, request: ModelRequest) -> ModelRequest:
-        """Prefer smaller external previews before asking to compact user history."""
+        """调整外部材料在请求中的预览长度，尽量减少为了容纳预览而压缩的对话历史。"""
         external = {
             (event.payload.result.call_id, event.payload.result.tool_name)
             for event in self._journal.events
@@ -611,6 +615,7 @@ class ContextService:
         return request
 
     async def compact_now(self) -> WindowSnapshot:
+        """执行显式请求的上下文压缩，并返回压缩后的窗口状态。"""
         self.request_compaction()
         await self.prepare_request(record_request=False)
         return self.inspect_window()
@@ -618,6 +623,7 @@ class ContextService:
     async def _archive(
         self, request: ModelRequest, knowledge: PreparedTurnKnowledge | None, kind: str
     ) -> None:
+        """保存请求及可核验的内容引用，再将请求清单位置记入会话日志。"""
         digest = await archive_request(request, self._objects, knowledge)
         if self._memory is not None:
             try:
@@ -650,6 +656,7 @@ class ContextService:
         previous: JsonObject | None,
         knowledge: PreparedTurnKnowledge | None,
     ) -> ModelRequest:
+        """选择可压缩的历史前缀，保存原始片段并生成摘要；验证通过后才提交新的上下文投影。"""
         self._status = "preparing"
         self._response_hashes = []
         events = tuple(self._journal.events)
@@ -675,8 +682,7 @@ class ContextService:
             if previous
             else []
         )
-        # The committed summary carries continuity; selected original segments independently
-        # restore facts that an earlier merge may have omitted, without loading every segment.
+        # 已提交的摘要保留对话脉络，选中的原文段补回早期合并时可能遗漏的事实，无需加载全部原文。
         summaries: list[JsonValue] = (
             [require_object(previous.get("summary"), "summary")] if previous else []
         )
@@ -735,8 +741,9 @@ class ContextService:
                 summaries.append(decode_object(original))
                 remaining -= len(original)
         calls = 0
+        # 以 UTF-8 字节区间记录每个事件在序列化输入中的位置，用于将摘要片段对应回原始事件。
         source_ranges: list[tuple[int, int, int]] = []
-        cursor = 1  # The canonical JSON array starts with '[' and uses one-byte commas.
+        cursor = 1  # 起始的左方括号占一个字节。
         for event in new_events:
             length = len(encode_json(event))
             source_ranges.append((cursor, cursor + length, int(event["sequence"])))
@@ -829,6 +836,7 @@ class ContextService:
         calls: int,
         source_sequences: Sequence[int],
     ) -> JsonObject:
+        """向模型请求结构化摘要，校验返回的字段和证据引用，再交给压缩流程提交。"""
         if calls > 8:
             raise CompactionError("Compaction model-call budget exhausted")
         completed_sources: list[int] = []
@@ -930,8 +938,7 @@ class ContextService:
             fact.pop("external_sources", None)
             if external:
                 fact["external_sources"] = list[JsonValue](external)
-        # Even fields without per-fact citations may mix material from the input.
-        # These references come from the journal, never the summarizer's declarations.
+        # 摘要字段可能混合多个输入来源。统一从日志读取来源引用，避免依赖摘要模型自行声明。
         result.pop("external_sources", None)
         inherited = [provenance[ref] for ref in source_sequences if ref in provenance]
         if inherited:

@@ -1,4 +1,4 @@
-"""Deterministic projection of session facts into model requests."""
+"""从已保存的会话事件构造发给模型的消息和工具定义。"""
 
 import json
 from collections.abc import Iterable, Sequence
@@ -29,7 +29,7 @@ from jdagent.knowledge.ptk import PreparedTurnKnowledge
 
 
 class ContextLimitError(RuntimeError):
-    """The complete projected context exceeds a known hard limit."""
+    """表示组装完的上下文超出了已知容量上限。"""
 
     def __init__(self, estimated_tokens: int, limit_tokens: int) -> None:
         super().__init__(
@@ -40,17 +40,17 @@ class ContextLimitError(RuntimeError):
 
 
 class UnsupportedModelCapabilityError(RuntimeError):
-    """A request requires a capability the selected adapter does not declare."""
+    """表示请求需要一项当前模型适配器未声明支持的能力。"""
 
 
 def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]:
-    """Project durable conversation facts into provider-independent messages."""
+    """将已保存的用户消息、完整助手响应和工具结果按会话顺序转换为模型消息。"""
 
     messages: list[ModelMessage] = []
     for event in events:
         if isinstance(event.payload, MCPPromptPreparedPayload):
-            # User-role wire material is explicitly named and delimited. Its
-            # durable event is never a UserMessagePayload or an assistant call.
+            # 协议使用 user 角色承载这段外部材料，因此要明确标出来源和范围；
+            # 日志中仍保留它的原始事件类型。
             data = event.payload.outcome.to_data()
             data["material_role"] = "external_mcp_prompt"
             messages.append(
@@ -99,7 +99,7 @@ def project_messages(events: Iterable[RuntimeEvent]) -> tuple[ModelMessage, ...]
 
 
 class ContextBuilder:
-    """Project requests, optionally omitting complete old turns without editing facts."""
+    """根据规则、会话事件和工具定义构造请求。需要缩短历史时按整轮选取，原日志保留。"""
 
     def __init__(
         self,
@@ -133,7 +133,7 @@ class ContextBuilder:
         enforce_budget: bool = True,
         tools_override: tuple[ToolDefinition, ...] | None = None,
     ) -> ModelRequest:
-        """Build and validate one deterministic provider-independent request."""
+        """组装与服务商无关的模型请求，并核对能力与上下文上限，供模型适配器发送。"""
 
         definitions = self._tools if tools_override is None else tools_override
         if allow_tools and definitions and not capabilities.tool_calls:
@@ -257,7 +257,7 @@ class ContextBuilder:
                     separators=(",", ":"),
                 )
         text += serialized_tools
-        # UTF-8 byte count is a conservative upper estimate, including CJK and JSON.
+        # 未校准时按 UTF-8 字节数保守估算用量，中文和 JSON 转义也会占用预算。
         return max(1, len(text.encode("utf-8")) + 32 * len(request.messages)) + (
             request.settings.max_output_tokens or 0
         )

@@ -1,4 +1,4 @@
-"""Composition root for selecting adapters and wiring runtime dependencies."""
+"""在启动时选择模型和存储适配器，将它们接到会话、工具和图执行器上。"""
 
 import os
 from collections.abc import Awaitable, Callable
@@ -78,7 +78,7 @@ def load_deepseek_api_key(
     explicit_key: str | None,
     key_file: Path = DEVELOPMENT_DEEPSEEK_API_KEY_FILE,
 ) -> str | None:
-    """Prefer an explicit key, then read the approved development-only key file."""
+    """优先使用显式提供的密钥，缺省时再读取开发环境约定的密钥文件。"""
 
     if explicit_key is not None and explicit_key.strip():
         return explicit_key.strip()
@@ -95,7 +95,7 @@ def load_deepseek_api_key(
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
-    """Loop-only knobs that do not duplicate resolved host configuration."""
+    """调用方在装配运行时时指定的执行选项，包括调用次数上限和工具配置。"""
 
     max_model_calls: int = 16
     max_tool_calls: int = 32
@@ -116,7 +116,7 @@ class RuntimeOptions:
 
 @dataclass(slots=True)
 class RuntimeComposition:
-    """Own the composed coordinator and adapter lifecycle."""
+    """持有已装配的协调器、会话和模型资源，由宿主在退出时统一关闭。"""
 
     coordinator: TurnCoordinator
     model: ModelPort
@@ -125,6 +125,7 @@ class RuntimeComposition:
     close_resources: tuple[Callable[[], Awaitable[None]], ...] = ()
 
     async def reconstruct_request(self, digest: str) -> ModelRequest:
+        """根据归档对象的摘要重建模型请求，供核对当时实际送入模型的内容。"""
         if self.maintenance is None or self.maintenance.memory.knowledge_references is None:
             raise ValueError("Request reconstruction dependencies are unavailable")
         return await reconstruct_request(
@@ -144,7 +145,7 @@ class RuntimeComposition:
 
 @dataclass(slots=True)
 class ConfiguredTurnRunnerFactory:
-    """Create per-turn runners from dependencies chosen by the composition root."""
+    """持有跨轮复用的依赖。每轮使用当时生效的配置与该会话的事件日志创建执行器。"""
 
     model: ModelPort
     model_name: str
@@ -184,6 +185,7 @@ class ConfiguredTurnRunnerFactory:
         return self.mcp_servers
 
     def prepare_turn(self) -> None:
+        """重读下一轮的配置。模型接入方式等需要重建连接的设置发生变化时，要求重启进程。"""
         if self.reload_configuration is None:
             return
         config = self.reload_configuration()
@@ -241,6 +243,7 @@ class ConfiguredTurnRunnerFactory:
         return self.contexts.get(session_id)
 
     def create(self, journal: RuntimeJournal) -> TurnRunner:
+        """将当前会话的工具、上下文和日志交给图执行器，使这一轮读取与写入同一份历史。"""
         if not journal.events:
             raise ValueError("Session journal must contain session_started before runner creation")
         session_id = journal.events[0].session_id
@@ -324,10 +327,10 @@ def build_runtime(
     event_observers: tuple[EventObserver, ...] = (),
     model_wrapper: Callable[[ModelPort], ModelPort] | None = None,
 ) -> RuntimeComposition:
-    """Wire adapters, optionally wrapping all model traffic for bounded experiments.
+    """按配置选择模型，装配会话、工具与维护服务。
 
-    The wrapper borrows the selected adapter. Composition retains client ownership;
-    foreground, compaction, repair, and maintenance share the same wrapped model.
+    前台对话、上下文压缩、引用修复和后台维护共用同一个模型包装器。
+    包装器借用客户端，由运行时统一关闭。
     """
 
     options = runtime_options or RuntimeOptions()

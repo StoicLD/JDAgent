@@ -1,4 +1,4 @@
-"""Deterministic TXT, Markdown, and CSV parsers with stable locators."""
+"""解析纯文本、Markdown 和 CSV，为内容块保留可定位的来源位置。"""
 
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ class SourceFormat(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ParsedBlock:
+    """表示解析后的一块文本及其在源文档中的位置，供分块和引用共用。"""
+
     locator: str
     text: str
     kind: str
@@ -38,6 +40,8 @@ class ParsedBlock:
 
 @dataclass(frozen=True, slots=True)
 class ParsedDocument:
+    """保存文档格式和按原文顺序排列的内容块。"""
+
     format: SourceFormat
     encoding: str
     encoding_method: str
@@ -74,6 +78,7 @@ def parse_source(
     encoding: str | None = None,
     csv_dialect: str = "excel",
 ) -> ParsedDocument:
+    """按输入格式分派到相应解析器，为文本、Markdown 和 CSV 生成可定位到原文的块。"""
     decoded = decode_source(data, encoding=encoding)
     if source_format is SourceFormat.TXT:
         blocks = _parse_txt(decoded.text)
@@ -122,6 +127,7 @@ def _parse_txt(text: str) -> tuple[ParsedBlock, ...]:
 
 
 def _parse_markdown(text: str) -> tuple[ParsedBlock, ...]:
+    """按 Markdown 结构生成带位置的内容块，保留后续定位证据所需的边界。"""
     lines = text.replace("\r\n", "\n").split("\n")
     blocks: list[ParsedBlock] = []
     heading_counts: dict[int, int] = {}
@@ -251,6 +257,7 @@ def _table_cells(prefix: str, table_index: str | int, table_lines: list[str]) ->
 
 
 def _parse_csv(text: str, *, dialect: str) -> tuple[ParsedBlock, ...]:
+    """将 CSV 解析为能定位到原始行的内容块，保留表格结构。"""
     previous_limit = csv.field_size_limit()
     csv.field_size_limit(MAX_CSV_FIELD_BYTES)
     try:

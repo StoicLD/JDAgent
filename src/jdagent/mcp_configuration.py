@@ -1,4 +1,4 @@
-"""MCP connection declarations and project-only scope narrowing, without secrets."""
+"""读取 MCP 服务器声明，按项目配置收窄可用范围。"""
 
 import math
 import re
@@ -9,11 +9,13 @@ from urllib.parse import urlsplit
 
 
 class MCPConfigurationError(ValueError):
-    """A configuration failure that never embeds a supplied value."""
+    """表示服务配置校验失败，报错只描述字段或约束，避免回显凭据等输入值。"""
 
 
 @dataclass(frozen=True, slots=True)
 class MCPToolOverride:
+    """保存针对一个已授权工具的超时设置，以及服务端明确超时后是否允许重试。"""
+
     name: str
     timeout_seconds: float
     safe_repeat: bool = False
@@ -21,6 +23,8 @@ class MCPToolOverride:
 
 @dataclass(frozen=True, slots=True)
 class MCPServerConfiguration:
+    """描述一个服务的连接方式、可用能力与时限；敏感配置只在建立连接时解析。"""
+
     server_id: str
     transport: Literal["stdio", "http"]
     enabled: bool
@@ -39,6 +43,8 @@ class MCPServerConfiguration:
 
 @dataclass(frozen=True, slots=True)
 class MCPConfiguration:
+    """汇总当前可配置的 MCP 服务和会话结果的存储配额。"""
+
     servers: tuple[MCPServerConfiguration, ...]
     result_quota_mib: int = 100
 
@@ -99,6 +105,7 @@ def _duration(value: object) -> float:
 def _server(
     server_id: str, value: object, workspace: Path, user_directory: Path, default_timeout: float
 ) -> MCPServerConfiguration:
+    """校验单个服务的标识、传输和授权设置，区分标准输入输出与 HTTP 连接各自允许的字段。"""
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", server_id) is None:
         raise MCPConfigurationError(
             "MCP Server ID must use 1-64 letters, digits, underscores or hyphens"
@@ -200,7 +207,7 @@ def _server(
 def resolve_mcp_configuration(
     user: object, project: object, *, workspace: Path, user_directory: Path
 ) -> MCPConfiguration:
-    """Validate references without resolving credentials, connecting, or launching processes."""
+    """以用户声明为上限合并项目的范围限制，校验凭据引用。此阶段只解析配置，无需连接或启动服务。"""
     user_table = _table(user, "User MCP")
     project_table = _table(project, "Project MCP")
     _keys(user_table, {"servers", "timeout_seconds", "result_quota_mib"}, "User MCP")

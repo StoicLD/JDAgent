@@ -1,4 +1,4 @@
-"""Rebuildable session discovery, selection, and naming use cases."""
+"""从会话记录重建目录，支持查找、选择和命名会话。"""
 
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -22,12 +22,12 @@ from jdagent.ports import SessionDiscoveryPort, SessionPort
 
 
 class SessionSelectionError(ValueError):
-    """A missing or ambiguous user-facing session selector."""
+    """表示给定条件找不到会话，或同时匹配了多个会话。"""
 
 
 @dataclass(frozen=True, slots=True)
 class SessionSummary:
-    """Catalog projection rebuilt from canonical session facts."""
+    """根据会话事件生成的列表项，提供名称、标识及恢复状态等信息。"""
 
     session_id: str
     name: str | None
@@ -77,7 +77,7 @@ def _summary(
 
 
 class SessionCatalog:
-    """Project session facts into discoverable summaries without an index dependency."""
+    """从持久会话事实重建可选列表，并将用户输入的名称或标识解析到具体会话。"""
 
     def __init__(
         self,
@@ -149,6 +149,7 @@ class SessionCatalog:
         return summary
 
     async def resolve(self, selector: str) -> SessionSummary:
+        """根据给定的选择条件查找会话，找不到或结果不唯一时报告选择错误。"""
         normalized = selector.strip()
         if not normalized:
             raise SessionSelectionError("Session selector must not be empty")

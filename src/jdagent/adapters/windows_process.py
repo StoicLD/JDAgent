@@ -1,4 +1,4 @@
-"""Windows Job ownership established before trusted bootstrap runs user code."""
+"""用 Windows Job 管理命令及其子进程，先建立归属再开始执行。"""
 
 import ctypes
 import json
@@ -10,8 +10,8 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import BinaryIO, cast
 
-# -I -S prevents workspace imports, environment Python paths and site startup.
-# Only after the host assigns this waiting bootstrap to a Job is argv supplied.
+# 启动参数 -I -S 隔离工作区导入、环境路径和站点初始化。
+# 宿主把引导进程纳入 Job 后才交给它命令参数。
 _BOOTSTRAP = """
 import json, os, sys, subprocess
 # Do not read ahead into protocol bytes that the child must inherit.
@@ -70,7 +70,7 @@ class _Accounting(ctypes.Structure):
 
 
 class WindowsCommand:
-    """Own one non-breakaway kill-on-close Job, its bootstrap and output pipes."""
+    """将命令及其子进程纳入同一 Windows Job，持有启动程序与管道，关闭 Job 时终止剩余进程。"""
 
     def __init__(
         self,
@@ -184,7 +184,7 @@ class WindowsCommand:
         return self._process.poll()
 
     def execution_started(self) -> bool | None:
-        """Read the bootstrap handshake; missing evidence never means verification failed."""
+        """读取启动程序的握手结果。缺少确认时可返回未知，供调用方区分未启动和结果无法核实。"""
         from jdagent.domain.json import normalize_json, require_object
 
         try:

@@ -1,4 +1,4 @@
-"""LangChain's DeepSeek integration behind the project's model protocol."""
+"""通过 LangChain 调用 DeepSeek，将模型响应转换成项目自己的事件。"""
 
 import json
 from collections.abc import AsyncGenerator, AsyncIterator
@@ -40,6 +40,8 @@ from jdagent.domain.tools import ToolCall
 
 @dataclass(slots=True)
 class _CallFragments:
+    """暂存 SDK 分片返回的工具标识、名称与参数，供响应完成时校验。"""
+
     call_id: str = ""
     name: str = ""
     arguments: str = ""
@@ -106,7 +108,7 @@ def _usage(chunk: AIMessageChunk, previous: Usage | None) -> Usage | None:
         )
     )
     before = previous or Usage()
-    # Provider chunks contain cumulative counts, not independently billable deltas.
+    # 模型在每个响应块中返回截至当时的累计用量，不能把各块的数值相加。
     return Usage(
         max(before.input_tokens, values[0]),
         max(before.output_tokens, values[1]),
@@ -132,10 +134,10 @@ def _http_category(status: int) -> ModelErrorCategory:
 
 
 class LangChainModelPort:
-    """Translate validated SDK chunks; own only clients created by this adapter.
+    """将项目请求转换为 LangChain 消息，并将响应转换为项目事件。
 
-    The supplied HTTP client is borrowed. Each request gets its own model settings,
-    while the underlying clients are reused. SDK retries and cloud tracing are disabled.
+    每次请求使用独立的模型设置，复用底层客户端。关闭时只释放适配器自己创建的客户端。
+    适配器关闭 SDK 自动重试和云端跟踪。
     """
 
     def __init__(
@@ -153,7 +155,7 @@ class LangChainModelPort:
         self._async = openai.AsyncOpenAI(
             api_key=api_key, base_url=base_url, max_retries=0, http_client=client
         )
-        # Supplying both SDK clients prevents ChatDeepSeek from making hidden clients.
+        # 同时传入同步和异步客户端，避免 ChatDeepSeek 自行创建额外连接。
         self._sync = openai.OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
         self._closed = False
 
@@ -164,7 +166,7 @@ class LangChainModelPort:
         )
 
     async def aclose(self) -> None:
-        """Close owned pools; borrowers remain responsible for their HTTP clients."""
+        """释放适配器自建的客户端与连接池，外部传入的客户端由其所有者关闭。"""
         if self._closed:
             return
         self._closed = True
@@ -193,7 +195,7 @@ class LangChainModelPort:
         )
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        """Stream transient deltas; publish calls and completion only after full validation."""
+        """将可显示的增量及时返回；完整工具调用及结束事件要等累计分片通过校验后才发布。"""
         if self._closed:
             yield ModelFailed(ModelErrorCategory.INVALID_REQUEST, "Model adapter is closed")
             return
@@ -201,7 +203,7 @@ class LangChainModelPort:
             messages = _messages(request)
             options = _provider_options(request)
             model = self._model(request)
-            # The SDK's dynamic keyword boundary is kept inside the adapter.
+            # 在适配器内组装 SDK 需要的动态参数，使上层仍使用明确的请求类型。
             kwargs: dict[str, Any] = {**options, "timeout": request.settings.timeout_seconds}
             if request.tools:
                 model_call = model.bind_tools(  # pyright: ignore[reportUnknownMemberType]
@@ -231,9 +233,9 @@ class LangChainModelPort:
         failure: ModelFailed | None = None
         completed: list[ToolCall] = []
         try:
-            # Do not inherit ambient LangSmith credentials or caller tracing callbacks.
+            # 此次调用使用独立的跟踪配置，避免将会话内容交给环境中配置的跟踪回调。
             with tracing_context(enabled=False):
-                # Locked LangChain implementations are async generators, despite the wider stub.
+                # 当前锁定版本返回异步生成器，类型声明允许的范围比实际返回类型更宽。
                 chunks = cast(
                     AsyncGenerator[BaseMessage, None],
                     model_call.astream(messages, config={"callbacks": []}, **kwargs),
@@ -275,7 +277,7 @@ class LangChainModelPort:
                 if not call.call_id or not call.name or call.call_id in seen:
                     raise ValueError("Missing or duplicate tool identity")
                 seen.add(call.call_id)
-                # LangChain accepts partial JSON while streaming. Execution requires strict JSON.
+                # 流式解析允许暂时缺少右括号；执行工具前需要对完整参数重新做严格的 JSON 解析。
                 arguments = require_object(
                     normalize_json(json.loads(call.arguments or "{}")), "arguments"
                 )
@@ -300,8 +302,7 @@ class LangChainModelPort:
             openai.LengthFinishReasonError,
             openai.ContentFilterFinishReasonError,
         ):
-            # Structured streams use an SDK final parse; an empty stream asserts,
-            # and truncated/filtered JSON raises dedicated non-HTTP exceptions.
+            # SDK 会在结构化流结束时做最终解析；空流、内容截断和过滤可能触发不同的解析异常。
             failure = ModelFailed(ModelErrorCategory.INVALID_RESPONSE, "Invalid DeepSeek response")
         if usage is not None:
             yield UsageReported(usage)

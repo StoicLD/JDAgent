@@ -1,4 +1,4 @@
-"""Strict decoding for raw source artifacts."""
+"""按明确的编码规则将来源文件的原始字节解码为文本。"""
 
 from __future__ import annotations
 
@@ -12,13 +12,15 @@ from jdagent.knowledge.errors import KnowledgeError, KnowledgeErrorCode
 
 @dataclass(frozen=True, slots=True)
 class DecodedText:
+    """同时保留解码文本、实际采用的编码及选择该编码的依据。"""
+
     text: str
     encoding: str
     method: str
 
 
 def decode_source(data: bytes, *, encoding: str | None = None) -> DecodedText:
-    """Decode bytes with explicit codec, BOM, UTF-8, then charset-normalizer."""
+    """优先采用调用方指定的编码，其次识别字节顺序标记，再尝试严格 UTF-8；仍无法解码时才检测编码。"""
 
     if encoding is not None:
         return _decode_explicit(data, encoding)

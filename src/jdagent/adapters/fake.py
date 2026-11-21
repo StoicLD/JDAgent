@@ -1,4 +1,4 @@
-"""Deterministic adapters for tests and offline demonstrations."""
+"""提供能重复产生相同结果的模型和工具，供离线演示与测试使用。"""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -15,7 +15,7 @@ from jdagent.domain.tools import (
 
 
 class FakeModelPort:
-    """Replays one configured event script per model call."""
+    """每次模型调用重放一组预设事件，便于在离线环境复现成功、取消和半截响应。"""
 
     def __init__(
         self,
@@ -56,7 +56,7 @@ class FakeModelPort:
 
 
 class FakeApproval:
-    """Returns one decision and records every approval request."""
+    """记录收到的审批请求，并返回预先设定的用户决定。"""
 
     def __init__(self, decision: ApprovalDecision | ApprovalOutcome) -> None:
         self._outcome = (
@@ -70,7 +70,7 @@ class FakeApproval:
 
 
 class FakeToolRuntime:
-    """Returns configured results without implementing tool behavior."""
+    """记录收到的工具调用并按预设顺序返回结果，便于核对实际执行顺序。"""
 
     def __init__(self, results: tuple[ToolResult, ...]) -> None:
         self._results = list(results)

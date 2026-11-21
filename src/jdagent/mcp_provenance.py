@@ -1,4 +1,4 @@
-"""Host-owned source references for MCP evidence and inseparable derived material."""
+"""记录 MCP 原始材料的来源，并将来源关联到使用了这些材料的派生内容。"""
 
 from collections.abc import Iterable
 
@@ -13,7 +13,7 @@ from jdagent.domain.json import JsonObject
 
 
 def external_provenance(events: Iterable[RuntimeEvent]) -> dict[int, JsonObject]:
-    """Keep independent user statements separate; later assistant prose may be mixed."""
+    """按事件序号标记 MCP 来源及其可能影响的后续助手内容，独立的用户陈述仍按自身来源处理。"""
     references: dict[int, JsonObject] = {}
     external_seen = False
     for event in events:

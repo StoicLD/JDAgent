@@ -1,4 +1,4 @@
-"""Immutable, content-addressed objects for context manifests and original content."""
+"""将上下文清单和原始内容保存为不可变对象，按内容摘要查找。"""
 
 import asyncio
 import hashlib
@@ -11,7 +11,7 @@ from jdagent.domain.errors import SessionError, SessionErrorCode
 
 
 class FileContextObjects:
-    """Publish fsynced objects before any journal may refer to their digest."""
+    """按内容摘要保存不可变对象；先把对象完整写入磁盘，再允许会话日志引用它。"""
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory.resolve()
@@ -36,6 +36,7 @@ class FileContextObjects:
         return content
 
     def put_sync(self, content: bytes) -> str:
+        """写入内容并返回摘要。相同内容可共用对象，读者只能看到已完成的写入。"""
         digest = hashlib.sha256(content).hexdigest()
         self._directory.mkdir(parents=True, exist_ok=True)
         destination = self._directory / digest

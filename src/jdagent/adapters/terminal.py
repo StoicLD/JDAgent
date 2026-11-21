@@ -1,4 +1,4 @@
-"""Prompt Toolkit terminal adapter for the interactive application seam."""
+"""使用 Prompt Toolkit 读取终端输入、展示事件和询问工具授权。"""
 
 import asyncio
 import json
@@ -63,7 +63,7 @@ _COMMANDS = (
 
 
 def format_approval_request(request: ApprovalRequest) -> str:
-    """Render complete prepared arguments, escaping terminal control characters."""
+    """完整展示待审批的实际参数，并转义控制字符，避免参数内容改变终端显示。"""
 
     parameters = json.dumps(
         request.display or request.arguments, ensure_ascii=False, sort_keys=True
@@ -89,7 +89,7 @@ def _key_bindings() -> KeyBindings:
 
 
 class PromptToolkitTerminal:
-    """Read enhanced line-oriented input and return project-owned user actions."""
+    """通过 Prompt Toolkit 读取用户输入，将按键和命令转换为应用层操作。"""
 
     def __init__(
         self,
@@ -154,6 +154,7 @@ class PromptToolkitTerminal:
             self._session.app.invalidate()
 
     async def _read_input(self) -> None:
+        """协调输入读取与终端控制事件，将本次输入交还给交互应用。"""
         while not self._closed:
             try:
                 raw = await self._session.prompt_async(
@@ -200,6 +201,7 @@ class PromptToolkitTerminal:
         self._session.app.invalidate()
 
     async def request(self, request: ApprovalRequest) -> ApprovalChoice:
+        """展示待授权的操作，读取用户选定的授权范围并返回相应选项。"""
         try:
             answer = await self._ask_line(
                 f"{format_approval_request(request)}\n"
@@ -257,7 +259,7 @@ class PromptToolkitTerminal:
 
 
 class RichPresenter:
-    """Render semantic UI events and streaming model text with Rich."""
+    """使用 Rich 展示界面事件和模型的流式文本。"""
 
     def __init__(self, console: Console | None = None) -> None:
         self._console = console or Console()
@@ -298,7 +300,7 @@ class RichPresenter:
         if event.kind is UiEventKind.STATE:
             self._state_text = event.message
             if event.state is InteractionState.WAITING_APPROVAL:
-                # Prompt Toolkit owns the persistent footer while it reads approval input.
+                # 读取授权选择期间，底部状态栏由 Prompt Toolkit 绘制。
                 self._stop_live(reset_text=False)
             elif event.state in {
                 InteractionState.RUNNING_TOOL,
@@ -330,7 +332,7 @@ class RichPresenter:
 
 
 class RichRuntimeObserver:
-    """Translate persisted tool lifecycle facts into semantic UI events."""
+    """将已持久化的工具生命周期事件转换为界面可以展示的状态变化。"""
 
     def __init__(self, presenter: RichPresenter) -> None:
         self._presenter = presenter

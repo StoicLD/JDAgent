@@ -1,4 +1,4 @@
-"""Dependency-inversion seams consumed by the runtime."""
+"""定义运行时依赖的接口，使模型、会话存储、工具和界面可以分别实现或替换。"""
 
 from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
@@ -24,7 +24,7 @@ from jdagent.domain.tools import (
 
 
 class ModelPort(Protocol):
-    """Streams provider-independent events for one model request."""
+    """接受一次模型请求，按到达顺序返回项目定义的模型事件。"""
 
     @property
     def capabilities(self) -> ModelCapabilities: ...
@@ -33,7 +33,7 @@ class ModelPort(Protocol):
 
 
 class MCPConnectionPort(Protocol):
-    """A Session-owned peer; all protocol types and secrets remain in its adapter."""
+    """代表一个会话拥有的远端 MCP 连接，协议对象与凭据留在连接适配器内。"""
 
     @property
     def state(self) -> MCPConnectionState: ...
@@ -44,11 +44,11 @@ class MCPConnectionPort(Protocol):
     async def connect(self) -> MCPPeerInformation: ...
 
     def input_schema_issue(self, schema: JsonObject) -> str | None:
-        """Report a negotiated-protocol constraint before exposing a tool."""
+        """在公开工具之前，检查输入定义是否符合已协商的协议限制。"""
         ...
 
     def capability_issue(self, kind: MCPCapabilityKind, definition: JsonValue) -> str | None:
-        """Validate one directory entry without rejecting its usable siblings."""
+        """单独校验一项目录条目，使同批中有效的能力仍可使用。"""
         ...
 
     async def request(
@@ -64,7 +64,7 @@ class MCPConnectionPort(Protocol):
 
 
 class SessionPort(Protocol):
-    """Appends and reads canonical events for a session."""
+    """按会话追加和读取持久事件，供执行时记录以及重启后恢复。"""
 
     async def append(self, event: RuntimeEvent) -> None: ...
 
@@ -76,7 +76,7 @@ class SessionPort(Protocol):
 
 
 class ContextObjects(Protocol):
-    """Persist and verify immutable content before publishing its hash in an event."""
+    """按内容摘要保存和校验不可变对象。事件只有在对象写入后才能引用其摘要。"""
 
     async def put(self, content: bytes) -> str: ...
 
@@ -84,19 +84,19 @@ class ContextObjects(Protocol):
 
 
 class SessionDiscoveryPort(Protocol):
-    """Lists identifiers without exposing storage layout to catalog use cases."""
+    """枚举可供选择的会话标识，使会话目录无需了解底层文件布局。"""
 
     async def list_session_ids(self) -> Sequence[str]: ...
 
 
 class ToolRuntimePort(Protocol):
-    """Validates, authorizes, and executes one complete tool call."""
+    """接收参数已收齐的工具调用，负责校验、权限判定、实际执行和结果返回。"""
 
     async def execute(self, call: ToolCall, context: ToolExecutionContext) -> ToolResult: ...
 
 
 class DynamicToolsPort(Protocol):
-    """Prepare definitions only between requests; check live host authorization at execution."""
+    """在模型请求之间调整可见工具；实际执行仍按调用时生效的授权检查。"""
 
     async def prepare_tools(self) -> tuple[ToolDefinition, ...]: ...
 
@@ -108,7 +108,7 @@ class DynamicToolsPort(Protocol):
 
 
 class RequestToolsPort(Protocol):
-    """Freeze the exact definitions projected into an admitted model request."""
+    """固定某次模型请求实际包含的工具定义，供后续执行核对。"""
 
     async def prepare_request(self) -> tuple[ToolDefinition, ...]: ...
 
@@ -118,25 +118,25 @@ class RequestToolsPort(Protocol):
 
 
 class ApprovalPort(Protocol):
-    """Collects a human answer for an ASK policy decision."""
+    """在策略要求询问时收集用户的审批决定。"""
 
     async def request(self, request: ApprovalRequest) -> ApprovalOutcome: ...
 
 
 class RuntimeEventSink(Protocol):
-    """Persists a canonical event before notifying observers."""
+    """接收完整事件，先持久化，再通知观察者。"""
 
     async def emit(self, event: RuntimeEvent) -> None: ...
 
 
 class EventObserver(Protocol):
-    """Consume persisted runtime facts without changing recovery state."""
+    """消费已经写入的运行事件，供界面或追踪使用。"""
 
     async def observe(self, event: RuntimeEvent) -> None: ...
 
 
 class RuntimeEventRecorder(Protocol):
-    """Create and persist the next canonical event for one session."""
+    """为当前会话创建并持久化下一个事件。"""
 
     async def record(
         self,
@@ -147,7 +147,7 @@ class RuntimeEventRecorder(Protocol):
 
 
 class RuntimeJournal(RuntimeEventRecorder, Protocol):
-    """Expose immutable history and append new facts at the Core seam."""
+    """为执行器提供会话历史的只读视图和新事件的写入接口。"""
 
     @property
     def events(self) -> Sequence[RuntimeEvent]: ...

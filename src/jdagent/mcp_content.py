@@ -1,4 +1,4 @@
-"""Text/JSON projection of received MCP content, retaining explicit unsupported markers."""
+"""从 MCP 结果提取文本和 JSON 预览，标出无法处理的内容类型。"""
 
 from dataclasses import dataclass
 
@@ -8,13 +8,15 @@ from jdagent.domain.mcp import MCPCapabilityKind
 
 @dataclass(frozen=True, slots=True)
 class MCPContent:
+    """保存可展示的内容预览、无法处理的内容类型，以及结果是否含可用材料。"""
+
     preview: JsonObject
     unsupported: tuple[str, ...]
     usable: bool
 
 
 def project_content(raw: JsonObject, kind: MCPCapabilityKind) -> MCPContent:
-    """Keep message roles as data; never turn Prompt messages into conversation facts."""
+    """提取支持的文本和 JSON，对不支持的内容保留标记。远端提示中的角色只作为材料信息保存。"""
     unsupported: set[str] = set()
     usable = "structuredContent" in raw
     preview = {

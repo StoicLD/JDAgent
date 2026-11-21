@@ -1,4 +1,4 @@
-"""Canonical event persistence and trace fan-out."""
+"""按序持久化会话事件，再将已保存的记录交给观察者。"""
 
 from collections.abc import AsyncIterator
 
@@ -26,7 +26,7 @@ async def _collect(items: AsyncIterator[RuntimeEvent]) -> list[RuntimeEvent]:
 
 
 class EventJournal:
-    """Sequence events, persist them first, then notify trace observers."""
+    """管理一个会话的事件序号。事件保存成功后才更新内存历史并通知观察者。"""
 
     def __init__(
         self,
@@ -49,7 +49,7 @@ class EventJournal:
         observers: tuple[EventObserver, ...] = (),
         require_existing: bool = False,
     ) -> "EventJournal":
-        """Open an existing event sequence or prepare an empty new session."""
+        """读取已有历史并建立日志视图；要求恢复已有会话时，会话缺失会报错。"""
 
         try:
             existing = await _collect(session.read(session_id))
@@ -69,7 +69,7 @@ class EventJournal:
         event_type: RuntimeEventType,
         payload: RuntimePayload,
     ) -> RuntimeEvent:
-        """Create and emit the next canonical event."""
+        """使用当前会话标识和下一个序号创建事件，并按日志的写入顺序发布。"""
 
         event = RuntimeEvent.create(
             session_id=self._session_id,
@@ -82,7 +82,7 @@ class EventJournal:
         return event
 
     async def emit(self, event: RuntimeEvent) -> None:
-        """Persist a caller-created event and then notify observers."""
+        """校验待写事件的会话与序号，追加成功后再通知观察者。"""
 
         if event.session_id != self._session_id:
             raise SessionError(SessionErrorCode.APPEND_FAILED, "Event belongs to another session")
@@ -92,8 +92,7 @@ class EventJournal:
                 SessionErrorCode.APPEND_FAILED,
                 f"Expected journal sequence {expected}, received {event.sequence}",
             )
-        # A cancelled thread wait cannot stop a JSONL append. Keep the durable
-        # record and the in-memory sequence in the same finite transaction.
+        # 取消等待无法中止线程里的文件追加，必须等写入和内存序号更新一同完成。
         await complete_before_cancel(self._persist(event))
         for observer in self._observers:
             await observer.observe(event)
@@ -109,7 +108,7 @@ async def close_pending_calls(
     *,
     reason: str = "Turn ended before a result was available",
 ) -> None:
-    """Record explicit non-execution for unstarted calls before ending a batch."""
+    """在一批工具调用中补齐尚无结果的记录，使恢复时能区分未执行的调用与结果未知的调用。"""
     events = [event for event in journal.events if event.turn_id == turn_id]
     completed = {
         event.payload.result.call_id
@@ -152,8 +151,7 @@ async def close_pending_calls(
         if registration is None or registration.task_ref != payload.task_ref or call is None:
             continue
         outcome = payload.outcome
-        # Management may have obtained a result before interrupted model-call
-        # pairing is repaired. Preserve any already recorded invocation ending.
+        # 修复未配对的模型调用前，管理操作可能已保存结果，应保留已知的调用结局。
         mcp_finished.setdefault(
             payload.call_id,
             ToolResult(

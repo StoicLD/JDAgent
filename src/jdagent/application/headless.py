@@ -1,4 +1,4 @@
-"""One-shot application seam shared by text and JSON presenters."""
+"""执行一次非交互请求，向文本和 JSON 输出提供相同的结果。"""
 
 import asyncio
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ from jdagent.observability import TraceProjection
 
 
 class ExitStatus(IntEnum):
-    """Stable process exit statuses for CLI callers."""
+    """提供给脚本调用方的稳定退出码，用于区分成功、配置错误、取消与执行失败。"""
 
     SUCCESS = 0
     INTERNAL_ERROR = 1
@@ -25,7 +25,7 @@ class ExitStatus(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class HeadlessResult:
-    """Presenter-independent result of exactly one prompt."""
+    """保存一次非交互调用的结构化结果，可分别呈现为纯文本或 JSON。"""
 
     session_id: str
     turn_id: str
@@ -56,7 +56,7 @@ class HeadlessResult:
         return ExitStatus.RUNTIME_ERROR
 
     def json_data(self) -> JsonObject:
-        """Return the stable JSON-v2 public representation."""
+        """将结果转换为版本 2 的公开 JSON，供外部脚本读取。"""
 
         error: JsonObject | None = None
         if self.exit_status is not ExitStatus.SUCCESS:
@@ -129,7 +129,7 @@ async def run_headless(
     model: str,
     session_id: str | None = None,
 ) -> HeadlessResult:
-    """Run one prompt without binding the application to terminal output."""
+    """执行一个提示并整理成单次调用结果，输出格式由宿主决定。"""
 
     turn = await coordinator.send(prompt, session_id=session_id, allow_prompt_clarification=False)
     summary = turn.trace.summary

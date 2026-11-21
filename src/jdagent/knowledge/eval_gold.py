@@ -1,4 +1,4 @@
-"""Offline gold-corpus retrieval and PTK eval."""
+"""使用带标准答案的离线语料评估检索结果及每轮准备的证据。"""
 
 from __future__ import annotations
 
@@ -41,6 +41,8 @@ SKIP_QUERIES = {"Q090", "Q091", "Q092"}
 
 @dataclass(frozen=True, slots=True)
 class LayerScore:
+    """记录某个查询在指定评估分组的指标、实测值、期望值及原因。"""
+
     query_id: str
     slice: str
     metric: str
@@ -101,6 +103,7 @@ def parser_locator_failures() -> tuple[LayerScore, ...]:
 async def run_retrieval_eval(
     tmp_path: Path,
 ) -> tuple[tuple[LayerScore, ...], tuple[LayerScore, ...]]:
+    """用固定语料和参考标注分别评估检索候选与本轮最终证据，汇总指标及未命中的样例。"""
     catalog = KnowledgeCatalog(tmp_path / "catalog.sqlite", tmp_path / "backups", clock=FakeClock())
     catalog.open()
     connection = catalog.register_connection(name="local")
@@ -256,7 +259,7 @@ async def run_retrieval_eval(
 
 
 def fake_hybrid_drop(child: tuple[LayerScore, ...]) -> float:
-    """Return best-single minus hybrid mean recall. Live embedding owns the ≤0.02 gate."""
+    """返回最佳单通道与混合检索的平均召回率之差；0.02 的门槛用于真实向量服务的评测。"""
 
     bm25 = [item.actual for item in child if item.metric == "recall@10"]
     dense = [item.actual for item in child if item.metric == "dense_recall@10"]

@@ -1,4 +1,4 @@
-"""One durable reservation policy shared by foreground and maintenance requests."""
+"""为前台请求和后台维护统一预留用量并记录实际消耗。"""
 
 import asyncio
 from dataclasses import dataclass
@@ -8,6 +8,8 @@ from jdagent.memory_store import MemoryStore
 
 @dataclass(slots=True)
 class RequestAccounting:
+    """让前台和维护请求共用持久用量账本，并分别约束总额度和后台额度。"""
+
     store: MemoryStore
     workspace: str
     total_input: int = 30_000_000

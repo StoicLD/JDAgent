@@ -1,8 +1,4 @@
-"""Exclusive Windows file handles for bounded local text operations.
-
-Readers and writers cannot overlap this handle. Interrupted writes are unknown,
-not rolled back; callers must persist execution-start before entering this seam.
-"""
+"""使用 Windows 独占句柄保护文件操作。写入中断后结果可能未知，调用方须在执行前记录开始事件。"""
 
 import ctypes
 import os
@@ -15,7 +11,7 @@ from typing import BinaryIO
 
 @contextmanager
 def locked_ancestors(root: Path, target: Path) -> Generator[None, None, None]:
-    """Prevent ancestor replacement and reparse writes during a file operation."""
+    """在操作文件时持有其祖先目录的句柄，防止路径在校验后被替换或重定向。"""
     target.relative_to(root)
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     create = kernel.CreateFileW
@@ -50,7 +46,7 @@ def locked_ancestors(root: Path, target: Path) -> Generator[None, None, None]:
 def locked_file(
     path: Path, *, create: bool = False, write: bool = False
 ) -> Generator[BinaryIO, None, None]:
-    """Open a non-shared regular file; never truncate before version validation."""
+    """以独占方式打开普通文件；写入者可以先核对既有版本，再决定是否修改文件。"""
     if os.name != "nt":
         raise OSError("This file adapter requires Windows")
     import msvcrt

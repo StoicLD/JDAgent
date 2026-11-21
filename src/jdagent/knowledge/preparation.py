@@ -1,4 +1,4 @@
-"""Turn Knowledge Preparation: freeze bindings, retrieve, fuse, expand, budget."""
+"""在固定的知识库版本上检索、合并排名，并在本轮预算内选取证据。"""
 
 from __future__ import annotations
 
@@ -29,13 +29,15 @@ from jdagent.knowledge.types import BindingRecord, RetrievalProfile
 
 
 class FrozenBaseResolver(Protocol):
+    """将工作区的一项知识库绑定解析为本轮使用的固定读取目标。"""
+
     def resolve(
         self, bindings: tuple[BindingRecord, ...]
     ) -> tuple[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None], ...]: ...
 
 
 class CatalogBaseResolver:
-    """Resolve live catalog rows into frozen search targets."""
+    """从目录读取活动代次、修订和检索配置，使同一轮后续步骤使用同一版本。"""
 
     def __init__(self, catalog: KnowledgeCatalog) -> None:
         self._catalog = catalog
@@ -43,6 +45,7 @@ class CatalogBaseResolver:
     def resolve(
         self, bindings: tuple[BindingRecord, ...]
     ) -> tuple[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None], ...]:
+        """按绑定顺序读取各知识库的配置和当前索引版本，逐项返回固定版本或失败原因。"""
         resolved: list[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None]] = []
         for binding in bindings:
             try:
@@ -81,7 +84,7 @@ class CatalogBaseResolver:
 
 
 class TurnKnowledgePreparation:
-    """Hide per-KB retrieval, fusion, expansion, and outcome aggregation."""
+    """将各库命中融合为一组本轮可引用的证据，汇总预算消耗及部分检索失败的原因。"""
 
     def __init__(
         self,
@@ -106,11 +109,13 @@ class TurnKnowledgePreparation:
         turn_token: str | None = None,
         source_names: Mapping[str, str] | None = None,
     ) -> PreparedTurnKnowledge:
+        """在已固定的版本上逐库检索并合并排名，将命中扩展到父段，再按预算选择证据。"""
         token = turn_token or uuid4().hex[:8]
         digest = hashlib.sha256(query_text.encode("utf-8")).hexdigest()
         if not bindings:
             return empty_prepared_knowledge(turn_id, token, digest)
 
+        # 按向量配置的指纹给知识库分组。同一查询可以复用向量，前提是使用相同的配置。
         groups: dict[str, list[int]] = {}
         for index, (base, failure) in enumerate(frozen):
             if base is None or failure is not None or base.retrieval_profile.mode == "bm25":
@@ -210,6 +215,7 @@ class TurnKnowledgePreparation:
                 )
             )
 
+        # 各库分数可能来自不同的检索方法。按名次合并后，再对跨库候选统一重排。
         fused = rrf_merge(
             tuple(kb_rankings),
             k=default_profile.rrf_k,
@@ -325,6 +331,7 @@ def _expand_parents(
     frozen: tuple[tuple[FrozenKnowledgeBase | None, QueryFailureReason | None], ...],
     source_names: Mapping[str, str],
 ) -> tuple[Evidence, ...]:
+    """从排名靠前的子片段取回父段，去重并按条数和文本预算决定可加入本轮的证据。"""
     kb_names = {base.knowledge_base_id: base.name for base, _failure in frozen if base is not None}
     selected: list[Evidence] = []
     seen_parents: set[tuple[str, str]] = set()

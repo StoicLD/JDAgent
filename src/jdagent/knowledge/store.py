@@ -1,4 +1,4 @@
-"""Content-addressed immutable source objects."""
+"""按内容摘要保存不可变的来源对象。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def content_digest(data: bytes) -> str:
 
 
 class ContentAddressedStore:
-    """Persist raw and parsed bytes by SHA-256. Owns no source lifecycle."""
+    """以 SHA-256 摘要为地址保存原始文件和解析结果。来源是否可访问由目录判断。"""
 
     def __init__(self, root: Path) -> None:
         self._root = root
@@ -33,6 +33,7 @@ class ContentAddressedStore:
         return self.path_for(digest).is_file()
 
     def put(self, data: bytes) -> str:
+        """将给定字节保存为不可变对象，返回可供来源版本引用的摘要。"""
         if len(data) > MAX_RAW_BYTES:
             raise KnowledgeError(
                 KnowledgeErrorCode.SOURCE_TOO_LARGE,

@@ -1,4 +1,4 @@
-"""One lazy, sequential SDK session owned and closed by the same asyncio task."""
+"""由同一个异步任务建立、使用和关闭 MCP 会话，依次执行协议请求。"""
 
 import asyncio
 import hashlib
@@ -53,8 +53,7 @@ from jdagent.domain.mcp import (
 from jdagent.mcp_configuration import MCPServerConfiguration
 
 _TaskCallResult: TypeAlias = types.CallToolResult | TaskHandle
-# The runtime union is supported by Pydantic; pinned Pyright does not yet accept
-# this TypeForm argument. The adapter's result remains explicitly typed.
+# Pydantic 支持这里的联合类型，当前锁定版本的 Pyright 无法识别这个 TypeForm 参数。
 _TASK_CALL_RESULT = TypeAdapter[_TaskCallResult](_TaskCallResult)  # pyright: ignore[reportArgumentType]
 _PARAMETER_HEADERS: ContextVar[dict[str, str] | None] = ContextVar(
     "mcp_parameter_headers", default=None
@@ -71,12 +70,10 @@ _DIRECTORY_ENTRIES: ContextVar[JsonObject | None] = ContextVar(
 
 
 class _ParameterHeaderDispatcher(JSONRPCDispatcher[TransportContext]):
-    """Attach request-scoped headers at the SDK's public dispatch boundary.
+    """将本次调用需要的参数请求头交给 SDK，由 SDK 校验并发送请求。
 
-    SDK 2.3 send_request ignores metadata.headers; its normal parameter header
-    resolver requires list_tools' unbounded schema cache. Keep both protocol
-    validation and transmission in the SDK, using the host's frozen definition.
-    The Any annotations stay wholly inside this SDK-to-SDK boundary.
+    SDK 2.3 的常规接口忽略 metadata.headers，默认解析方式依赖无容量限制的工具缓存。
+    这里根据宿主为本次请求保留的工具定义生成请求头。
     """
 
     async def send_raw_request(
@@ -96,10 +93,8 @@ class _ParameterHeaderDispatcher(JSONRPCDispatcher[TransportContext]):
         entries = _DIRECTORY_ENTRIES.get()
         key = _DIRECTORY_KEYS.get(method)
         if entries is not None and key is not None and isinstance(raw.get(key), list):
-            # The SDK validates list results atomically. Validate its envelope
-            # here with an empty list, then expose the original entries for
-            # per-item SDK validation through capability_issue. No constraints
-            # or malformed entries silently disappear from the host catalog.
+            # SDK 默认整批校验列表。先用空列表校验响应外层，再逐项校验原始条目，
+            # 目录才能指出哪一项无效。
             entries[key] = normalize_json(raw[key])
             return {**raw, key: []}
         return raw
@@ -107,6 +102,8 @@ class _ParameterHeaderDispatcher(JSONRPCDispatcher[TransportContext]):
 
 @dataclass(slots=True)
 class _Request:
+    """表示排入连接队列的一次调用，关联等待者、发送任务和完成结果。"""
+
     method: MCPMethod | None
     params: JsonObject
     result: asyncio.Future[JsonObject | MCPFailure]
@@ -117,10 +114,9 @@ class _Request:
 
 
 class SDKMCPConnection:
-    """Reuse a peer across caller tasks, without sharing it across host Sessions.
+    """管理单个宿主会话的 MCP 连接，一次只允许一个请求使用连接。
 
-    Only one request may be active. The owner task holds the SDK contexts, not a
-    business workflow. Failed/closed connections require explicit replacement.
+    同一异步任务负责建立、收发和关闭连接；失败或关闭后需要显式替换连接。
     """
 
     def __init__(self, configuration: MCPServerConfiguration) -> None:
@@ -171,13 +167,13 @@ class SDKMCPConnection:
         on_progress: MCPProgressCallback | None = None,
         input_schema: JsonObject | None = None,
     ) -> JsonObject:
-        """Validate results; directory entries require capability_issue before use."""
+        """校验并转发一次协议请求。目录中的具体条目在对模型公开之前还须逐项校验。"""
         return await self._request(
             method, params, on_progress=on_progress, input_schema=input_schema
         )
 
     async def connect(self) -> MCPPeerInformation:
-        """Negotiate capabilities without assuming the peer offers Tools."""
+        """建立连接并协商能力，只有远端实际声明的能力才可在后续使用。"""
         await self._request(None, {})
         assert self._information is not None
         return self._information
@@ -190,6 +186,7 @@ class SDKMCPConnection:
         on_progress: MCPProgressCallback | None = None,
         input_schema: JsonObject | None = None,
     ) -> JsonObject:
+        """将请求交给拥有连接的异步任务并等待结果；已有请求占用连接时报告繁忙。"""
         if self._state in ("unavailable", "closed") or self._closing:
             raise MCPFailure("connection")
         if self._pending is not None:
@@ -210,8 +207,7 @@ class SDKMCPConnection:
         except asyncio.CancelledError:
             request.abandoned = True
             if method in {"tasks/get", "tasks/cancel"}:
-                # Abandon only this read. The same connection must remain usable
-                # for tasks/cancel; the owner retains and settles its RPC task.
+                # 取消只结束本次读取。连接所有者仍须收尾这次请求，并保留连接以发送任务取消操作。
                 if request.operation is not None:
                     request.operation.cancel()
             else:
@@ -221,7 +217,7 @@ class SDKMCPConnection:
             self._pending = None
 
     async def aclose(self) -> bool:
-        """Wait at most five seconds; retain ownership if cleanup is unfinished."""
+        """请求连接所有者关闭资源，最多等待五秒。清理未结束时保留所有权并报告尚未关闭。"""
         self._closing = True
         if self._owner is None:
             self._state = "closed"
@@ -238,6 +234,7 @@ class SDKMCPConnection:
         return True
 
     async def _run(self) -> None:
+        """由连接所有者串行消费请求队列，将每次结果或故障传回相应等待者。"""
         failure = MCPFailure("connection")
         try:
             async with AsyncExitStack() as stack:
@@ -256,16 +253,13 @@ class SDKMCPConnection:
                     except asyncio.CancelledError:
                         if self._closing or self._owner is not None and self._owner.cancelling():
                             raise
-                        # A cancelled child query does not cancel the context
-                        # owner. No next RPC starts until the child has settled.
+                        # 子查询取消后要等它收尾，才能在同一连接上发起下一次请求。
                         result = MCPFailure("connection")
                     except MCPError as error:
                         if error.code == types.CONNECTION_CLOSED:
                             raise
-                        # This session has no SDK request timer. On this pinned public
-                        # send_request path REQUEST_TIMEOUT can only be a peer reply;
-                        # HTTP status fallbacks use other codes. Host deadlines cancel
-                        # the request and never pass through this exception branch.
+                        # 当前会话没有设置 SDK 请求计时器。这里的 REQUEST_TIMEOUT 来自对端；
+                        # 宿主超时走取消路径。
                         kind = (
                             "server_timeout"
                             if request.method in {"tools/call", "tasks/get"}
@@ -281,8 +275,7 @@ class SDKMCPConnection:
         except asyncio.CancelledError:
             pass
         except Exception as error:
-            # SDK transports may raise ExceptionGroup during context teardown.
-            # Do not expose nested exception messages, URLs, or server content.
+            # SDK 在关闭传输时可能抛出异常组，其中的详细信息可能含有地址或服务器原文。
             failure = _safe_failure(error)
         finally:
             failure = self._stream_error or failure
@@ -291,12 +284,11 @@ class SDKMCPConnection:
                 self._pending.result.set_result(failure)
 
     async def _connect(self, stack: AsyncExitStack) -> ClientSession:
+        """根据配置建立标准流或 HTTP 连接，并以实际使用的连接参数建立身份校验依据。"""
         config = self._configuration
         if not config.enabled:
             raise MCPFailure("configuration")
-        # Bind durable handles to the endpoint and the values actually used by
-        # this connection, not just environment variable names. This digest is
-        # private control data and never belongs in public status or events.
+        # 绑定摘要使用端点和连接实际采用的配置值，以便恢复时核对身份。它只保存在私有控制数据中。
         identity: dict[str, object] = {
             "transport": config.transport,
             "command": config.command,
@@ -378,16 +370,15 @@ class SDKMCPConnection:
             self._owner.cancel()
 
     def _remember_transport_failure(self, error: Exception) -> None:
-        # The SDK's SSE path translates read failures to CONNECTION_CLOSED.
-        # Retain the bounded transport's category before that information is lost.
+        # SDK 会把 SSE 读取错误统一报为连接关闭，须先取回传输层记录的具体错误类别。
         if self._stream_error is None:
             self._stream_error = _safe_failure(error)
 
     async def _negotiate(
         self, dispatcher: JSONRPCDispatcher[TransportContext], session: ClientSession
     ) -> None:
-        # send_discover() has its own 10-second deadline. The public dispatcher
-        # lets the host apply one 15-second connection budget, including fallback.
+        """与对端协商协议版本及能力，在同一连接预算内处理发现请求和回退。"""
+        # 直接调用发现接口会单独计时十秒。这里通过公共分发接口让发现和回退共用十五秒连接预算。
         try:
             raw = await dispatcher.send_raw_request(
                 "server/discover",
@@ -421,16 +412,15 @@ class SDKMCPConnection:
             session.adopt(discovery)
 
     async def _send(self, session: ClientSession, request: _Request) -> JsonObject:
-        # Avoid ClientSession.list_tools(): its unbounded schema cache would be
-        # a third cache outside the host's directory/loaded-definition budgets.
+        """按协商的方法分派一次请求，处理进度和结果，并将 SDK 层返回值转换为项目数据。"""
+        # SDK 的 list_tools 会额外缓存完整定义。由宿主管理目录和已加载定义，才能约束缓存大小。
         if request.method is None:
             return {}
 
         async def report_progress(
             progress: float, total: float | None, message: str | None
         ) -> None:
-            # Peer text is neither a diagnostic nor a durable event. Retain only
-            # valid finite numbers, with no deadline or retry side effects.
+            # 进度通知只采纳有限数值；对端附带的文字不写入日志，通知也不延长超时或触发重试。
             del message
             if isinstance(progress, bool) or not math.isfinite(progress) or progress < 0:
                 return

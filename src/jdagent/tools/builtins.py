@@ -1,4 +1,4 @@
-"""The three built-in v0.1 tools."""
+"""定义基础计算器和旧版工作区的文本读写工具。"""
 
 import ast
 import asyncio
@@ -121,7 +121,7 @@ def object_schema(properties: JsonObject, required: list[JsonValue]) -> JsonObje
 
 
 def create_calculator_tool() -> ToolDefinition:
-    """Create the v0.4 calculator with a validated structured result."""
+    """创建计算器的参数定义、执行处理函数和结构化返回值约定。"""
 
     async def calculate(arguments: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
         return ToolOutcome(data={"value": await _calculate(arguments, context)})
@@ -137,7 +137,7 @@ def create_calculator_tool() -> ToolDefinition:
 
 
 def create_builtin_tools(resolver: WorkspacePathResolver) -> tuple[ToolDefinition, ...]:
-    """Create the fixed calculator/read/write tool set for one workspace."""
+    """为指定工作区装配旧接口使用的计算、读文本与写文本工具。"""
 
     async def read_handler(arguments: JsonObject, context: ToolExecutionContext) -> str:
         return await _read_text_file(arguments, context, resolver)

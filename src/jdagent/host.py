@@ -1,4 +1,4 @@
-"""Composition host for interactive and headless CLI modes."""
+"""管理命令行进程的生命周期，包括装配依赖、运行交互或单次任务以及关闭资源。"""
 
 import json
 import sys
@@ -33,7 +33,7 @@ OutputFunction = Callable[[str], None]
 
 @dataclass(frozen=True, slots=True)
 class CliStartup:
-    """Parsed startup values before layered configuration resolution."""
+    """保存命令行解析结果。配置文件与默认值在启动运行时之前合并。"""
 
     prompt: str | None
     session_id: str | None
@@ -63,7 +63,7 @@ async def run_single_turn(
     output_function: OutputFunction = print,
     render_final_text: bool = True,
 ) -> CoordinatedTurn:
-    """Compatibility seam for the v0.1 vertical-slice tests."""
+    """为 v0.1 端到端用例保留的单轮对话入口。"""
 
     turn = await coordinator.send(user_text, session_id=session_id)
     if render_final_text and turn.result.assistant_text:
@@ -119,7 +119,7 @@ def _print_trace(trace: TraceProjection, *, file: TextIO | None = None) -> None:
 
 
 async def run_cli(startup: CliStartup) -> int:
-    """Resolve, compose, and own one CLI process lifecycle."""
+    """根据启动参数装配运行时。单次调用输出一个结果，交互调用持续读取用户操作，退出时关闭资源。"""
 
     if startup.prompt is None and startup.output is not None:
         raise ConfigurationError("--output requires a one-shot prompt")
@@ -250,7 +250,7 @@ async def run_cli(startup: CliStartup) -> int:
 
 
 async def run_maintenance(startup: CliStartup) -> int:
-    """Resume durable jobs without creating a Session or inventing a first-turn trigger."""
+    """恢复已登记的后台作业；单独运行维护命令时无需创建会话或发起新一轮对话。"""
     resolved = resolve_configuration(
         startup.workspace,
         CliOverrides(

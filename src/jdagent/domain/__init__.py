@@ -1,1 +1,1 @@
-"""Provider-independent runtime domain types."""
+"""定义可跨模型和存储实现使用的领域类型。"""

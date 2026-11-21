@@ -1,4 +1,4 @@
-"""Narrow external previews without changing originals or execution facts."""
+"""缩短进入模型请求的外部内容预览，保留归档原文和执行记录。"""
 
 import hashlib
 import json
@@ -7,7 +7,7 @@ from jdagent.domain.json import JsonObject, JsonValue, normalize_json, require_o
 
 
 def source_preview(source: JsonValue) -> JsonValue:
-    """Bound displayed identities; full origins remain in durable invocation facts."""
+    """为显示截短较长的外部身份字段；完整来源可从持久调用记录核对。"""
     if not isinstance(source, dict):
         return source
     projected: JsonObject = {}
@@ -25,7 +25,7 @@ def source_preview(source: JsonValue) -> JsonValue:
 
 
 def narrow_preview(content: str) -> str:
-    """Halve visible external text, keeping source and the verified original reference."""
+    """缩减请求中可见的外部文本，保留来源与可核验的原文引用。"""
     outcome = require_object(normalize_json(json.loads(content)), "MCP outcome")
     data = require_object(outcome.get("data"), "MCP result data")
     if not isinstance(data.get("original"), dict):

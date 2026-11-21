@@ -1,4 +1,4 @@
-"""Resumable two-stage memory jobs with bounded model work and fenced publication."""
+"""分两个阶段执行可恢复的记忆维护作业，限制模型开销并检查提交资格。"""
 
 import asyncio
 import hashlib
@@ -39,7 +39,7 @@ from jdagent.ports import ContextObjects, ModelPort
 
 
 class PrioritizedModel:
-    """One shared provider slot. A waiting foreground request gets the next slot."""
+    """让前台任务和后台维护共享一个模型调用位置。位置空出时优先交给已在等待的前台请求。"""
 
     def __init__(self, model: ModelPort) -> None:
         self.model = model
@@ -52,6 +52,7 @@ class PrioritizedModel:
         return self.model.capabilities
 
     async def stream(self, request: ModelRequest) -> AsyncGenerator[ModelEvent]:
+        """按请求用途排队取得模型调用位置，并在流关闭后释放，供下一个请求使用。"""
         foreground = request.metadata.get("call_kind") != "memory"
         async with self._condition:
             self._foreground += int(foreground)
@@ -74,10 +75,12 @@ class PrioritizedModel:
 
 
 class SourceDeferred(ValueError):
-    """An active or changing source is pending work, not a provider failure."""
+    """表示来源仍在使用或内容发生变化，后台作业需要稍后重新处理该来源。"""
 
 
 class MemoryMaintenance:
+    """负责调度可恢复的记忆整理作业，通过租约确认当前工作者仍有权发布结果。"""
+
     def __init__(
         self,
         memory: MemoryService,
@@ -107,6 +110,7 @@ class MemoryMaintenance:
         self._stopping = False
 
     async def reconcile(self) -> None:
+        """在启动时检查可补登记的维护工作，使进程重启后仍能继续处理。"""
         for identity in await self.memory.discovery.list_session_ids():
             try:
                 events = await self.memory.source(identity)
@@ -140,6 +144,7 @@ class MemoryMaintenance:
             await asyncio.wait({self._task}, timeout=5)
 
     async def run_pending(self) -> None:
+        """领取待处理作业，在租约有效期间执行整理并记录完成、延后或失败。"""
         while (
             not self._stopping
             and self.enabled
@@ -179,7 +184,7 @@ class MemoryMaintenance:
                 self.memory.store.finish, lease, error=message, cancelled=cancelled
             )
         except ValueError:
-            pass  # An expired worker must not modify its successor's state.
+            pass  # 旧租约不能修改继任者的作业状态。
 
     async def _heartbeat(self, lease: JobLease) -> None:
         while True:
@@ -187,6 +192,7 @@ class MemoryMaintenance:
             await asyncio.to_thread(self.memory.store.heartbeat, lease)
 
     async def _model_json(self, lease: JobLease, instruction: str, data: object) -> JsonObject:
+        """在作业预算内调用模型，读取结构化 JSON 结果供后续提取或归并使用。"""
         if self.automatic_allowed is not None and not await asyncio.to_thread(
             self.automatic_allowed
         ):
@@ -247,6 +253,7 @@ class MemoryMaintenance:
         return decode_object("".join(parts).encode())
 
     async def _run(self, lease: JobLease) -> None:
+        """读取稳定的会话来源，提取并归并候选记忆；提交前核验来源与租约，避免使用过期结果。"""
         snapshots: list[tuple[str, str, tuple[RuntimeEvent, ...]]] = []
         candidates: list[tuple[str, str]] = []
         sources: list[tuple[str, str, str]] = []

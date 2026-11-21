@@ -1,4 +1,4 @@
-"""Versioned memory, one-shot user intent, maintenance leases and durable cost accounting."""
+"""保存记忆版本、一次性用户意图、维护作业租约及用量记录。"""
 
 import hashlib
 import json
@@ -16,7 +16,7 @@ from jdagent.domain.json import JsonObject
 
 
 def parse_memory_intent(text: str) -> tuple[str, str, str | None, str] | None:
-    """Match a direct whole utterance; never recursively parse its statement payload."""
+    """仅将完整匹配的用户原话识别为记忆指令；待保存的陈述本身不再递归解释为命令。"""
     text = text.strip()
     text = re.sub(r"^(?:请|请帮我|麻烦)(?=记住|把|忘记|重新启用|记为)", "", text, count=1)
     patterns = (
@@ -40,6 +40,8 @@ def parse_memory_intent(text: str) -> tuple[str, str, str | None, str] | None:
 
 @dataclass(frozen=True, slots=True)
 class MemoryRecord:
+    """保存一条记忆的指定版本，包括内容、生命周期状态和可追溯的来源。"""
+
     memory_id: str
     version: int
     workspace: str
@@ -54,6 +56,8 @@ class MemoryRecord:
 
 @dataclass(frozen=True, slots=True)
 class JobLease:
+    """标识取得后台作业的本次执行权，旧工作者失去租约后不能发布结果。"""
+
     job_id: str
     workspace: str
     session: str
@@ -77,7 +81,7 @@ def _record(row: sqlite3.Row) -> MemoryRecord:
 
 
 class MemoryStore:
-    """SQLite owns memory and jobs; no mutable connection is shared across threads."""
+    """使用 SQLite 保存记忆版本、用户授权、后台作业与费用记录，每个事务独立持有数据库连接。"""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -170,6 +174,7 @@ class MemoryStore:
         event: str,
         dependencies: tuple[str, ...] = (),
     ) -> str | None:
+        """验证用户明确表达的记忆操作，记录对应的会话、轮次和原始输入，使后续写入可以核对授权。"""
         parsed = parse_memory_intent(text)
         if parsed is None:
             return None
@@ -255,6 +260,7 @@ class MemoryStore:
         write_allowed: bool,
         dependencies_verified: bool = False,
     ) -> MemoryRecord:
+        """在事务内核对并消费一次用户意图，写入相应记忆版本，防止同一指令重复生效。"""
         if not write_allowed:
             raise PermissionError("Memory write denied by current capability or write ceiling")
         with self._transaction() as db:
@@ -333,6 +339,7 @@ class MemoryStore:
     def recall(
         self, workspace: str, *, include_inactive: bool = False, now: float | None = None
     ) -> tuple[MemoryRecord, ...]:
+        """根据作用范围和生命周期选取可召回的记忆版本。"""
         now = time.time() if now is None else now
         with self._transaction() as db:
             rows = db.execute(
@@ -377,6 +384,7 @@ memories x WHERE x.id=m.id)""",
         verified: bool = True,
         db: sqlite3.Connection | None = None,
     ) -> MemoryRecord:
+        """校验整理作业的候选记忆及既有抑制记录，避免后台作业重新发布用户已撤回的事实。"""
         if db is None:
             with self._transaction() as connection:
                 return self.publish_candidate(
@@ -394,7 +402,7 @@ memories x WHERE x.id=m.id)""",
         ).fetchone()
         if same:
             return self._latest(db, same["id"])
-        # If equivalence cannot be excluded, never revive a suppressed fact by paraphrasing.
+        # 如果无法排除两种表述指向同一事实，应继续尊重原有的停用决定。
         suppressed = db.execute(
             "SELECT 1 FROM suppressions WHERE workspace IN (?, '') AND enabled=1 LIMIT 1",
             (workspace,),
@@ -418,6 +426,7 @@ memories x WHERE x.id=m.id)""",
         return item
 
     def invalidate_dependency(self, dependency: str) -> None:
+        """在来源失效时处理依赖该来源的记忆，使其退出后续召回。"""
         with self._transaction() as db:
             rows = db.execute(
                 "SELECT * FROM memories m WHERE version=(SELECT MAX(version) FROM "
@@ -455,6 +464,7 @@ memories x WHERE x.id=m.id)""",
     def claim(
         self, workspace: str, owner: str, *, now: float | None = None, ttl: float = 120
     ) -> JobLease | None:
+        """领取可执行的维护作业并发放租约，供后续心跳和提交核验。"""
         now = time.time() if now is None else now
         with self._transaction() as db:
             if db.execute(
@@ -470,6 +480,7 @@ memories x WHERE x.id=m.id)""",
             ).fetchone()
             if row is None:
                 return None
+            # 每次接手作业都递增租约代次，上一任执行者即使恢复运行，也无法用旧租约提交。
             epoch = row["epoch"] + 1
             db.execute(
                 "UPDATE jobs SET "
@@ -507,6 +518,7 @@ memories x WHERE x.id=m.id)""",
         candidate_dependencies: tuple[tuple[str, tuple[str, ...]], ...] = (),
         deferred: bool = False,
     ) -> None:
+        """核对租约后更新作业状态，根据本批次处理结果决定是否安排后续工作。"""
         now = time.time() if now is None else now
         with self._transaction() as db:
             self._check_lease(db, lease, now)
@@ -543,7 +555,7 @@ memories x WHERE x.id=m.id)""",
             )
             if deferred:
                 if sources:
-                    # A bounded source batch gets a fresh job budget; this is not a retry reset.
+                    # 新一批来源有独立的处理预算；旧批次的重试次数仍按原记录计算。
                     continuation = hashlib.sha256(
                         (lease.job_id + json.dumps(sources)).encode()
                     ).hexdigest()
@@ -605,6 +617,7 @@ memories x WHERE x.id=m.id)""",
         maintenance_output_limit: int | None = None,
         manifest: str | None = None,
     ) -> None:
+        """在发送模型请求前以事务检查总额度和维护额度，并按请求标识登记预留量。"""
         with self._transaction() as db:
             if kind not in {"task", "compaction", "citation_repair"}:
                 count = db.execute(
@@ -643,6 +656,7 @@ memories x WHERE x.id=m.id)""",
                 db.execute("INSERT INTO request_manifests VALUES (?,?)", (request, manifest))
 
     def settle(self, request: str, input_tokens: int, output_tokens: int) -> None:
+        """根据服务商报告的输入和输出用量结算指定请求的预留额度。"""
         with self._transaction() as db:
             db.execute(
                 "UPDATE requests SET input=?,output=?,settled=1 WHERE id=? AND settled=0",

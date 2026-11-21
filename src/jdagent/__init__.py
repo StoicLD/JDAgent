@@ -1,4 +1,4 @@
-"""JDAgent public package."""
+"""JDAgent 的公共包入口。"""
 
 from importlib.metadata import version
 

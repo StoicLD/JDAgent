@@ -1,4 +1,4 @@
-"""Bounded stdio framing; the official SDK owns JSON-RPC and MCP semantics."""
+"""通过标准输入输出传送有大小上限的消息，由 MCP SDK 解析协议。"""
 
 import os
 import signal
@@ -29,8 +29,9 @@ StdioStreams = tuple[
 async def _owned_pipes(
     command: str, args: tuple[str, ...], cwd: Path, environment: dict[str, str]
 ) -> AsyncGenerator[tuple[ByteSendStream, ByteReceiveStream, ByteReceiveStream]]:
+    """启动并管理标准输入输出连接使用的子进程，调用方退出时回收进程和管道。"""
     if os.name == "nt":
-        # Ownership must be established even if cancellation races with spawning.
+        # 即使创建子进程时收到取消，也要先取得进程的控制权，才能可靠地回收它。
         job: WindowsCommand | None = None
         with anyio.CancelScope(shield=True):
             job = await run_sync(
@@ -40,7 +41,7 @@ async def _owned_pipes(
         try:
             yield FileWriteStream(job.stdin), FileReadStream(job.stdout), FileReadStream(job.stderr)
         finally:
-            # Closing the Job kills descendants before waiting for blocked pipe readers.
+            # 先关闭 Job 终止所有后代进程，阻塞在管道上的读取才能结束。
             with anyio.CancelScope(shield=True):
                 await run_sync(job.close)
     else:
@@ -72,10 +73,9 @@ async def bounded_stdio_client(
     environment: Mapping[str, str] | None = None,
     limit_bytes: int = 1 << 20,
 ) -> AsyncGenerator[StdioStreams]:
-    """Own one server tree and reject oversize/unfinished messages before SDK parsing.
+    """启动并管理通过标准输入输出通信的 MCP 服务进程，在 SDK 解析前检查消息边界和大小。
 
-    Only the SDK's minimal inherited environment and explicit overrides are passed.
-    Stderr is drained without exposing remote log content. Enter/exit in the same task.
+    子进程只继承 SDK 要求的最少环境和显式配置。宿主读走标准错误以防阻塞，不展示远端日志。
     """
     if limit_bytes <= 0:
         raise ValueError("Receive limit must be positive")

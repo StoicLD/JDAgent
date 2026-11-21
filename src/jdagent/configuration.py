@@ -1,4 +1,4 @@
-"""Layered CLI configuration resolved before runtime composition."""
+"""读取用户和项目配置，与命令行选项合并，校验后交给运行时。"""
 
 import math
 import os
@@ -70,12 +70,12 @@ _PROJECT_FIELDS = _CONTEXT_FIELDS | frozenset(
 
 
 class ConfigurationError(ValueError):
-    """A safe, actionable configuration failure."""
+    """可向用户报告的配置错误，调用方可以据此停止启动或拒绝本轮重载。"""
 
 
 @dataclass(frozen=True, slots=True)
 class CliOverrides:
-    """Only explicitly supplied CLI values; absent fields do not override files."""
+    """仅记录调用方显式传入的选项；缺省字段沿用文件配置或默认值。"""
 
     provider: str | None = None
     model: str | None = None
@@ -96,7 +96,7 @@ class CliOverrides:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedConfiguration:
-    """Validated immutable values consumed by the composition root."""
+    """装配运行时使用的不可变配置，包含经过校验的最终值及已解析的数据路径。"""
 
     provider: str
     model: str
@@ -142,7 +142,7 @@ _legacy_notice_emitted = False
 
 
 def accept_legacy_engine(value: object) -> None:
-    """Validate an old selector and issue one migration notice across concurrent reloads."""
+    """校验旧的引擎选择值。即使多个线程同时重读配置，每个进程也只输出一次迁移提示。"""
     if not isinstance(value, str) or value.strip() not in LEGACY_RUNTIME_ENGINES:
         raise ConfigurationError("runtime_engine must be native or langgraph")
     global _legacy_notice_emitted
@@ -192,6 +192,7 @@ def _positive_number(values: Mapping[str, object], name: str) -> float:
 
 
 def _validate(values: dict[str, object]) -> None:
+    """检查合并后的模型、执行和上下文配置，拒绝不支持的组合或相互矛盾的预算。"""
     for name in (
         "model_context_window",
         "max_output_tokens",
@@ -261,7 +262,7 @@ def resolve_configuration(
     data_paths: DataPaths | None = None,
     environment: Mapping[str, str] = os.environ,
 ) -> ResolvedConfiguration:
-    """Resolve CLI > project > user > defaults and validate the complete result."""
+    """依次合并默认值、用户配置、项目配置和命令行选项，并校验权限和 MCP 的范围。"""
 
     overrides = cli_overrides or CliOverrides()
     paths = data_paths or DataPaths.for_workspace(workspace, environment=environment)

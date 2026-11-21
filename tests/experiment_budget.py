@@ -70,11 +70,7 @@ class ExperimentEntry:
 
 
 class ExperimentLedger:
-    """Serialize admission and preserve reservations across processes and restarts.
-
-    Limits and experiment identity are fixed when creating the ledger. A missing,
-    corrupt, or differently configured existing ledger never silently starts over.
-    """
+    """在多个进程间串行预留实验用量，重启后沿用已登记的预算；账本缺失、损坏或配置冲突时拒绝继续。"""
 
     def __init__(self, path: Path, experiment_id: str, limits: ExperimentLimits) -> None:
         self.path = path.resolve()
@@ -255,7 +251,7 @@ class ExperimentLedger:
 
 
 class BudgetedModel:
-    """Borrow a model and admit every external attempt through the shared ledger."""
+    """在转交模型请求前通过共享账本预留用量，使每次外部尝试都计入同一实验。"""
 
     def __init__(
         self, model: ModelPort, ledger: ExperimentLedger, combination: str, attempt: int

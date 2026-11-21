@@ -1,4 +1,4 @@
-"""Readable, append-only JSONL session adapter."""
+"""将每条会话事件保存为一行 UTF-8 JSON。超出行内载荷阈值的内容存入受控对象目录。"""
 
 import asyncio
 import json
@@ -84,7 +84,7 @@ _PATH_LOCKS: dict[Path, threading.RLock] = {}
 
 
 def session_file_lock(path: Path) -> threading.RLock:
-    """Return the process-local lock shared by session storage adapters."""
+    """取得同一进程内读写指定会话文件时共用的锁。"""
 
     normalized = path.resolve(strict=False)
     with _LOCKS_GUARD:
@@ -156,6 +156,7 @@ def _tool_result_to_data(result: ToolResult) -> JsonObject:
 
 
 def _payload_to_data(payload: RuntimePayload) -> JsonObject:
+    """根据载荷类型生成可持久化的字段，使会话文件只依赖项目约定的数据格式。"""
     if isinstance(payload, MCPTaskResultReservedPayload):
         return {
             "task_ref": payload.task_ref,
@@ -384,7 +385,7 @@ def _payload_to_data(payload: RuntimePayload) -> JsonObject:
 
 
 def event_to_data(event: RuntimeEvent) -> JsonObject:
-    """Convert one canonical event to its JSON-compatible representation."""
+    """将一条完整事件转换为可写入 JSON 的信封与载荷。"""
 
     return {
         "schema_version": event.schema_version,
@@ -490,6 +491,7 @@ def _tool_outcome(value: JsonObject) -> ToolOutcome:
 
 
 def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> RuntimePayload:
+    """根据事件类型校验所需字段，将 JSON 恢复为相应载荷对象。"""
     if event_type is RuntimeEventType.MCP_TASK_RESULT_RESERVED:
         reserved = require_integer(data, "reserved_bytes")
         if reserved <= 0:
@@ -797,7 +799,7 @@ def _payload_from_data(event_type: RuntimeEventType, data: JsonObject) -> Runtim
 
 
 def event_from_data(data: JsonObject) -> RuntimeEvent:
-    """Validate and reconstruct one schema-v2 canonical event."""
+    """校验事件格式、版本和载荷字段，将磁盘记录重建为运行时事件。"""
 
     schema_version = require_integer(data, "schema_version")
     if schema_version != 4:
@@ -836,7 +838,7 @@ def _decode_json_object(raw: bytes, offset: int) -> JsonObject:
 
 
 class JsonlSession:
-    """Persist schema-v2 events as one fsynced UTF-8 JSON object per line."""
+    """以追加方式保存会话事件，每次写入校验序号并同步到磁盘。读取时逐行校验会话身份和顺序。"""
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory.resolve(strict=False)
@@ -847,7 +849,7 @@ class JsonlSession:
         self._objects = FileContextObjects(self._directory / "objects")
 
     def decode_record(self, data: JsonObject) -> RuntimeEvent:
-        """Hydrate only the envelope's owned payload, never user-controlled nested keys."""
+        """遇到事件信封中的受控对象引用时才读取并验证外置载荷；用户内容中的同名字段按普通数据保留。"""
         if "owned_payload_hash" in data:
             raw = self._objects.get_sync(require_string(data, "owned_payload_hash"))
             if len(raw) != require_integer(data, "payload_bytes"):
@@ -897,7 +899,7 @@ class JsonlSession:
             yield event
 
     async def list_session_ids(self) -> tuple[str, ...]:
-        """List candidate session identifiers without parsing their events."""
+        """根据文件名列出候选会话标识。此步骤无需读取各会话的事件。"""
 
         try:
             paths = await asyncio.to_thread(lambda: tuple(self._directory.glob("*.jsonl")))
@@ -907,7 +909,7 @@ class JsonlSession:
         return tuple(sorted(identifiers))
 
     def path_for(self, session_id: str) -> Path:
-        """Resolve a validated session identifier to its storage path."""
+        """校验会话标识后返回对应的日志路径。"""
 
         if _SESSION_ID.fullmatch(session_id) is None:
             raise SessionError(SessionErrorCode.NOT_FOUND, "Invalid session ID")
@@ -924,10 +926,12 @@ class JsonlSession:
                     self._release_sync(event.session_id)
 
     def _append_owned(self, path: Path, event: RuntimeEvent) -> None:
+        """在持有会话写入权时外置较大载荷，核对下一序号；整行写入并同步后再更新尾部缓存。"""
         data = event_to_data(event)
         payload = json.dumps(
             data["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
+        # 超过 16 KiB 的载荷单独存储，日志行保留摘要和字节数，读取时据此还原事件。
         if len(payload) > 16384:
             data.pop("payload")
             data["owned_payload_hash"] = self._objects.put_sync(payload)
@@ -946,6 +950,8 @@ class JsonlSession:
                 stat = path.stat()
                 identity = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
                 cached = self._tails.get(event.session_id)
+                # 缓存只对同一文件、长度和修改时间有效。文件变化后重新读取历史，
+                # 再确定下一个序号。
                 if cached is not None and cached[:3] == identity:
                     expected = cached[3] + 1
                 else:
@@ -973,6 +979,7 @@ class JsonlSession:
             )
 
     def _read_sync(self, path: Path, session_id: str) -> list[RuntimeEvent]:
+        """读取有效的完整记录。末行不完整、序号断裂或载荷损坏时报告故障位置，供显式恢复使用。"""
         if not path.exists():
             raise SessionError(SessionErrorCode.NOT_FOUND, f"Session not found: {session_id}")
         try:

@@ -1,4 +1,4 @@
-"""Resolve workspace identity and operating-system data locations."""
+"""确定工作区身份，并定位当前操作系统上的项目数据目录。"""
 
 import hashlib
 import json
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def canonical_workspace_path(workspace: Path) -> Path:
-    """Return the one canonical path used for workspace isolation."""
+    """解析工作区的实际路径，并按平台统一大小写等路径表示，用于识别同一工作区。"""
 
     resolved = workspace.resolve(strict=True)
     normalized = os.path.normpath(str(resolved))
@@ -20,7 +20,7 @@ def canonical_workspace_path(workspace: Path) -> Path:
 
 
 def workspace_identity(workspace: Path) -> str:
-    """Hash a canonical workspace path without exposing it in directory names."""
+    """对规范化后的工作区路径求摘要，得到可用作目录名的稳定标识。"""
 
     canonical = canonical_workspace_path(workspace)
     digest = hashlib.sha256(str(canonical).encode("utf-8")).hexdigest()
@@ -47,7 +47,7 @@ def _default_roots(
 
 @dataclass(frozen=True, slots=True)
 class DataPaths:
-    """All local paths derived once for a target workspace."""
+    """保存一个工作区对应的配置、会话和知识数据位置。"""
 
     workspace: Path
     identity: str
@@ -63,7 +63,7 @@ class DataPaths:
     knowledge_backups: Path
 
     def ensure_project_partition(self) -> None:
-        """Create or validate the collision-detecting workspace manifest."""
+        """校验数据分区中登记的工作区身份；首次使用时创建身份清单，发现冲突则停止。"""
 
         self.project_directory.mkdir(parents=True, exist_ok=True)
         manifest_path = self.project_directory / "workspace.json"
@@ -107,7 +107,7 @@ class DataPaths:
         environment: Mapping[str, str] = os.environ,
         home: Path | None = None,
     ) -> "DataPaths":
-        """Resolve OS roots and the workspace partition without creating files."""
+        """根据平台和工作区推导各类文件的位置。实际创建目录由使用这些路径的组件负责。"""
 
         canonical = canonical_workspace_path(workspace)
         default_config, default_data, application_name = _default_roots(

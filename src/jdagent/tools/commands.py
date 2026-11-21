@@ -1,4 +1,4 @@
-"""Prepared command identity, Job lifecycle and session-scoped output access."""
+"""准备待执行命令，管理进程生命周期并提供会话内的输出读取。"""
 
 import asyncio
 import hashlib
@@ -44,11 +44,12 @@ _ENVIRONMENT = {
 
 
 def command_environment() -> dict[str, str]:
-    """Copy a bounded host allowlist, excluding API credentials and Python hooks."""
+    """从宿主环境的允许列表构造子进程环境，避免向执行的命令传入凭据或 Python 启动设置。"""
     return {key: value for key, value in os.environ.items() if key.upper() in _ENVIRONMENT}
 
 
 def create_command_tools(workspace: Path, logs: CommandLogs) -> tuple[ToolDefinition, ...]:
+    """创建执行命令和分段读取输出的工具，将审批时确认的程序及参数与本次执行关联。"""
     root = workspace.resolve(strict=True)
     environment = command_environment()
     environment_id = hashlib.sha256(json.dumps(environment, sort_keys=True).encode()).hexdigest()
@@ -140,6 +141,7 @@ def create_command_tools(workspace: Path, logs: CommandLogs) -> tuple[ToolDefini
     def execute(
         args: JsonObject, context: ToolExecutionContext, cancellation: threading.Event
     ) -> ToolOutcome:
+        """启动命令并收集输出；超时、取消或日志读取出错时回收进程，并记录已观察到的结果。"""
         actual_cwd = checked_path(root, require_string(args, "cwd"), directory=True)
         program = require_string(args, "program")
         argv = [program, *(str(value) for value in require_array(args.get("args"), "args"))]
@@ -173,6 +175,7 @@ def create_command_tools(workspace: Path, logs: CommandLogs) -> tuple[ToolDefini
             if cancellation.is_set():
                 return ToolOutcome(completed=False, cancelled=True, data=output)
             process = WindowsCommand(argv, actual_cwd, environment, log.status_file)
+            # 同时读取标准输出和标准错误；任何一个管道积满都会阻塞子进程。
             readers = [
                 pool.submit(log.drain, "stdout", process.stdout),
                 pool.submit(log.drain, "stderr", process.stderr),

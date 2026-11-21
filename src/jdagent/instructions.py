@@ -1,4 +1,4 @@
-"""Turn-scoped directory instructions with explicit source and path scope."""
+"""按目录和路径范围为当前对话轮次选择项目指令。"""
 
 import asyncio
 import hashlib
@@ -11,6 +11,8 @@ from jdagent.domain.model import SystemPart
 
 @dataclass(frozen=True, slots=True)
 class DirectoryInstruction:
+    """保存一份目录规则的来源路径、适用范围、内容及其版本摘要。"""
+
     path: str
     scope: str
     content_hash: str
@@ -18,7 +20,7 @@ class DirectoryInstruction:
 
 
 class TurnInstructions:
-    """Discover only relevant ancestors, and never replace a version during its turn."""
+    """按操作涉及的路径逐级查找适用规则；本轮已读取的文件保留首次读取的版本。"""
 
     def __init__(self, workspace: Path, *, global_file: Path | None = None) -> None:
         self._workspace = workspace.resolve(strict=True)
@@ -93,7 +95,7 @@ class TurnInstructions:
         return len(self._rules) > self._acknowledged
 
     def acknowledge(self) -> None:
-        """Only request preparation may acknowledge rules actually sent to the model."""
+        """标记确实已经放入模型请求的规则，供工具判断是否需要先让模型重读再执行。"""
         self._acknowledged = len(self._rules)
 
     def system_parts(self) -> tuple[SystemPart, ...]:

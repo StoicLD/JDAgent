@@ -1,4 +1,4 @@
-"""Workspace-scoped history retrieval and evidence-bound memory operations."""
+"""在工作区内检索会话历史，依据来源证据读取和更新记忆。"""
 
 import asyncio
 import hashlib
@@ -62,6 +62,8 @@ def cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
 
 
 class MemoryService:
+    """根据工作区和来源证据检索历史与记忆，并向当前会话提供受限的读写工具。"""
+
     def __init__(
         self,
         *,
@@ -91,7 +93,7 @@ class MemoryService:
         self.revisions: dict[str, int] = {}
 
     async def source(self, identity: str) -> tuple[RuntimeEvent, ...]:
-        """Read one stable source under the same OS lease as foreground execution."""
+        """在与前台执行共用的会话锁保护下读取稳定历史，供后台提取来源证据。"""
         if identity in self.active_sessions:
             raise ValueError("Source session is active")
         await self.session.acquire(identity)
@@ -108,14 +110,14 @@ class MemoryService:
             await self.session.release(identity)
 
     async def resolved_parent(self, identity: str) -> bool:
-        """Every recovery branch must agree, with a real user statement as evidence."""
+        """核验各恢复分支对父会话操作的结论，并要求存在用户亲自提供的依据。"""
         unknown: set[str] = set()
         conclusions: dict[str, set[str]] = {}
         for child in await self.discovery.list_session_ids():
             try:
                 events = await self.source(child)
             except (SessionError, ValueError):
-                # An unreadable branch could contain a conflict; do not infer agreement.
+                # 无法读取的分支也可能含有冲突证据，因此不能据其余分支判定各方一致。
                 return False
             refs = [
                 event.payload
@@ -148,6 +150,7 @@ class MemoryService:
     async def rank(
         self, query: str, entries: list[tuple[str, str]], *, namespace: str
     ) -> tuple[list[tuple[str, str]], str]:
+        """为候选材料计算相关度；可用时结合向量结果，供搜索选择有限数量的匹配项。"""
         wanted = terms(query)
         lexical = sorted(entries, key=lambda entry: (-len(wanted & terms(entry[1])), entry[0]))
         lexical = [entry for entry in lexical if not wanted or wanted & terms(entry[1])]
@@ -219,7 +222,7 @@ class MemoryService:
         }
 
     async def valid_dependency(self, dependency: str) -> bool:
-        """Revalidate source versions before injecting a derived fact as active memory."""
+        """注入派生记忆前重新检查来源版本，防止已失效的证据继续影响回答。"""
         try:
             data = decode_object(dependency.encode())
             if data.get("kind") == "session_prefix":
@@ -278,6 +281,7 @@ class MemoryService:
     async def search_history(
         self, query: str, *, session_id: str | None = None, cursor: int = 0
     ) -> JsonObject:
+        """在可读取的会话历史中查找匹配片段，返回能够定位到原始记录的结果。"""
         entries: list[tuple[str, str]] = []
         references: dict[str, JsonObject] = {}
         busy = 0
@@ -342,6 +346,7 @@ class MemoryService:
         }
 
     async def read_history(self, identity: str, turn_id: str, *, offset: int = 0) -> JsonObject:
+        """按历史引用读取受限范围的原文，使模型能核查搜索命中的具体内容。"""
         events = (
             tuple(self.views[identity]()) if identity in self.views else await self.source(identity)
         )
@@ -383,6 +388,7 @@ class MemoryService:
         }
 
     def tools(self) -> tuple[ToolDefinition, ...]:
+        """构造模型可调用的历史与记忆工具，并将身份、权限与当前会话的用户意图绑定。"""
         string: JsonObject = {"type": "string"}
 
         def schema(properties: JsonObject, required: list[str]) -> JsonObject:

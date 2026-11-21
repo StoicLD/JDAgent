@@ -1,1 +1,1 @@
-"""Concrete adapters for runtime seams."""
+"""模型、存储、终端和外部协议的具体实现。"""

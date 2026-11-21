@@ -1,4 +1,4 @@
-"""Modern Tasks wire types and explicit SDK operations, confined to the adapter."""
+"""定义 MCP 远程任务的协议消息，并通过 SDK 执行任务操作。"""
 
 from collections.abc import Sequence
 from typing import Literal, Self
@@ -24,12 +24,14 @@ class _TaskFields(types.Result):
     status_message: str | None = None
 
 
+# 表示远端刚创建的任务；宿主必须先保存任务与本地引用的关联，才能开始轮询。
 class TaskHandle(_TaskFields):
     """Creation response; the host must persist this before its first poll."""
 
     result_type: Literal["task"] = "task"
 
 
+# 保存一次查询返回的任务状态，并区分终态下的业务错误和协议状态。
 class TaskState(_TaskFields):
     """Polling response, retaining terminal business errors separately from status."""
 
@@ -54,7 +56,7 @@ async def _require_host_polling(handle: TaskHandle, context: ClaimContext) -> ty
 
 
 class TasksExtension(ClientExtension):
-    """Claim modern task handles without starting an implicit polling loop."""
+    """识别服务端返回的任务句柄，把是否开始轮询的决定留给宿主。"""
 
     identifier = TASKS_EXTENSION
 
@@ -100,7 +102,7 @@ async def get_task(
     timeout_seconds: float | None = None,
     progress_callback: ProgressFnT | None = None,
 ) -> TaskState:
-    """Fetch only the existing task; do not repeat its originating operation."""
+    """查询已经创建的远端任务，沿用原任务标识。"""
     _check_support(session)
     state = await session.send_request(
         _GetTask(params=_TaskParams(task_id=task_id)),
@@ -120,7 +122,7 @@ async def cancel_task(
     timeout_seconds: float | None = None,
     progress_callback: ProgressFnT | None = None,
 ) -> None:
-    """Request cancellation; the acknowledgement does not prove work stopped."""
+    """向原任务发送取消请求，是否已停止仍需查看远端之后报告的状态。"""
     _check_support(session)
     await session.send_request(
         _CancelTask(params=_TaskParams(task_id=task_id)),

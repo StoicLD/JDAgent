@@ -1,4 +1,4 @@
-"""Pure permission policies evaluated before tool handlers."""
+"""在工具处理函数执行前评估权限规则。"""
 
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -20,13 +20,13 @@ from jdagent.tools.workspace import WorkspacePathError, WorkspacePathResolver
 
 
 class PermissionPolicy(Protocol):
-    """Decide whether a validated tool call may proceed or needs approval."""
+    """在工具已经通过参数校验之后决定直接放行、询问用户或拒绝。"""
 
     def decide(self, call: ToolCall, definition: ToolDefinition) -> PermissionDecision: ...
 
 
 class DefaultPermissionPolicy:
-    """Allow pure/read tools and ask before writes."""
+    """为本地工具提供默认决策，按风险决定是否需要询问用户。"""
 
     def __init__(
         self,
@@ -54,7 +54,7 @@ class DefaultPermissionPolicy:
 
 
 class SessionPermissionPolicy:
-    """Apply active Session rules below a non-bypassable write ceiling."""
+    """在宿主配置的权限上限内应用当前会话的有效许可。"""
 
     def __init__(
         self,
@@ -72,6 +72,7 @@ class SessionPermissionPolicy:
         self._rules = rules
 
     def decide(self, call: ToolCall, definition: ToolDefinition) -> PermissionDecision:
+        """结合宿主设置、操作类型和会话规则判定权限；已有会话许可不能放宽明确拒绝的操作。"""
         decision = self._base.decide(call, definition)
         if decision is not PermissionDecision.ASK:
             return decision
@@ -113,12 +114,12 @@ class SessionPermissionPolicy:
         return PermissionDecision.ASK
 
     def grant(self, rule: SessionPermissionRule) -> None:
-        """Refresh the turn's rule projection after the grant is durably saved."""
+        """在授权事件成功保存后更新本轮使用的许可视图。"""
         self._rules = (*self._rules, rule)
 
 
 def active_session_rules(events: tuple[RuntimeEvent, ...]) -> tuple[SessionPermissionRule, ...]:
-    """Project active rules from durable grant/revoke facts."""
+    """按日志顺序应用授权和撤销事件，重建当前仍生效的会话规则。"""
 
     active: dict[str, SessionPermissionRule] = {}
     for event in events:
@@ -130,7 +131,7 @@ def active_session_rules(events: tuple[RuntimeEvent, ...]) -> tuple[SessionPermi
 
 
 class StaticPermissionPolicy:
-    """A deterministic policy adapter for tests."""
+    """返回预先指定的权限决定，用于需要固定审批结果的测试。"""
 
     def __init__(self, decision: PermissionDecision) -> None:
         self._decision = decision

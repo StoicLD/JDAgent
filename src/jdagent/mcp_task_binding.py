@@ -1,4 +1,4 @@
-"""The durable Task binding format and its registration consistency checks."""
+"""保存远程任务与本地引用的绑定，并核对绑定和会话登记记录是否一致。"""
 
 import json
 from dataclasses import asdict, dataclass, field
@@ -10,7 +10,7 @@ from jdagent.domain.mcp import MCPCapability, MCPTask
 
 @dataclass(frozen=True, slots=True)
 class MCPTaskBinding:
-    """Bind a private handle to the original execution and connection identity."""
+    """将私有远端任务标识绑定到原始调用、工作区和连接身份，使重启后的管理操作仍可核验目标。"""
 
     task: MCPTask = field(repr=False)
     identity_digest: str = field(repr=False)
@@ -22,7 +22,7 @@ class MCPTaskBinding:
     definition: MCPCapability
 
     def to_bytes(self) -> bytes:
-        """Keep the original v0.7 control-object representation byte compatible."""
+        """按 v0.7 的控制对象格式序列化任务关联，保证既有对象仍能逐字节核验。"""
         control = {**asdict(self), "server_id": self.definition.server_id}
         return json.dumps(control, ensure_ascii=False, sort_keys=True).encode("utf-8")
 
@@ -35,7 +35,7 @@ class MCPTaskBinding:
         session_id: str,
         workspace_identity: str,
     ) -> "MCPTaskBinding":
-        """Restore only a handle whose immutable identity matches its journal fact."""
+        """读取不可变控制对象并核对登记事件中的身份，只有两者一致才恢复远端任务标识。"""
         record = registration.payload
         if not isinstance(record, MCPTaskRegisteredPayload):
             raise ValueError("Task registration is required")

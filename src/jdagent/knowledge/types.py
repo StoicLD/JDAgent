@@ -1,4 +1,4 @@
-"""Frozen knowledge catalog values shared by use cases and adapters."""
+"""定义知识目录、来源版本、绑定和检索配置等共享数据。"""
 
 from __future__ import annotations
 
@@ -12,15 +12,21 @@ from jdagent.domain.json import JsonObject
 
 
 class ProviderKind(StrEnum):
+    """标识知识库连接使用的后端类型，供目录和适配器选择相应的实现。"""
+
     JDAGENT_MANAGED = "jdagent_managed"
 
 
 class KnowledgeBaseStatus(StrEnum):
+    """表示知识库在目录中的可用状态。"""
+
     ACTIVE = "active"
     DELETING = "deleting"
 
 
 class SourceLifecycle(StrEnum):
+    """表示来源当前是否可见、是否已删除，供检索和引用重新打开原文时校验。"""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     DELETE_PENDING = "delete_pending"
@@ -28,6 +34,8 @@ class SourceLifecycle(StrEnum):
 
 
 class SagaStage(StrEnum):
+    """标识一次跨目录、对象存储和索引的摄取操作已完成到哪一步，供中断后恢复。"""
+
     RECEIVED = "received"
     RAW_STORED = "raw_stored"
     PARSED = "parsed"
@@ -37,6 +45,8 @@ class SagaStage(StrEnum):
 
 
 class OperationKind(StrEnum):
+    """区分目录中持久记录的各类知识库操作。"""
+
     ADD = "add"
     REPLACE = "replace"
     DEACTIVATE = "deactivate"
@@ -47,7 +57,7 @@ class OperationKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingProfile:
-    """Versioned document/query vector contract for one knowledge base."""
+    """固定文档和查询生成向量时使用的参数，使两者可以在同一向量空间中比较。"""
 
     provider: str = "openai_compatible"
     base_url: str = ""
@@ -112,7 +122,7 @@ class EmbeddingProfile:
 
 @dataclass(frozen=True, slots=True)
 class RetrievalProfile:
-    """Versioned candidate generation and budget rules."""
+    """固定检索模式、候选条数、融合方式和证据预算，用于复现一次检索的设置。"""
 
     mode: str = "hybrid_rrf"
     dense_top_k: int = 20
@@ -182,6 +192,8 @@ def _json_int(data: JsonObject, name: str, default: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class CredentialRef:
+    """标识获取凭据的位置，使连接记录可以保存引用而无需保存凭据正文。"""
+
     kind: str
     value: str
 
@@ -196,6 +208,8 @@ class CredentialRef:
 
 @dataclass(frozen=True, slots=True)
 class ConnectionRecord:
+    """保存已注册连接的身份、后端设置和凭据引用。"""
+
     connection_id: str
     name: str
     provider_kind: ProviderKind
@@ -207,6 +221,8 @@ class ConnectionRecord:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeBaseRecord:
+    """保存知识库身份、活动索引代次和修订号，确定读取请求应落在哪个索引版本。"""
+
     knowledge_base_id: str
     connection_id: str
     name: str
@@ -222,6 +238,8 @@ class KnowledgeBaseRecord:
 
 @dataclass(frozen=True, slots=True)
 class BindingRecord:
+    """将一个工作区关联到具体连接中的知识库，供每轮检索确定搜索范围。"""
+
     binding_id: str
     workspace_identity: str
     connection_id: str
@@ -231,6 +249,8 @@ class BindingRecord:
 
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
+    """表示知识库中的一个来源，指向当前版本并记录其生命周期状态。"""
+
     source_id: str
     knowledge_base_id: str
     name: str
@@ -242,6 +262,8 @@ class SourceRecord:
 
 @dataclass(frozen=True, slots=True)
 class SourceVersionRecord:
+    """记录一次来源版本对应的原始对象、解码方式及解析快照，供旧引用核验。"""
+
     source_version_id: str
     source_id: str
     raw_hash: str
@@ -254,6 +276,8 @@ class SourceVersionRecord:
 
 @dataclass(frozen=True, slots=True)
 class OperationRecord:
+    """保存一次知识库变更的类型、持久化阶段、恢复参数与错误，供重试时使用。"""
+
     operation_id: str
     kind: OperationKind
     saga_stage: str

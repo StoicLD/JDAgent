@@ -1,4 +1,4 @@
-"""LangGraph runtime fixtures with real adapters and an offline HTTP boundary."""
+"""使用实际运行时和模型适配器，用本地构造的 HTTP 响应验证 LangGraph 执行。"""
 
 import json
 from collections.abc import AsyncGenerator, Callable
@@ -27,6 +27,7 @@ MODEL_ADAPTERS = ("native", "langchain")
 def model_response(
     text: str = "done", calls: tuple[ToolCall, ...] = (), *, usage: Usage | None = None
 ) -> httpx.Response:
+    """构造含文本或工具调用的流式 HTTP 响应，可在结束前附带模型用量。"""
     delta: JsonObject = {"role": "assistant", "content": text}
     if calls:
         delta["tool_calls"] = [
@@ -64,6 +65,8 @@ def model_response(
 
 @dataclass
 class RuntimeCase:
+    """为一组运行时用例准备独立的工作区和数据目录，并替换对外模型连接。"""
+
     root: Path
     monkeypatch: pytest.MonkeyPatch
     model_adapter: str

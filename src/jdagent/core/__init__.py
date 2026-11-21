@@ -1,1 +1,1 @@
-"""Framework-independent contracts for the Turn lifecycle."""
+"""与执行框架无关的对话轮次接口。"""

@@ -1,4 +1,4 @@
-"""Collect one model response and validate its completion before dispatching tools."""
+"""在一次模型流结束时检查文本、工具参数和结束信号是否构成完整响应。"""
 
 from jdagent.domain.errors import StopReason
 from jdagent.domain.model import ResponseCompleted, TextDelta, ToolCallCompleted, ToolCallDelta
@@ -6,6 +6,8 @@ from jdagent.domain.tools import ToolCall
 
 
 class ResponseProtocolError(Exception):
+    """表示模型响应无法按协议处理，同时携带本轮应记录的错误类别和停止原因。"""
+
     def __init__(
         self,
         message: str,
@@ -18,7 +20,7 @@ class ResponseProtocolError(Exception):
 
 
 class ModelResponse:
-    """Accumulate content independently of display, accounting, and graph routing."""
+    """累积同一次请求返回的文本与工具调用，跟踪工具参数是否收齐以及模型给出的结束原因。"""
 
     def __init__(self, *, repair: bool) -> None:
         self.repair = repair
@@ -30,6 +32,7 @@ class ModelResponse:
     def accept(
         self, event: TextDelta | ToolCallDelta | ToolCallCompleted | ResponseCompleted
     ) -> None:
+        """接收一条内容或结束事件。引用修复只允许文本，普通响应只允许一个结束信号。"""
         if isinstance(event, TextDelta):
             self.text_parts.append(event.text)
         elif isinstance(event, ResponseCompleted):
@@ -45,6 +48,7 @@ class ModelResponse:
             self.calls.append(event.call)
 
     def validate(self) -> None:
+        """在流关闭后核对结束原因和内容。模型声明调用工具时，至少要有一个已经收齐参数的调用。"""
         if (
             self._finish is None
             or self._unfinished_delta

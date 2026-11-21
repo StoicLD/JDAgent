@@ -1,4 +1,4 @@
-"""Permission rule inspection and revocation use cases."""
+"""查询和撤销已保存的工具授权规则。"""
 
 from jdagent.domain.events import PermissionRuleRevokedPayload, RuntimeEventType
 from jdagent.eventing import EventJournal
@@ -11,7 +11,7 @@ async def revoke_session_rule(
     session_id: str,
     rule_id: str,
 ) -> None:
-    """Persist revocation only when the selected active rule exists."""
+    """仅在指定会话中仍有对应的有效许可时，追加撤销事件。"""
 
     journal = await EventJournal.open(session, session_id, require_existing=True)
     active = {rule.rule_id for rule in active_session_rules(journal.events)}

@@ -20,6 +20,7 @@ def create_test_coordinator(
     workspace_identity: str | None = None,
     event_observers: tuple[EventObserver, ...] = (),
 ) -> TurnCoordinator:
+    """用测试提供的模型、会话和工具组装协调器，使测试经过与实际对话相同的执行入口。"""
     factory = ConfiguredTurnRunnerFactory(
         model=model,
         model_name="fake",

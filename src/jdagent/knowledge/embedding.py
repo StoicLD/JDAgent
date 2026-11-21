@@ -1,4 +1,4 @@
-"""Embedding adapters that share one request and validation path."""
+"""将文本转换成向量，统一校验各实现返回的数量、维数和数值。"""
 
 from __future__ import annotations
 
@@ -16,18 +16,24 @@ from jdagent.knowledge.types import EmbeddingProfile
 
 
 class EmbeddingKind(StrEnum):
+    """区分用于建索引的文档和用于搜索的查询，使向量服务可以分别处理两类输入。"""
+
     DOCUMENT = "document"
     QUERY = "query"
 
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingResult:
+    """按输入顺序保存向量，同时记录生成向量的模型标识和向量维数。"""
+
     vectors: tuple[tuple[float, ...], ...]
     model_identity: str
     dimension: int
 
 
 class EmbeddingPort(Protocol):
+    """约定如何将一批文档或查询文本转换成可供索引使用的向量。"""
+
     async def embed(
         self,
         texts: tuple[str, ...],
@@ -42,6 +48,7 @@ def validate_vectors(
     vectors: tuple[tuple[float, ...], ...],
     profile: EmbeddingProfile,
 ) -> None:
+    """在写入或检索之前校验向量数量、维度及数值，防止不同规格的数据混入索引。"""
     if len(vectors) != len(texts):
         raise KnowledgeError(
             KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
@@ -77,7 +84,7 @@ def hash_vector(text: str, dimension: int, *, normalize: bool) -> tuple[float, .
 
 
 class HashEmbedding:
-    """Deterministic embedding used by tests and offline ingest."""
+    """用确定性的散列值为文本生成向量，供离线摄取和测试重现相同结果。"""
 
     async def embed(
         self,
@@ -95,7 +102,7 @@ class HashEmbedding:
 
 
 class OpenAICompatibleEmbedding:
-    """OpenAI-compatible HTTP /embeddings adapter."""
+    """通过兼容的 HTTP embeddings 接口生成向量，并校验返回结果是否与请求配置一致。"""
 
     def __init__(self, client: httpx.AsyncClient | None = None, api_key: str | None = None) -> None:
         self._client = client
@@ -108,6 +115,7 @@ class OpenAICompatibleEmbedding:
         *,
         input_kind: EmbeddingKind,
     ) -> EmbeddingResult:
+        """按配置分批发送文本，校验返回的向量，并按原输入顺序合并结果。"""
         del input_kind
         if not profile.base_url or not profile.model:
             raise KnowledgeError(
@@ -148,6 +156,7 @@ class OpenAICompatibleEmbedding:
         texts: tuple[str, ...],
         profile: EmbeddingProfile,
     ) -> tuple[tuple[float, ...], ...]:
+        """发送一批文本并按返回的索引还原向量顺序，使每个结果与原输入对应。"""
         attempts = 0
         last_error: Exception | None = None
         payload: object = None
@@ -244,7 +253,7 @@ class OpenAICompatibleEmbedding:
 
 
 class AdaptiveEmbedding:
-    """Use HTTP embeddings when a profile names a provider; otherwise hash."""
+    """按知识库的向量配置选择 HTTP 服务或本地散列向量实现。"""
 
     def __init__(self, api_key: str | None = None) -> None:
         self._hash = HashEmbedding()

@@ -1,4 +1,4 @@
-"""Resolve archived evidence through the owning KB's version and lifecycle contracts."""
+"""按所属知识库的版本和来源状态解析已归档的证据引用。"""
 
 import asyncio
 import hashlib
@@ -22,10 +22,13 @@ from jdagent.knowledge.types import SourceLifecycle
 
 
 class KnowledgeReferences:
+    """按归档记录的知识库与版本还原证据，读取时重新确认原始来源仍允许访问。"""
+
     def __init__(self, catalog: Path, backups: Path, objects: Path) -> None:
         self.catalog_path, self.backups, self.objects = catalog, backups, objects
 
     def _text(self, reference: JsonObject, *, current: bool) -> str:
+        """核对来源版本、片段位置和内容摘要后返回父段原文；校验当前依赖时还要求版本仍有效。"""
         if not self.catalog_path.is_file():
             raise ValueError("Knowledge dependency is unavailable")
         catalog = KnowledgeCatalog(self.catalog_path, self.backups)
@@ -55,6 +58,7 @@ class KnowledgeReferences:
                     child = require_object(item, "child")
                     if child.get("locator") == reference.get("locator"):
                         digest = hashlib.sha256(require_string(child, "text").encode()).hexdigest()
+                        # 引用指向子片段，展示的是所在父段。先校验子片段的摘要，再返回周围原文。
                         if digest != reference.get("content_hash"):
                             raise ValueError("Knowledge evidence content hash mismatch")
                         return require_string(parent, "text")
@@ -70,6 +74,7 @@ class KnowledgeReferences:
             return False
 
     async def render(self, entry: JsonObject) -> str:
+        """根据请求清单中的引用还原证据文本，缺失或失效的来源按当前可用状态处理。"""
         if entry.get("render_version") != 1:
             raise ValueError("Unsupported knowledge rendering version")
         evidence: list[Evidence] = []

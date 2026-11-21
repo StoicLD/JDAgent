@@ -1,4 +1,4 @@
-"""Session-owned bounded output logs; capacity is serialized across processes."""
+"""按会话保存有容量上限的命令输出日志，并在进程间协调写入。"""
 
 import json
 import re
@@ -19,7 +19,7 @@ def _component(value: str) -> str:
 
 
 class CommandLog:
-    """One invocation's two streams with independent preview and storage limits."""
+    """管理一次命令的标准输出和错误输出，各自记录预览、落盘范围与截断状态。"""
 
     def __init__(self, folder: Path, capacity: int, call_id: str = "") -> None:
         self.log_id = command_log_id(call_id) if call_id else uuid4().hex
@@ -73,7 +73,7 @@ class CommandLog:
 
 
 class CommandLogs:
-    """Resolve opaque IDs only inside one workspace's session log partition."""
+    """在指定会话的日志分区中管理命令输出，通过日志标识和字节偏移读取。"""
 
     def __init__(
         self,
@@ -82,7 +82,7 @@ class CommandLogs:
         total_limit: int = 100 * 1024 * 1024,
         call_limit: int = 10 * 1024 * 1024,
     ) -> None:
-        # Supervisors use these paths from the command's cwd, not the launcher's.
+        # 监督进程以待执行命令的工作目录解释这些路径，因此保存时需要明确路径位置。
         self.root = root.resolve()
         self.total_limit = total_limit
         self.call_limit = call_limit
@@ -102,6 +102,7 @@ class CommandLogs:
     def read(
         self, session_id: str, log_id: str, stream: str, offset: int, length: int
     ) -> JsonObject:
+        """按流名称和字节范围读取一页输出，返回下一页偏移以及日志是否完整或已清除。"""
         folder = self.root / _component(session_id) / _component(log_id)
         if stream not in {"stdout", "stderr"} or offset < 0 or not 1 <= length <= 32768:
             raise ValueError("Invalid stream range")

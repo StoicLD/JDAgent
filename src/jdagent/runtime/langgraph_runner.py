@@ -1,4 +1,4 @@
-"""Sequential StateGraph execution; the journal remains the only durable history."""
+"""通过顺序执行的 LangGraph 节点推进一轮对话，持久历史由会话事件日志保存。"""
 
 import asyncio
 from collections.abc import Awaitable
@@ -42,11 +42,14 @@ from jdagent.runtime.model_response import ModelResponse, ResponseProtocolError
 
 @dataclass(frozen=True, slots=True)
 class _Failure:
+    """保存失败节点交给收尾节点的停止原因、错误类别和说明。"""
+
     reason: StopReason
     category: str
     message: str
 
 
+# 图在一轮内传递的状态。调用预算按整轮累计，待执行工具和响应文本属于当前模型请求。
 class _TurnState(TypedDict):
     session_id: str
     turn_id: str
@@ -71,6 +74,8 @@ class _TurnState(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class _Dependencies:
+    """保存图节点共用的模型、工具和上下文服务，以及当前会话的事件日志。"""
+
     model: ModelPort
     builder: ContextBuilder
     tools: ToolRuntimePort
@@ -87,8 +92,8 @@ class _Node(Protocol):
 
 
 def _step_limit(limits: LoopLimits) -> int:
-    # Each model attempt visits at most six nodes; each executed tool adds one.
-    # Leave room for the tool-limit guard, terminal node, and citation repair guards.
+    # 每次模型尝试最多经过六个节点，每个已执行工具再占一步；另为上限检查、
+    # 引用修正和结束节点留出步数。
     return 6 * limits.max_model_calls + 2 * limits.max_tool_calls + 10
 
 
@@ -97,11 +102,7 @@ def _route(state: _TurnState) -> str:
 
 
 class LangGraphTurnRunner:
-    """Run project services through a fresh graph invocation without checkpoint replay.
-
-    Dependencies belong to this session. Per-turn mutable state and bound node methods
-    are created inside run(), so reusing a runner does not reuse counters or candidates.
-    """
+    """使用会话级服务执行一轮对话。每次调用都创建独立的图状态，计数器与待执行工具按轮隔离。"""
 
     def __init__(
         self,
@@ -136,6 +137,7 @@ class LangGraphTurnRunner:
         cancellation: CancellationToken | None = None,
         knowledge: PreparedTurnKnowledge | None = None,
     ) -> TurnResult:
+        """为本轮绑定工具上下文、取消信号与知识材料，返回图执行得到的终态。"""
         execution = _Execution(
             self._dependencies,
             turn_id,
@@ -147,6 +149,8 @@ class LangGraphTurnRunner:
 
 
 class _Execution:
+    """持有一次图调用的可变状态，并提供构成这张图的节点函数。"""
+
     def __init__(
         self,
         dependencies: _Dependencies,
@@ -167,6 +171,7 @@ class _Execution:
             "model_calls": 0,
             "tool_calls": 0,
             "observed_failures": 0,
+            # 从会话历史还原已使用的调用标识，防止后续模型响应重复使用这些标识。
             "seen_call_ids": {
                 call.call_id
                 for event in dependencies.journal.events
@@ -190,14 +195,14 @@ class _Execution:
 
     def _tracked(self, name: str, node: _Node) -> _Node:
         async def execute(state: _TurnState) -> _TurnState:
-            # Retain progress made before an await that raises. There is one writer,
-            # no parallel nodes, no checkpoint, and no reducer that could replay it.
+            # 节点按顺序写入，且不会从检查点重放。即使等待过程中抛出异常，也要保留此前的进度。
             self.stage, self.state = name, state
             return await node(state)
 
         return execute
 
     async def run(self) -> TurnResult:
+        """建立节点及允许的下一步，执行直到成功或失败。发生异常时，先检查日志中是否已有终态。"""
         graph = StateGraph(_TurnState)
         nodes: dict[str, tuple[_Node, list[str]]] = {
             "prepare": (self.prepare, ["model", "fail"]),
@@ -234,7 +239,7 @@ class _Execution:
                 await self.fail(self.state)
             raise
         except SessionError:
-            # Failed persistence is not evidence of a persisted failure event.
+            # 如果写日志本身失败，就没有证据表明这次失败事件已被保存。
             raise
         except Exception as error:
             terminal = self._terminal_result()
@@ -267,6 +272,7 @@ class _Execution:
         return self._failure(state, StopReason.MODEL_ERROR, "invalid_response", message)
 
     async def _prepare(self, state: _TurnState, *, repair: bool) -> _TurnState:
+        """在模型调用之前检查取消与预算，并按普通回答或引用修复准备本次请求。"""
         if self.cancellation.cancelled or state["model_calls"] >= self.d.limits.max_model_calls:
             cancelled = self.cancellation.cancelled
             return self._failure(
@@ -315,6 +321,7 @@ class _Execution:
         return await self._prepare(state, repair=True)
 
     async def _consume(self, state: _TurnState, *, repair: bool) -> _TurnState:
+        """读取一次模型流，分别处理显示、用量和响应内容；确认流完整后才交给引用校验或工具阶段。"""
         request = state["request"]
         assert request is not None
         state["model_calls"] += 1
@@ -390,6 +397,7 @@ class _Execution:
         return await self._consume(state, repair=True)
 
     async def citations(self, state: _TurnState) -> _TurnState:
+        """核对最终文本中的引用。发现无效引用时允许模型修复一次，仍无效则结束本轮。"""
         if not state["pending_calls"] and self.knowledge is not None:
             finalized = finalize_answer(state["response_text"], self.knowledge)
             if finalized.illegal:
@@ -410,8 +418,9 @@ class _Execution:
         return state
 
     async def persist(self, state: _TurnState) -> _TurnState:
+        """保存完整的助手消息。把调用交给工具前，先检查同批和已发起调用的标识是否重复。"""
         text, calls = state["response_text"], state["pending_calls"]
-        # Keep the model's tool prelude in the result even when its call IDs are rejected.
+        # 即使工具调用标识无效，模型在提出调用前已经输出的文本仍属于本轮结果。
         state["turn_text_parts"].append(text)
         ids = [call.call_id for call in calls]
         if len(ids) != len(set(ids)) or any(call_id in state["seen_call_ids"] for call_id in ids):
@@ -430,6 +439,7 @@ class _Execution:
         return state
 
     async def tool(self, state: _TurnState) -> _TurnState:
+        """依次执行当前批次的工具并记录结果。根据失败次数、停止标记或新发现的目录规则决定下一步。"""
         if self.cancellation.cancelled:
             return self._failure(state, StopReason.CANCELLED, "cancelled", "Turn was cancelled")
         if state["tool_calls"] >= self.d.limits.max_tool_calls:
@@ -501,6 +511,7 @@ class _Execution:
         )
 
     def _terminal_result(self) -> TurnResult | None:
+        """从日志中查找本轮已写入的终态，避免观察者出错后再次记录结束。"""
         for event in reversed(self.d.journal.events):
             if event.turn_id != self.state["turn_id"]:
                 continue
@@ -518,6 +529,7 @@ class _Execution:
         return None
 
     async def complete(self, state: _TurnState) -> _TurnState:
+        """写入成功终态，并返回整轮累计的文本与调用次数。"""
         await self.d.journal.record(
             state["turn_id"],
             RuntimeEventType.TURN_COMPLETED,
@@ -533,6 +545,7 @@ class _Execution:
         return state
 
     async def fail(self, state: _TurnState) -> _TurnState:
+        """先为尚未配对的工具调用补记结果，再保存失败原因并生成本轮结果。"""
         terminal = self._terminal_result()
         if terminal is not None:
             state["result"] = terminal

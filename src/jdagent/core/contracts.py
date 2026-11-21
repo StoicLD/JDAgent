@@ -1,4 +1,4 @@
-"""Framework-independent contracts for executing a Turn."""
+"""定义执行一轮对话所需的输入、依赖和结果。"""
 
 from dataclasses import dataclass
 from typing import Protocol
@@ -11,14 +11,14 @@ from jdagent.knowledge.ptk import PreparedTurnKnowledge
 
 
 class ModelEventObserver(Protocol):
-    """Consume transient model events such as displayable text deltas."""
+    """接收显示等用途的临时模型流事件。会话的持久记录通过事件日志写入。"""
 
     async def observe(self, event: ModelEvent) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class LoopLimits:
-    """Hard call-count limits for one turn, independent of graph step counts."""
+    """规定一轮内允许的模型调用、工具调用和失败恢复次数。图的节点步数另行限制。"""
 
     max_model_calls: int = 16
     max_tool_calls: int = 32
@@ -31,7 +31,7 @@ class LoopLimits:
 
 @dataclass(frozen=True, slots=True)
 class TurnResult:
-    """The caller-visible result of one complete turn."""
+    """一轮执行的最终结果，包含停止原因、可展示的回答、调用次数及引用。"""
 
     stop_reason: StopReason
     assistant_text: str
@@ -43,7 +43,7 @@ class TurnResult:
 
 
 class CancellationToken:
-    """A cooperative cancellation signal checked at safe execution boundaries."""
+    """由请求方设置的取消信号，执行器在可以安全停止的位置检查它。"""
 
     def __init__(self) -> None:
         self._cancelled = False
@@ -57,7 +57,7 @@ class CancellationToken:
 
 
 class TurnRunner(Protocol):
-    """Execute one turn through project services, without exposing framework state."""
+    """单轮执行接口。调用方提供轮次标识、工具上下文和可选的取消信号，得到最终结果。"""
 
     async def run(
         self,

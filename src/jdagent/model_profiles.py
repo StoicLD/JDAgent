@@ -1,4 +1,4 @@
-"""Verified provider capacity profiles; custom endpoints require explicit capacity."""
+"""定义已知模型的容量；自定义端点需明确提供容量信息。"""
 
 from urllib.parse import urlparse
 
@@ -10,7 +10,7 @@ DEEPSEEK_MODELS = frozenset({"deepseek-flash", "deepseek-v4-flash", "deepseek-v4
 
 
 def maintenance_options(provider: str, options: JsonObject | None = None) -> JsonObject:
-    """Use the provider's JSON mode for tool-free structured maintenance responses."""
+    """为无需调用工具的后台结构化任务选择服务商支持的 JSON 输出设置。"""
     result = dict(options or {})
     if provider == "deepseek":
         result["deepseek"] = {
@@ -21,6 +21,7 @@ def maintenance_options(provider: str, options: JsonObject | None = None) -> Jso
 
 
 def model_window(provider: str, model: str, base_url: str, explicit: int | None) -> int | None:
+    """根据显式配置或已知模型档案确定容量，使用自定义端点时需要明确的窗口大小。"""
     if explicit is not None:
         return explicit
     if provider == "fake":
@@ -30,6 +31,6 @@ def model_window(provider: str, model: str, base_url: str, explicit: int | None)
         and urlparse(base_url).hostname == "api.deepseek.com"
         and model in DEEPSEEK_MODELS
     ):
-        # Official notation is 1M. Decimal 1,000,000 is the conservative admission value.
+        # 服务商以 1M 标注容量，这里按十进制的一百万计算可接收的输入量。
         return 1_000_000
     return None

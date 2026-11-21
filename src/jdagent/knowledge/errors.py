@@ -1,10 +1,10 @@
-"""Stable knowledge-module errors that do not leak secrets."""
+"""定义知识模块对外报告的错误类别和可展示的信息。"""
 
 from enum import StrEnum
 
 
 class KnowledgeErrorCode(StrEnum):
-    """Stable failures at the knowledge application seam."""
+    """供知识库管理和检索层共同使用的稳定错误类别。"""
 
     CATALOG_CORRUPT = "catalog_corrupt"
     NAME_CONFLICT = "name_conflict"
@@ -27,7 +27,7 @@ class KnowledgeErrorCode(StrEnum):
 
 
 class KnowledgeError(RuntimeError):
-    """A classified knowledge-module failure."""
+    """携带错误类别的知识库异常，公开信息不包含凭据。"""
 
     def __init__(self, code: KnowledgeErrorCode, message: str) -> None:
         super().__init__(message)

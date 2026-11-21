@@ -1,1 +1,1 @@
-"""LangGraph execution behind the framework-independent TurnRunner contract."""
+"""通过与框架无关的 TurnRunner 接口提供 LangGraph 执行器。"""

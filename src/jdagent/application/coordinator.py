@@ -1,4 +1,4 @@
-"""Coordinate one turn without embedding adapter details in the agent loop."""
+"""准备一次对话所需的会话、上下文和外部材料，再交给轮次执行器。"""
 
 import asyncio
 import json
@@ -61,7 +61,7 @@ from jdagent.ports import EventObserver, RuntimeJournal, SessionPort
 
 
 class TurnRunnerFactory(Protocol):
-    """Create a configured TurnRunner for a per-session journal."""
+    """根据当前配置与会话日志创建执行器，供应用层启动一轮任务。"""
 
     def create(self, journal: RuntimeJournal) -> TurnRunner: ...
 
@@ -74,7 +74,7 @@ class TurnRunnerFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
-    """Application result with stable IDs and its trace projection."""
+    """将执行结果与会话、轮次、执行轨迹和本轮知识材料关联，供宿主展示。"""
 
     session_id: str
     turn_id: str
@@ -85,6 +85,7 @@ class CoordinatedTurn:
 
 
 def retrieval_payload(ptk: PreparedTurnKnowledge) -> TurnRetrievalRecordedPayload:
+    """将本轮冻结的检索结果转换为可持久化的事件载荷，保留来源与降级信息。"""
     return TurnRetrievalRecordedPayload(
         ptk.outcome.value,
         ptk.turn_token,
@@ -135,7 +136,7 @@ def retrieval_payload(ptk: PreparedTurnKnowledge) -> TurnRetrievalRecordedPayloa
 
 
 class TurnCoordinator:
-    """Own the session-input-to-turn-result application lifecycle."""
+    """管理从接收输入到取得单轮结果的过程，负责会话所有权、输入记录和执行前的准备。"""
 
     def __init__(
         self,
@@ -232,13 +233,13 @@ class TurnCoordinator:
             self.memory.views.pop(session_id, None)
 
     def mcp_status(self, session_id: str = "") -> tuple[MCPServerStatus, ...]:
-        """Read only local state; never connect or reload configuration here."""
+        """读取本地 MCP 状态，调用期间不连接远端或重载配置。"""
         if self._mcp is None:
             return ()
         return self._mcp.status(session_id, self._runner_factory.mcp_configuration())
 
     async def create_session(self) -> str:
-        """Create an owned empty Session for explicit commands without starting a Turn."""
+        """为显式管理操作创建并取得一个空会话，调用本身不启动模型。"""
         session_id = str(uuid4())
 
         async def create() -> None:
@@ -261,7 +262,7 @@ class TurnCoordinator:
     async def mcp_list(
         self, session_id: str, *, server_id: str | None = None, refresh: bool = False
     ) -> MCPCatalogView:
-        """Discover an existing Session's granted capabilities while it is idle."""
+        """在已有会话空闲时列出允许使用的 MCP 能力。"""
         if self._mcp is None:
             return MCPCatalogView((), ())
         async with self._mcp_journal(session_id):
@@ -299,7 +300,7 @@ class TurnCoordinator:
             self._mcp_operations.discard(session_id)
 
     async def mcp_tasks(self, session_id: str) -> tuple[MCPTaskView, ...]:
-        """List original task references locally; never connect or resume the Agent."""
+        """从本地记录列出原任务引用，供后续显式管理。"""
         if self._mcp_task_management is None:
             return ()
         async with self._mcp_journal(session_id, configure=False) as journal:
@@ -308,7 +309,7 @@ class TurnCoordinator:
     async def mcp_task(
         self, session_id: str, task_ref: str, *, action: MCPTaskAction = "query"
     ) -> ToolOutcome:
-        """Query, retrieve or cancel one original task while the Session is idle."""
+        """会话空闲时，按本地记录的任务引用查询、取回结果或请求取消原远端任务。"""
         if action not in {"query", "result", "cancel"}:
             raise ValueError("Unsupported MCP task action")
         if self._mcp_task_management is None:
@@ -326,7 +327,7 @@ class TurnCoordinator:
         offset: int = 0,
         limit: int = 10,
     ) -> MCPSearchResult:
-        """Find granted capabilities through the same idle management boundary."""
+        """在已有会话空闲时搜索允许使用的 MCP 能力。"""
         MCPService.validate_search(query, offset=offset, limit=limit)
         await self.mcp_list(session_id, server_id=server_id)
         if self._mcp is None:
@@ -344,6 +345,7 @@ class TurnCoordinator:
         cancellation: CancellationToken | None = None,
         allow_prompt_clarification: bool = True,
     ) -> CoordinatedTurn:
+        """为目标会话安排一次执行，拒绝在同一会话中同时运行两轮。"""
         if session_id is not None and new_session_id is not None:
             raise ValueError("session_id and new_session_id are mutually exclusive")
         identity = session_id or new_session_id or str(uuid4())
@@ -375,7 +377,7 @@ class TurnCoordinator:
         cancellation: CancellationToken | None = None,
         allow_prompt_clarification: bool = True,
     ) -> CoordinatedTurn:
-        """Append a user message and drive exactly one agent turn."""
+        """记录用户输入，处理恢复确认和记忆意图，准备本轮材料并启动图执行。"""
 
         if not user_text.strip():
             raise ValueError("user_text must not be empty")
@@ -426,6 +428,7 @@ class TurnCoordinator:
             UserMessagePayload(user_text),
         )
         memory_intent = None
+        # 恢复会话允许用户明确说明上次操作的结果，只接受恢复快照中登记过的操作标识。
         resolution = re.fullmatch(
             r"确认父会话 ([A-Za-z0-9._-]+) 操作 ([A-Za-z0-9._-]+) (已完成|未执行)，依据：(.+)",
             user_text.strip(),
@@ -590,6 +593,7 @@ class TurnCoordinator:
                 )
                 result = TurnResult(reason, prepared.message, 0, 0, category)
                 return CoordinatedTurn(actual_session_id, turn_id, result, trace, knowledge)
+        # 执行器绑定当前会话的日志，后续模型和工具事件都写回这份历史。
         runner = self._runner_factory.create(journal)
         if actual_session_id in self._pending_compactions:
             service = self._runner_factory.context_for(actual_session_id)
@@ -652,6 +656,7 @@ class TurnCoordinator:
     async def _prepare(
         self, turn_id: str, turn_token: str, query_text: str
     ) -> PreparedTurnKnowledge:
+        """根据当前工作区的知识库绑定检索材料，得到仅供本轮使用的知识快照。"""
         digest = sha256(query_text.encode("utf-8")).hexdigest()
         catalog_path = self._knowledge_catalog
         backup_path = self._knowledge_backups

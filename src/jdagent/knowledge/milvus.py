@@ -1,8 +1,8 @@
-"""Milvus Standalone adapter; SDK types stay inside this module."""
+"""对接 Milvus Standalone，在适配器内处理集合、索引和查询。"""
 
 from __future__ import annotations
 
-# pymilvus is an optional extra; this adapter keeps SDK types private.
+# pymilvus 是可选依赖，只有此适配器需要使用它的类型。
 # pyright: reportMissingImports=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
 # pyright: reportUnknownLambdaType=false
@@ -18,7 +18,7 @@ MIXED_ZH_EN_V1: dict[str, object] = {
 
 
 class MilvusKnowledgeIndex:
-    """Dense HNSW + filtered search. Alias is never used as the read target."""
+    """在 Milvus 的物理集合中按指定修订检索，先限制可见片段再取候选。"""
 
     def __init__(self, uri: str) -> None:
         try:
@@ -42,6 +42,7 @@ class MilvusKnowledgeIndex:
             ) from error
 
     def upsert_chunks(self, generation_id: str, chunks: tuple[IndexChunk, ...]) -> None:
+        """将片段的原文定位、修订范围和向量一起写入对应集合。"""
         collection = self._ensure_collection(
             generation_id, chunks[0].vector.__len__() if chunks else 8
         )
@@ -69,6 +70,7 @@ class MilvusKnowledgeIndex:
     def close_chunks(
         self, generation_id: str, chunk_ids: tuple[str, ...], valid_to_revision: int
     ) -> None:
+        """更新指定片段可见的修订边界，保留按历史修订读取所需的信息。"""
         if not chunk_ids or not self._utility.has_collection(generation_id, using=self._alias):
             return
         collection = self._collection_type(generation_id, using=self._alias)
@@ -124,6 +126,7 @@ class MilvusKnowledgeIndex:
         vector: tuple[float, ...],
         top_k: int,
     ) -> tuple[IndexHit, ...]:
+        """在指定物理集合与修订范围内按查询向量选取相似片段。"""
         if not self._utility.has_collection(generation_id, using=self._alias):
             raise KnowledgeError(
                 KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
@@ -183,6 +186,7 @@ class MilvusKnowledgeIndex:
         query_text: str,
         top_k: int,
     ) -> tuple[IndexHit, ...]:
+        """查询指定修订内符合条件的片段，按词项相关度返回有限数量的命中。"""
         if not self._utility.has_collection(generation_id, using=self._alias):
             raise KnowledgeError(
                 KnowledgeErrorCode.PROVIDER_UNAVAILABLE,
@@ -277,6 +281,7 @@ class MilvusKnowledgeIndex:
             self._utility.drop_collection(generation_id, using=self._alias)
 
     def get_chunks(self, generation_id: str, chunk_ids: tuple[str, ...]) -> tuple[IndexChunk, ...]:
+        """在指定索引代次中按片段标识读取内容及来源信息。"""
         if not chunk_ids or not self._utility.has_collection(generation_id, using=self._alias):
             return ()
         collection = self._collection_type(generation_id, using=self._alias)
@@ -322,6 +327,7 @@ class MilvusKnowledgeIndex:
         )
 
     def _ensure_collection(self, name: str, dimension: int) -> Any:
+        """检查物理集合和索引结构，按所需字段和向量规格准备可用集合。"""
         from pymilvus import CollectionSchema, DataType, FieldSchema
 
         if self._utility.has_collection(name, using=self._alias):

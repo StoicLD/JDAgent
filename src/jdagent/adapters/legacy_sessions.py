@@ -1,4 +1,4 @@
-"""Non-destructive import of v0.1 workspace-local session files."""
+"""从旧版工作区导入 v0.1 会话，保留原始会话文件。"""
 
 import asyncio
 import os
@@ -43,7 +43,7 @@ async def import_legacy_sessions(
     legacy_directory: Path,
     target_directory: Path,
 ) -> tuple[str, ...]:
-    """Validate and copy legacy sessions while preserving every source file."""
+    """验证旧工作区中的会话文件并复制到目标位置，保留原文件供核对。"""
 
     if not await asyncio.to_thread(_prepare_import, legacy_directory, target_directory):
         return ()

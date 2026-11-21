@@ -1,4 +1,4 @@
-"""DeepSeek Chat Completions adapter implemented without provider SDK leakage."""
+"""将项目的模型请求和流式事件与 DeepSeek 的 Chat Completions 接口互相转换。"""
 
 import json
 from collections.abc import AsyncIterator
@@ -36,6 +36,8 @@ from jdagent.domain.tools import ToolCall
 
 @dataclass(slots=True)
 class _ToolFragments:
+    """暂存流中同一次工具调用陆续到达的名称、标识和参数片段。"""
+
     call_id: str = ""
     name: str = ""
     arguments: str = ""
@@ -67,6 +69,7 @@ def _message_data(message: ModelMessage) -> JsonObject:
 
 
 def _request_data(request: ModelRequest) -> JsonObject:
+    """将项目模型请求转换为 DeepSeek 接收的消息、工具定义及生成参数。"""
     messages: list[JsonValue] = [
         {"role": "system", "content": part.content} for part in request.system_parts
     ]
@@ -131,7 +134,7 @@ def _error_category(status_code: int) -> ModelErrorCategory:
 
 
 class DeepSeekModelPort:
-    """Translate DeepSeek SSE chunks into the stable ModelPort event vocabulary."""
+    """将 DeepSeek 的流式 HTTP 响应转换为统一模型事件，使图执行器无需解析服务商协议。"""
 
     def __init__(
         self,
@@ -159,12 +162,13 @@ class DeepSeekModelPort:
         return self._capabilities
 
     async def aclose(self) -> None:
-        """Close the internally owned HTTP client."""
+        """关闭适配器自行创建的 HTTP 客户端。外部传入的客户端由创建方管理。"""
 
         if self._owns_client:
             await self._client.aclose()
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        """发送一次模型请求，按顺序解码响应；网络或协议故障按项目的模型错误分类返回。"""
         try:
             payload = _request_data(request)
         except (TypeError, ValueError) as error:
@@ -223,6 +227,7 @@ class DeepSeekModelPort:
         chunk: JsonObject,
         fragments: dict[int, _ToolFragments],
     ) -> list[ModelEvent]:
+        """解析一个流式数据块，累积同一工具调用的参数片段，转换文本、结束原因和用量。"""
         events: list[ModelEvent] = []
         completion_events: list[ModelEvent] = []
 

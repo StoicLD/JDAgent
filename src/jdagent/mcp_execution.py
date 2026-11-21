@@ -1,4 +1,4 @@
-"""Durable MCP sends and bounded external-content results, independent of RAG."""
+"""记录 MCP 请求是否已发送，保存外部结果，并限制结果占用的空间。"""
 
 import asyncio
 import hashlib
@@ -52,6 +52,8 @@ def _origin(entry: MCPCapability) -> ToolOrigin:
 
 @dataclass(frozen=True, slots=True)
 class MCPResultLimits:
+    """限定会话可保存的结果总量，以及每次可能发送业务请求前需要预留的空间。"""
+
     session_bytes: int = 100 << 20
     reservation_bytes: int = (2 << 20) + 16384
     preview_tokens: int = 12000
@@ -62,7 +64,7 @@ class MCPResultLimits:
 
 
 class MCPExecution:
-    """One Turn's use of the authoritative journal and immutable result objects."""
+    """负责一次轮次中的 MCP 调用，协调会话配额、发送记录、远端结果与原文归档。"""
 
     def __init__(
         self,
@@ -79,6 +81,7 @@ class MCPExecution:
         )
 
     def _usage(self) -> tuple[int, dict[tuple[str | None, str], int]]:
+        """从会话事件重建已占用的容量和未释放的预留，同一份不可变原文按其摘要计量。"""
         charges: dict[tuple[str | None, str], int] = {}
         objects: dict[str, int] = {}
         tasks: dict[str, tuple[str | None, str]] = {}
@@ -100,8 +103,7 @@ class MCPExecution:
                 and payload.status in {"failed", "cancelled"}
                 and payload.task_ref in tasks
             ):
-                # These terminal states have no business result to fetch. Keep
-                # the control object charged, but release its unused reservation.
+                # 这些终态没有可获取的业务结果。控制对象仍占配额，可以释放预留给结果的空间。
                 charges[tasks[payload.task_ref]] = 0
             elif isinstance(payload, MCPInvocationFinishedPayload):
                 if payload.result_confirmed:
@@ -122,8 +124,7 @@ class MCPExecution:
         return sum(charges.values()) + sum(objects.values()) + metadata_bytes, charges
 
     def _metadata_reservation(self, origin: ToolOrigin, context: ToolExecutionContext) -> int:
-        # Result records contain a bounded preview and repeated host identities.
-        # Reserve their serialization, separately from the complete peer result.
+        # 结果记录除了完整的对端返回值，还要保存预览和宿主标识，应分别预留空间。
         identity_bytes = len(_encode((asdict(origin), context.call_id, context.tool_name)))
         return 4 * (self._limits.preview_tokens + identity_bytes) + 8192
 
@@ -135,7 +136,7 @@ class MCPExecution:
     async def reserve_task_result(
         self, entry: MCPCapability, task_ref: str, context: ToolExecutionContext
     ) -> bool:
-        """Retain existing capacity or commit new capacity before a management RPC."""
+        """显式取回任务结果前检查已有预留，必要时先提交新的容量记录，再向远端查询。"""
         used, reservations = self._usage()
         existing = reservations.get((context.turn_id, context.call_id), 0)
         required = self._limits.reservation_bytes + self._metadata_reservation(
@@ -160,7 +161,7 @@ class MCPExecution:
         *,
         name: str = "search_tools",
     ) -> ToolOutcome:
-        """Persist a local directory projection using the same quota and preview contract."""
+        """将本地目录发现结果按统一的配额和预览规则发布，供模型继续查看。"""
         size = len(_encode(raw))
         origin = ToolOrigin("mcp_control", raw_name=name)
         reservation = size + self._metadata_reservation(origin, context)
@@ -192,7 +193,7 @@ class MCPExecution:
     async def read_result(
         self, arguments: JsonObject, context: ToolExecutionContext
     ) -> ToolOutcome:
-        """Resolve only originals published in this Session; offsets count Unicode characters."""
+        """仅允许按摘要读取本会话已发布的原文，分页偏移以 Unicode 字符计数。"""
         digest = require_string(arguments, "sha256")
         offset, limit = arguments.get("offset", 0), arguments.get("limit", 2048)
         if (
@@ -251,6 +252,7 @@ class MCPExecution:
     async def invoke(
         self, entry: MCPCapability, arguments: JsonObject, context: ToolExecutionContext
     ) -> ToolOutcome:
+        """校验调用并预留空间，记录发送意图后联系远端。遇到长任务时保存任务关联，收到结果后再发布。"""
         if not self._service.capability_allowed(context.session_id, entry):
             return ToolOutcome(completed=False, error_code=ToolErrorCode.TOOL_UNAVAILABLE)
         if entry.kind == "resource_template":
@@ -263,7 +265,7 @@ class MCPExecution:
             else "tools/call"
         )
         fingerprint = hashlib.sha256(_encode(arguments)).hexdigest()
-        # A second model call_id does not erase an unconfirmed send in this Turn.
+        # 同一轮内，即使模型换了调用标识，先前那次发送是否成功仍然未知。
         confirmed = {
             event.payload.result.call_id
             for event in self._journal.events
@@ -313,8 +315,7 @@ class MCPExecution:
             ),
             default=0,
         )
-        # Success closes a logical operation. Failed attempts cannot be reset by
-        # another model call_id, but independent later successful reads remain usable.
+        # 成功会结束当前逻辑操作。换一个调用标识不能清除失败次数，之后独立成功的读取仍可使用。
         prior = [item for sequence, item in prior_records if sequence > last_success]
         attempted = len(prior) if entry.kind == "tool" else 0
         safe_repeat = self._service.safe_repeat(context.session_id, entry)
@@ -483,7 +484,7 @@ class MCPExecution:
         interruption: ToolOutcome | None = None,
         management_task_ref: str | None = None,
     ) -> ToolOutcome:
-        """Retain a received result even when completion races local cancellation."""
+        """已收到的结果先完成本地归档与事件写入，再处理同时到达的取消。"""
         published: ToolOutcome | None = None
 
         async def publish() -> None:
@@ -498,9 +499,7 @@ class MCPExecution:
                 management_task_ref=management_task_ref,
             )
 
-        # This transaction performs only local object/event writes, never RPCs.
-        # Once a response is received, cancelling its disk wait must not orphan
-        # an ongoing write or erase the reference to that known result.
+        # 此处只写本地对象和事件。收到对端响应后须等写入结束，取消等待不能丢掉已知结果的引用。
         try:
             await complete_before_cancel(publish())
         except asyncio.CancelledError:
@@ -527,6 +526,7 @@ class MCPExecution:
         interruption: ToolOutcome | None,
         management_task_ref: str | None,
     ) -> ToolOutcome:
+        """校验远端结果的结构，生成模型可读的预览并保存业务结果及其来源。"""
         if len(_encode(raw)) > self._limits.reservation_bytes:
             raise MCPFailure("response_limit")
         content = project_content(raw, entry.kind)
@@ -594,7 +594,7 @@ class MCPExecution:
         context: ToolExecutionContext,
         details: JsonObject,
     ) -> ToolOutcome:
-        """Save an explicitly retrieved result without repeating the original call's completion."""
+        """保存管理命令显式取回的原任务结果，保留原模型调用原有的结束记录。"""
         origin = _origin(entry)
         return await self._complete(
             entry,
@@ -606,7 +606,7 @@ class MCPExecution:
         )
 
     def _last_attempt_timed_out_remotely(self, context: ToolExecutionContext) -> bool:
-        """Stopping during backoff must not erase the already-confirmed remote failure."""
+        """检查上一次尝试是否已收到远端超时回复，以免在等待重试时中断而遗失已知结局。"""
         for event in reversed(self._journal.events):
             if event.turn_id != context.turn_id:
                 continue
@@ -631,6 +631,7 @@ class MCPExecution:
         safe_repeat: bool,
         reservation: int,
     ) -> tuple[JsonObject | MCPTask, int]:
+        """按次记录远端尝试。只有服务端明确报告超时且操作允许重复时，才按上限重试。"""
         for attempt in range(attempted + 1, 4):
             await self._journal.record(
                 context.turn_id,
@@ -672,8 +673,7 @@ class MCPExecution:
                 )
                 raise
             else:
-                # Return the receipt before another cancellable persistence or
-                # observer boundary, so invoke can preserve it during cleanup.
+                # 在下一次可能被取消的写入或通知前交还回执，使调用方能在收尾时保留它。
                 return raw, attempt
         raise RuntimeError("MCP attempt guard did not reject an exhausted operation")
 
@@ -686,6 +686,7 @@ class MCPExecution:
         content: MCPContent | None = None,
         schema_valid: bool | None = None,
     ) -> tuple[JsonObject, str, int]:
+        """将完整结果存入内容对象，生成带原文引用和来源的有界预览。"""
         encoded = _encode(raw)
         digest = await self._objects.put(encoded)
         data: JsonObject = {
@@ -698,8 +699,7 @@ class MCPExecution:
             "unsupported_content": [] if content is None else list(content.unsupported),
             "schema_valid": schema_valid,
         }
-        # Use the estimator's uncalibrated UTF-8 byte/token proxy. The request
-        # projector can narrow this further to fit the actual remaining window.
+        # 先按 UTF-8 字节数保守估算；构造实际请求时还可按剩余窗口继续缩短预览。
         if len(_encode(data)) + 256 > self._limits.preview_tokens:
             projected = _encode(data.pop("preview"))
             data["preview_complete"] = False

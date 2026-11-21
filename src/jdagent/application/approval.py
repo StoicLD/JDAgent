@@ -1,4 +1,4 @@
-"""Translate terminal approval choices into validated domain outcomes."""
+"""将终端上的授权选择转换成经过范围校验的权限决定。"""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -16,7 +16,7 @@ from jdagent.domain.tools import (
 
 
 class ApprovalScope(StrEnum):
-    """User-selectable lifetime and target scope."""
+    """表示用户此次授权覆盖的目标与有效期限。"""
 
     ONCE = "once"
     SESSION_FILE = "session_file"
@@ -26,7 +26,7 @@ class ApprovalScope(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ApprovalChoice:
-    """A terminal choice that does not itself contain a permission rule."""
+    """记录用户在终端选中的审批选项，具体权限规则由应用层生成。"""
 
     decision: ApprovalDecision
     scope: ApprovalScope = ApprovalScope.ONCE
@@ -38,18 +38,19 @@ class ApprovalChoice:
 
 
 class ApprovalChoicePort(Protocol):
-    """Collect a user's visible choice without constructing domain rules."""
+    """接收用户在界面上作出的选择。生成权限规则由审批服务负责。"""
 
     async def request(self, request: ApprovalRequest) -> ApprovalChoice: ...
 
 
 class ScopedApproval:
-    """Build the narrow rule implied by a terminal choice and normalized request."""
+    """根据用户选择及已规范化的操作目标生成相应范围的权限规则。"""
 
     def __init__(self, choices: ApprovalChoicePort) -> None:
         self._choices = choices
 
     async def request(self, request: ApprovalRequest) -> ApprovalOutcome:
+        """针对当前操作展示审批请求，把可用的授权范围转换为本次决定及可选的会话规则。"""
         choice = await self._choices.request(request)
         if choice.decision is ApprovalDecision.REJECT or choice.scope is ApprovalScope.ONCE:
             return ApprovalOutcome(choice.decision)
@@ -103,7 +104,7 @@ class ScopedApproval:
 
 
 class RejectingApprovalChoices:
-    """Reject side effects in non-interactive modes that cannot ask a user."""
+    """无法询问用户时拒绝需要批准的操作，供非交互入口使用。"""
 
     async def request(self, request: ApprovalRequest) -> ApprovalChoice:
         del request

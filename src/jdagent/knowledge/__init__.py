@@ -1,1 +1,1 @@
-"""Knowledge package public types."""
+"""导出知识模块的公共类型。"""

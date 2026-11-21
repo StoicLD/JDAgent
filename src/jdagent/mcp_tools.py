@@ -1,4 +1,4 @@
-"""Model-facing MCP discovery and immutable host routes for loaded tools."""
+"""向模型提供 MCP 能力发现工具，并将已加载的工具绑定到调用目标。"""
 
 import json
 from dataclasses import asdict
@@ -20,7 +20,7 @@ from jdagent.mcp_service import MCPService
 
 
 class MCPTools:
-    """A Turn borrows the Session's cache; discovery never executes a remote business tool."""
+    """将本轮的模型工具与会话级能力缓存连接。搜索目录只改变候选定义，业务执行另行发起。"""
 
     def __init__(self, service: MCPService, session_id: str, execution: MCPExecution) -> None:
         self._service = service
@@ -101,6 +101,7 @@ class MCPTools:
         )
 
     async def _search(self, arguments: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
+        """在会话目录中查找匹配工具，登记可在下一次模型请求中加载的定义。"""
         if context.session_id != self._session_id:
             return ToolOutcome(completed=False, error_code=ToolErrorCode.TOOL_UNAVAILABLE)
         query = require_string(arguments, "query")
@@ -144,6 +145,7 @@ class MCPTools:
         )
 
     def _definition(self, entry: MCPCapability) -> ToolDefinition:
+        """根据已加载条目生成工具定义，把执行目标绑定到宿主已核验的服务与目录版本。"""
         raw = require_object(normalize_json(json.loads(entry.definition_json)), "MCP tool")
         schema = require_object(raw["inputSchema"], "MCP input schema")
 

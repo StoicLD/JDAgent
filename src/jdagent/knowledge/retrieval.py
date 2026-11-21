@@ -1,4 +1,4 @@
-"""Per-knowledge-base retrieval and rank fusion."""
+"""在单个知识库内获取候选片段，按检索通道的排名合并结果。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from jdagent.knowledge.types import RetrievalProfile
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeQueryResult:
+    """保存单个知识库的命中列表与查询状态，区分无命中和检索失败。"""
+
     hits: tuple[IndexHit, ...]
     hit_count: int
     failure_reason: QueryFailureReason | None = None
@@ -23,10 +25,12 @@ def rrf_merge(
     k: int,
     limit: int,
 ) -> tuple[IndexHit, ...]:
+    """合并多份排行榜。同一来源版本和位置的得分按 1 / (k + 名次) 累加，名次从 1 开始。"""
     scores: dict[tuple[str, str], float] = {}
     first: dict[tuple[str, str], IndexHit] = {}
     for ranking in rankings:
         for rank, hit in enumerate(ranking, start=1):
+            # 同一来源版本的同一位置只保留一份内容，多个排行榜的名次都计入它的总分。
             key = (hit.source_version_id, hit.locator)
             scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
             first.setdefault(key, hit)
@@ -54,7 +58,7 @@ def rrf_merge(
 
 
 class KnowledgeProvider:
-    """Retrieve one frozen knowledge base without embedding or cross-KB fusion."""
+    """在一个已固定版本的知识库中执行检索，向量的生成和跨库合并由调用方负责。"""
 
     def search(
         self,
@@ -64,6 +68,7 @@ class KnowledgeProvider:
         query_vector: tuple[float, ...] | None,
         profile: RetrievalProfile,
     ) -> KnowledgeQueryResult:
+        """按当前检索配置运行向量搜索、词项搜索或两者的排名融合，并记录该库的失败原因。"""
         generation_id = frozen.generation_id or frozen.physical_collection
         if generation_id is None:
             return KnowledgeQueryResult((), 0, QueryFailureReason.PROVIDER_UNAVAILABLE)

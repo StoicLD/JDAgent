@@ -1,4 +1,4 @@
-"""Safe trace projections derived from canonical persisted events."""
+"""从已保存的会话事件生成跟踪信息，控制其中可展示的内容。"""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,7 +18,7 @@ from jdagent.domain.events import (
 
 @dataclass(frozen=True, slots=True)
 class TraceEntry:
-    """Non-sensitive identity and timing fields for one canonical event."""
+    """保存一条持久事件的标识和计时信息，供追踪使用。"""
 
     event_id: str
     session_id: str
@@ -35,7 +35,7 @@ class TraceEntry:
 
 @dataclass(frozen=True, slots=True)
 class TraceSummary:
-    """Safe metrics derived from the observed canonical event sequence."""
+    """汇总已观察事件的耗时、用量和调用情况，供界面或脚本展示。"""
 
     event_count: int
     provider: str | None
@@ -51,7 +51,7 @@ class TraceSummary:
 
 
 class TraceProjection:
-    """Observe persisted events without duplicating their payload state."""
+    """从已经持久化的事件提取追踪信息，避免再次保存消息或工具的完整正文。"""
 
     def __init__(self) -> None:
         self._entries: list[TraceEntry] = []
@@ -71,7 +71,7 @@ class TraceProjection:
 
     @property
     def summary(self) -> TraceSummary:
-        """Return current aggregate metrics without retaining sensitive payloads."""
+        """返回当前汇总指标，其中不包含原始事件载荷。"""
 
         duration_ms = 0
         if len(self._entries) >= 2:
@@ -92,6 +92,7 @@ class TraceProjection:
         )
 
     async def observe(self, event: RuntimeEvent) -> None:
+        """按事件类型更新追踪条目和累计量，使追踪结果与写入顺序一致。"""
         payload = event.payload
         tool_status = (
             payload.result.status.value

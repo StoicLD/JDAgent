@@ -1,4 +1,4 @@
-"""CLI adapter for knowledge catalog use cases."""
+"""将知识管理命令转换为目录、来源和检索操作。"""
 
 from __future__ import annotations
 
@@ -169,7 +169,7 @@ def run_knowledge_cli(
     workspace: Path,
     data_dir: Path | None = None,
 ) -> int:
-    """Execute one knowledge management command and print JSON."""
+    """运行一条知识库管理命令并输出 JSON，使配置、摄取与普通对话可以独立操作。"""
 
     namespace = _parser().parse_args(list(argv))
     resolved = resolve_configuration(
@@ -187,6 +187,7 @@ def run_knowledge_cli(
 
 
 def _dispatch(catalog: KnowledgeCatalog, namespace: argparse.Namespace, paths: DataPaths) -> object:
+    """根据子命令调用对应的目录、来源或绑定操作，并整理可供命令行输出的结果。"""
     group = namespace.group
     action = namespace.action
     if group == "connection" and action == "add":

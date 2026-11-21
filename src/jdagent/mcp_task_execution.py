@@ -1,4 +1,4 @@
-"""Sequential remote Task waiting with durable, non-model handle references."""
+"""顺序等待远程任务，将恢复所需的句柄保存在模型之外。"""
 
 import asyncio
 from datetime import UTC, datetime
@@ -21,7 +21,7 @@ from jdagent.ports import ContextObjects, RuntimeJournal
 
 
 class MCPTaskExecution:
-    """Hold the active tool call until its registered Task returns a business result."""
+    """为当前工具调用跟踪已登记的远端长任务，直到得到业务结果或本地等待结束。"""
 
     def __init__(
         self,
@@ -44,10 +44,11 @@ class MCPTaskExecution:
         self.control_failure: MCPFailure | None = None
 
     def attach(self, task_ref: str, task: MCPTask) -> None:
-        """Use a verified durable binding without issuing a new business operation."""
+        """接管已校验的任务关联，使后续查询继续使用原任务。"""
         self._task_ref, self._task = task_ref, task
 
     async def query(self, entry: MCPCapability, context: ToolExecutionContext) -> MCPTaskSnapshot:
+        """查询已登记任务并记录观察到的状态，让重启后的管理操作仍有依据。"""
         if self._task_ref is None or self._task is None:
             raise MCPFailure("configuration")
         previous = next(
@@ -60,8 +61,7 @@ class MCPTaskExecution:
             None,
         )
         interval = max(0.1, (self._task.poll_interval_ms or 0) / 1000)
-        # Explicit management also obeys the latest durable hint after restart.
-        # A backwards wall clock delays at most one full interval.
+        # 重启后手动查询也要遵守已记录的轮询间隔；系统时钟回拨最多多等一个间隔。
         elapsed = 0 if previous is None else max(0, (datetime.now(UTC) - previous).total_seconds())
         if elapsed < interval:
             await asyncio.sleep(interval - elapsed)
@@ -87,12 +87,13 @@ class MCPTaskExecution:
     async def register(
         self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
     ) -> None:
-        """Publish the received handle before entering cancellable Task polling."""
+        """在进入可取消的轮询前先保存远端任务句柄及登记事件。"""
         await complete_before_cancel(self._register(entry, task, context))
 
     async def _register(
         self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
     ) -> None:
+        """给远程任务分配本地引用，保存私有绑定，并在会话日志中登记引用和绑定摘要。"""
         task_ref = uuid4().hex
         encoded = MCPTaskBinding(
             task=task,
@@ -107,8 +108,7 @@ class MCPTaskExecution:
         if len(encoded) > self._max_control_bytes:
             raise MCPFailure("response_limit")
         digest = await self._objects.put(encoded)
-        # Keep the received handle available if cancellation arrives while its
-        # durable registration finishes or observers receive that event.
+        # 即使登记句柄或通知观察者时发生取消，收尾代码也需要能找到已收到的任务句柄。
         self._task_ref, self._task = task_ref, task
         await self._journal.record(
             context.turn_id,
@@ -129,6 +129,7 @@ class MCPTaskExecution:
     async def wait(
         self, entry: MCPCapability, task: MCPTask, context: ToolExecutionContext
     ) -> JsonObject | ToolOutcome:
+        """按远端建议的间隔及本地期限查询原任务，根据观察到的状态决定等待、返回或停止。"""
         task_ref = self._task_ref
         if task_ref is None:
             raise MCPFailure("configuration")
@@ -142,8 +143,7 @@ class MCPTaskExecution:
                     message="MCP Task requires unsupported client input",
                     requires_stop=True,
                 )
-            # Server hints cannot force busy polling; the outer logical deadline
-            # covers this sleep and every query without resetting between them.
+            # 限制最短轮询间隔。等待和后续查询共用同一个截止时间。
             await asyncio.sleep(max(0.1, (task.poll_interval_ms or 0) / 1000))
             snapshot = await self._query(entry, task, task_ref, context)
             task = snapshot.task
@@ -172,7 +172,7 @@ class MCPTaskExecution:
     async def cancel(
         self, entry: MCPCapability, context: ToolExecutionContext, *, query_result: bool = True
     ) -> None:
-        """Request cancel and inspect its effect within one independent five-second window."""
+        """在独立的五秒时限内申请取消并查询结果，将本地取消意图与远端确认区分记录。"""
         if self._task_ref is None or self._task is None or self.result_confirmed:
             return
         task_ref, task = self._task_ref, self._task
@@ -228,6 +228,7 @@ class MCPTaskExecution:
     async def _query(
         self, entry: MCPCapability, task: MCPTask, task_ref: str, context: ToolExecutionContext
     ) -> MCPTaskSnapshot:
+        """获取任务快照，核验返回的任务身份，持久化可公开的状态与已收到的结果信息。"""
         for attempt in range(1, 4):
             try:
                 if task.timing.expired:
@@ -258,14 +259,13 @@ class MCPTaskExecution:
                 )
                 if error.kind != "server_timeout" or attempt == 3:
                     raise
-                # A query retry never re-enters tools/call. It remains under the
-                # original logical deadline and also respects the peer's hint.
+                # 重试只查询已有任务，不会重复发起工具调用；
+                # 原截止时间和对端建议的轮询间隔仍适用。
                 await asyncio.sleep(
                     max(0.5 * 2 ** (attempt - 1), (task.poll_interval_ms or 0) / 1000)
                 )
             else:
-                # A completed response must survive cancellation at the event
-                # boundary; cleanup must not query or cancel the old state.
+                # 如果记录完成状态时收到取消，应保留已收到的响应，以免对旧状态重复查询或取消。
                 self._task = snapshot.task
                 self.result_confirmed = snapshot.task.status in {"completed", "failed", "cancelled"}
                 self.final_result = snapshot.result

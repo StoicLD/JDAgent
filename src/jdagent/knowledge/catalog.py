@@ -1,4 +1,4 @@
-"""SQLite knowledge catalog: identities, bindings, integrity, and backups."""
+"""用 SQLite 保存知识库、来源版本和绑定，并提供完整性检查和备份操作。"""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def _parse_time(value: str) -> datetime:
 
 
 class KnowledgeCatalog:
-    """Own the user-level SQLite catalog without contacting Milvus or Embedding."""
+    """使用 SQLite 管理连接、知识库、来源和工作区绑定；远端索引与向量计算由适配器负责。"""
 
     def __init__(
         self,
@@ -132,6 +132,7 @@ class KnowledgeCatalog:
         credential_ref: str | None = None,
         provider_kind: ProviderKind = ProviderKind.JDAGENT_MANAGED,
     ) -> ConnectionRecord:
+        """登记知识库连接的名称、端点和凭据引用，返回可供绑定使用的连接记录。"""
         stable_name = _require_name(name, "name")
         parsed_ref = parse_credential_ref(credential_ref)
         now = self._clock.now().isoformat()
@@ -245,6 +246,7 @@ class KnowledgeCatalog:
         retrieval_profile: RetrievalProfile | None = None,
         language_profile: str = "mixed_zh_en_v1",
     ) -> KnowledgeBaseRecord:
+        """在指定连接中登记知识库身份与检索配置，使后续摄取和绑定能引用同一知识库。"""
         stable_name = _require_name(name, "name")
         embedding = embedding_profile or EmbeddingProfile()
         retrieval = retrieval_profile or RetrievalProfile()
@@ -378,6 +380,7 @@ class KnowledgeCatalog:
         connection_id: str,
         knowledge_base_id: str,
     ) -> BindingRecord:
+        """校验工作区与目标知识库的关系后登记绑定，供对话检索冻结当前读取范围。"""
         if not workspace_identity.strip():
             raise KnowledgeError(
                 KnowledgeErrorCode.INVALID_ARGUMENT,
@@ -468,6 +471,7 @@ class KnowledgeCatalog:
         return self._binding_from_row(row)
 
     def acquire_lease(self, operation_id: str, owner: str, *, takeover: bool = False) -> None:
+        """为知识库操作取得有期限的写入权，避免多个工作者同时推进同一资源的变更。"""
         now = self._clock.now()
         with self._lock:
             db = self._db()
@@ -546,6 +550,7 @@ class KnowledgeCatalog:
         error_code: str | None = None,
         error_message: str | None = None,
     ) -> OperationRecord:
+        """持久化操作的当前阶段与恢复所需字段，供故障后查明哪些步骤已完成。"""
         now = self._clock.now().isoformat()
         with self._lock:
             db = self._db()
@@ -650,6 +655,7 @@ class KnowledgeCatalog:
         lifecycle: SourceLifecycle = SourceLifecycle.ACTIVE,
         current_version_id: str | None = None,
     ) -> SourceRecord:
+        """在指定知识库登记或更新来源身份，为之后写入来源版本提供稳定引用。"""
         now = self._clock.now().isoformat()
         identifier = source_id or new_id("src")
         with self._lock:
@@ -760,6 +766,7 @@ class KnowledgeCatalog:
         snapshot_hash: str,
         parser_profile: str,
     ) -> str:
+        """登记来源版本，关联原始文件与解析快照的摘要，返回新版本标识。"""
         version_id = new_id("sv")
         now = self._clock.now().isoformat()
         with self._lock:
@@ -828,6 +835,7 @@ class KnowledgeCatalog:
         source_id: str,
         lifecycle: SourceLifecycle,
     ) -> None:
+        """在一次目录事务中切换活动索引修订和来源可见状态，使读者看到一致的版本。"""
         now = self._clock.now().isoformat()
         with self._lock:
             db = self._db()
@@ -862,6 +870,7 @@ class KnowledgeCatalog:
         return tuple(self._source_version_from_row(row) for row in rows)
 
     def openable_digest_count(self, digest: str) -> int:
+        """统计仍可打开且引用指定摘要的记录，为安全清理共享内容提供依据。"""
         with self._lock:
             row = (
                 self._db()
@@ -949,6 +958,7 @@ class KnowledgeCatalog:
             )
 
     def _migrate(self) -> None:
+        """将目录数据库更新到当前支持的结构，保留现有目录记录。"""
         db = self._db()
         db.execute(
             "CREATE TABLE IF NOT EXISTS catalog_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"

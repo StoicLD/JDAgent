@@ -1,1 +1,1 @@
-"""Application-level use cases."""
+"""对话、会话管理和工具授权等应用操作。"""

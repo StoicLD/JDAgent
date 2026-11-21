@@ -1,4 +1,4 @@
-"""Source ingest saga, activation, and reversible lifecycle operations."""
+"""协调来源导入、索引生效、停用和恢复，记录各阶段供失败后处理。"""
 
 from __future__ import annotations
 
@@ -28,6 +28,8 @@ from jdagent.knowledge.types import (
 
 @dataclass(frozen=True, slots=True)
 class IngestResult:
+    """标识一次导入操作、对应的来源与版本，以及生效的索引代次和修订号。"""
+
     operation_id: str
     source_id: str
     source_version_id: str
@@ -36,7 +38,7 @@ class IngestResult:
 
 
 class KnowledgeIngestion:
-    """Run per-file all-or-nothing ingest against Catalog, Store, and Index."""
+    """协调目录、对象存储和索引完成单个文件的摄取，以分阶段记录支持失败后的检查与恢复。"""
 
     def __init__(
         self,
@@ -62,6 +64,7 @@ class KnowledgeIngestion:
         encoding: str | None = None,
         replace: bool = False,
     ) -> IngestResult:
+        """保存原始文件和解析快照，生成片段及向量，校验索引后再将新修订设为活动版本。"""
         operation = operation_id or new_id("op")
         completed = self._completed_result(operation)
         if completed is not None:
@@ -187,6 +190,7 @@ class KnowledgeIngestion:
                 parser_profile=parsed.parser_profile,
             )
             generation_id = kb.current_generation_id or new_id("gen")
+            # 新片段从下一修订号开始可见；写入索引期间，已固定旧修订号的查询仍读取旧内容。
             next_revision = kb.current_revision + 1
             children = [(parent, child) for parent in parents for child in parent.children]
             texts = tuple(child.text for _parent, child in children)
@@ -291,6 +295,7 @@ class KnowledgeIngestion:
             self._catalog.release_lease(operation)
 
     async def retry(self, operation_id: str) -> IngestResult:
+        """根据操作记录重新推进未完成的摄取，在可复用的阶段继续处理。"""
         completed = self._completed_result(operation_id)
         if completed is not None:
             return completed
@@ -314,6 +319,7 @@ class KnowledgeIngestion:
         )
 
     def reconcile(self) -> dict[str, int]:
+        """检查未完成的操作与租约，处理需要恢复的摄取状态。"""
         expired = self._catalog.expire_stale_leases()
         resumed = 0
         for record in self._catalog.list_incomplete_operations():
@@ -330,6 +336,7 @@ class KnowledgeIngestion:
         return await self._visibility(knowledge_base_id, source_id, SourceLifecycle.INACTIVE)
 
     async def reactivate(self, knowledge_base_id: str, source_id: str) -> int:
+        """根据已保存的来源版本重新建立可见的索引数据，再切换来源状态。"""
         source = self._source_for(knowledge_base_id, source_id)
         if source.lifecycle in {SourceLifecycle.DELETE_PENDING, SourceLifecycle.DELETED}:
             raise KnowledgeError(
@@ -390,6 +397,7 @@ class KnowledgeIngestion:
             self._catalog.release_lease(operation)
 
     async def delete(self, knowledge_base_id: str, source_id: str, *, confirmed: bool) -> None:
+        """根据确认参数处理来源删除，更新可见性并清理符合条件的内容对象。"""
         if not confirmed:
             raise KnowledgeError(
                 KnowledgeErrorCode.CONFIRMATION_REQUIRED,
@@ -501,6 +509,7 @@ class KnowledgeIngestion:
         existing: object,
         error: KnowledgeError,
     ) -> None:
+        """从已有操作记录取回失败前的阶段和数据，供后续检查或恢复。"""
         source_id = getattr(existing, "source_id", None)
         stage = SagaStage.RECEIVED
         payload_json = "{}"
@@ -554,6 +563,7 @@ class KnowledgeIngestion:
         )
 
     async def _resume(self, record: OperationRecord) -> IngestResult | None:
+        """根据最近持久化的阶段和实际索引状态，判断可以接续验证、激活还是需要重做。"""
         if record.saga_stage == SagaStage.ACTIVE.value:
             return self._completed_result(record.operation_id)
         payload = _payload(record)
@@ -597,6 +607,7 @@ class KnowledgeIngestion:
     def _activate_from_payload(
         self, record: OperationRecord, payload: dict[str, object]
     ) -> IngestResult | None:
+        """从已保存的操作参数恢复待激活版本，将通过校验的索引修订登记为当前版本。"""
         source_id = payload.get("source_id") or record.source_id
         version_id = payload.get("version_id") or payload.get("source_version_id")
         revision = payload.get("next_revision") or payload.get("revision")

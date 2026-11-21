@@ -1,4 +1,4 @@
-"""Model-selected external resource and Prompt material, without user-role promotion."""
+"""读取模型选定的 MCP 资源和 Prompt，将其作为外部材料交给模型。"""
 
 import json
 from collections.abc import Callable
@@ -27,12 +27,13 @@ from jdagent.ports import ContextObjects, RuntimeJournal
 
 
 class MCPMaterialTools:
-    """Use the Session catalog for discovery and the shared execution path for content."""
+    """使用当前会话的能力目录查找资源和远端提示，并通过统一的执行路径读取材料。"""
 
     def __init__(self, service: MCPService, execution: MCPExecution, session_id: str) -> None:
         self._service, self._execution, self._session_id = service, execution, session_id
 
     def definitions(self) -> tuple[ToolDefinition, ...]:
+        """按会话实际允许的能力构造搜索、列举与读取外部材料的工具定义。"""
         definitions: list[ToolDefinition] = []
         page: JsonObject = {
             "server_id": {"type": "string"},
@@ -228,7 +229,7 @@ class MCPMaterialTools:
         return await self._execution.invoke(entry, {}, context)
 
     async def get_prompt(self, arguments: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
-        """Fetch explicit material with the same required-argument and source contract."""
+        """校验提示所需参数，按指定来源读取 MCP 提示并保留材料的来源信息。"""
         try:
             entry = await self._service.resolve_material(
                 self._session_id,
@@ -269,7 +270,7 @@ class MCPMaterialTools:
 
 
 class MCPDirectPrompts:
-    """Prepare material for a user command, without fabricating a model call pair."""
+    """为用户显式输入的 MCP 提示命令准备材料，单独记录宿主读取的事实。"""
 
     def __init__(
         self, service: MCPService, objects: ContextObjects, limits: Callable[[], MCPResultLimits]
@@ -279,6 +280,7 @@ class MCPDirectPrompts:
     async def prepare(
         self, journal: RuntimeJournal, arguments: JsonObject, context: ToolExecutionContext
     ) -> ToolOutcome:
+        """获取命令指定的提示材料并记录准备结果，供协调器决定执行、澄清参数或结束本轮。"""
         execution = MCPExecution(self._service, journal, self._objects, self._limits())
         outcome = await MCPMaterialTools(self._service, execution, context.session_id).get_prompt(
             arguments, context

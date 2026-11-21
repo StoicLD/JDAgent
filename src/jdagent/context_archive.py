@@ -1,4 +1,4 @@
-"""Logical request manifests and deterministic source fingerprints."""
+"""记录请求所用的消息与工具，为原始材料生成可复核的内容摘要。"""
 
 import hashlib
 import json
@@ -35,7 +35,7 @@ def _json_default(value: object) -> str:
 
 
 def encode_json(value: object) -> bytes:
-    """Use one canonical representation for immutable context objects."""
+    """使用统一的 JSON 字节表示写入不可变对象，使相同内容得到相同的摘要。"""
     return json.dumps(
         value,
         ensure_ascii=False,
@@ -51,16 +51,17 @@ def decode_object(content: bytes) -> JsonObject:
 
 
 def prefix_hash(events: Sequence[RuntimeEvent], through: int) -> str:
+    """为指定范围内的事件前缀计算摘要，供恢复或重建时核验历史是否相符。"""
     records: list[object] = []
     for event in events:
         if event.sequence > through:
             continue
         record = asdict(event)
         if isinstance(event.payload, ModelRequestPreparedPayload) and not event.payload.mcp_context:
-            # Old schema-4 request manifests have no provenance flag; preserve their hashes.
+            # 早期版本的请求清单没有来源标志，读取时仍须得到原先的摘要。
             record["payload"].pop("mcp_context", None)
         if isinstance(event.payload, CompactionFailedPayload) and not event.payload.response_hashes:
-            # Keep the original v0.5 schema-4 canonical form when the optional field is absent.
+            # 可选字段缺失时沿用 v0.5 的序列化形式；补上默认值也会改变历史摘要。
             record["payload"].pop("response_hashes", None)
         records.append(record)
     return hashlib.sha256(encode_json(records)).hexdigest()
@@ -71,7 +72,7 @@ async def archive_request(
     objects: ContextObjects,
     knowledge: PreparedTurnKnowledge | None,
 ) -> str:
-    """Do not create an owned copy of externally managed knowledge evidence."""
+    """将逻辑请求拆成可校验的归档信息；外部知识证据保留引用，由原知识库管理其生命周期。"""
     systems: list[JsonValue] = []
     for part in request.system_parts:
         if part.source == "untrusted_evidence":
@@ -138,10 +139,9 @@ async def reconstruct_request(
     *,
     resolve_knowledge: Callable[[JsonObject], Awaitable[str]] | None = None,
 ) -> ModelRequest:
-    """Rebuild logical requests; deleted knowledge stays a missing external dependency.
+    """从请求清单和归档对象重建当时的模型输入。
 
-    The knowledge owner verifies source lifecycle, version, locator and content hash before
-    returning the exact rendered part. It must raise on a tombstone; this archive has no KB copy.
+    外部知识由所属知识库校验版本、位置和内容摘要后重新提供。来源已删除时重建会失败。
     """
     manifest = decode_object(await objects.get(digest))
     if manifest.get("version") != 1:

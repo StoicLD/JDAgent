@@ -1,4 +1,4 @@
-"""Parse explicit Prompt commands shared by interactive and one-shot inputs."""
+"""解析用户显式输入的 MCP Prompt 命令，供交互和单次运行共用。"""
 
 import re
 import shlex
@@ -7,7 +7,7 @@ from jdagent.domain.json import JsonObject
 
 
 def parse_mcp_prompt(text: str) -> JsonObject | None:
-    """Retain the original trigger separately; only explicit commands fetch material."""
+    """识别显式 MCP 提示命令，保留原始触发文本，供本轮记录和材料读取使用。"""
     if re.match(r"^/mcp\s+prompt(?:\s|$)", text.strip()) is None:
         return None
     parts = shlex.split(text)

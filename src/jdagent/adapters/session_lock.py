@@ -1,4 +1,4 @@
-"""Operating-system ownership locks, released automatically after process death."""
+"""使用操作系统文件锁独占会话；持锁进程退出时锁会释放。"""
 
 import os
 from pathlib import Path
@@ -8,7 +8,7 @@ from jdagent.domain.errors import SessionError, SessionErrorCode
 
 
 class SessionLease:
-    """Hold one nonblocking OS lock; the lock file is never deleted or replaced."""
+    """持有会话锁文件的非阻塞操作系统锁。进程退出时锁自动释放，锁文件本身保持原位。"""
 
     def __init__(self, path: Path) -> None:
         self._stream: BinaryIO | None = None

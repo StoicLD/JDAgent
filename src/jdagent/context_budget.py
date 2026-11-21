@@ -1,4 +1,4 @@
-"""One input estimate for context reporting, compaction and request admission."""
+"""统一估算模型输入的用量，供上下文报告、压缩和发送前检查使用。"""
 
 import json
 from collections import deque
@@ -11,7 +11,7 @@ from jdagent.domain.model import MessageRole, ModelRequest, Usage
 
 @dataclass(frozen=True, slots=True)
 class ContextBudget:
-    """Model capacity is mandatory; application limits can only narrow it."""
+    """根据模型容量、应用上限、预留输出和安全余量计算本次请求可用的输入额度。"""
 
     model_window: int | None
     application_window: int | None = None
@@ -65,7 +65,7 @@ class ContextBudget:
 
 @dataclass(frozen=True, slots=True)
 class InputEstimate:
-    """Category values are local estimates, never fabricated provider measurements."""
+    """本地对请求输入量的估算，分项记录各类内容的占用与估算方法。"""
 
     input_tokens: int
     categories: tuple[tuple[str, int], ...]
@@ -74,10 +74,11 @@ class InputEstimate:
 
 
 class InputEstimator:
-    """Calibrate complete requests within one provider/model/serialization version."""
+    """按服务商和模型，用已报告的输入用量校准本地估算，使容量检查和上下文压缩使用同一尺度。"""
 
     def __init__(self) -> None:
         self._samples: dict[tuple[str, str], deque[Fraction]] = {}
+        # 容量被拒绝后提高的估算下限只在当前轮次生效；普通校准样本可以跨轮复用。
         self._floors: dict[tuple[str, str, str], Fraction] = {}
 
     @staticmethod
@@ -86,6 +87,7 @@ class InputEstimator:
 
     @staticmethod
     def _proxy(request: ModelRequest) -> dict[str, int]:
+        """按指令、消息、工具定义等类别估算未校准的输入用量，并计入协议开销。"""
         values: dict[str, int] = dict.fromkeys(
             (
                 "instructions",
@@ -145,7 +147,7 @@ class InputEstimator:
         return values
 
     def measure(self, request: ModelRequest) -> InputEstimate:
-        """Count input only; output reservation is exclusively owned by ContextBudget."""
+        """计算请求的输入用量。预留的输出空间由窗口预算另外扣除。"""
         values = self._proxy(request)
         samples = self._samples.get(self._key(request))
         coefficient = max(samples) if samples else Fraction(1)
@@ -163,14 +165,14 @@ class InputEstimator:
         )
 
     def observe(self, request: ModelRequest, usage: Usage) -> None:
-        """Accept usage only when the caller has the complete, untruncated input."""
+        """输入用量大于零时，记录实际用量与本地估算的比值，供同一服务商和模型的后续请求使用。"""
         if usage.input_tokens <= 0:
             return
         samples = self._samples.setdefault(self._key(request), deque(maxlen=20))
         samples.append(Fraction(usage.input_tokens, sum(self._proxy(request).values())))
 
     def reject(self, request: ModelRequest) -> None:
-        """Raise this turn's floor after a provider context rejection."""
+        """在服务商拒绝过长请求后提高该请求的估算下限，供本轮重新选择上下文。"""
         samples = self._samples.get(self._key(request))
         key = (*self._key(request), request.metadata.get("turn_id", ""))
         current = max(max(samples) if samples else Fraction(1), self._floors.get(key, Fraction(0)))

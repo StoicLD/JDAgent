@@ -1,4 +1,4 @@
-"""Process-local session and event adapters."""
+"""将会话和事件保存在当前进程的内存里。"""
 
 import asyncio
 import hashlib
@@ -9,17 +9,17 @@ from jdagent.domain.events import RuntimeEvent
 
 
 class InMemorySession:
-    """Stores canonical events in strict session sequence order."""
+    """将会话事件保存在当前进程内，并检查追加顺序，适用于无需落盘的测试。"""
 
     def __init__(self) -> None:
         self._events: dict[str, list[RuntimeEvent]] = {}
         self._lock = asyncio.Lock()
 
     async def acquire(self, session_id: str) -> None:
-        """This isolated adapter has no external process sharing its data."""
+        """内存会话只在当前进程内使用，取得会话时无需申请操作系统文件锁。"""
 
     async def release(self, session_id: str) -> None:
-        """No operating-system resource is owned by the in-memory adapter."""
+        """内存会话未占用操作系统文件锁，释放操作可直接完成。"""
 
     async def append(self, event: RuntimeEvent) -> None:
         async with self._lock:
@@ -41,14 +41,14 @@ class InMemorySession:
             yield event
 
     async def list_session_ids(self) -> tuple[str, ...]:
-        """Return stable identifiers for catalog projection tests."""
+        """返回顺序稳定的会话标识，供测试重建会话目录。"""
 
         async with self._lock:
             return tuple(sorted(self._events))
 
 
 class InMemoryContextObjects:
-    """Immutable object adapter for deterministic runtime tests."""
+    """用内存实现按内容摘要存取的不可变对象接口，供离线测试重建请求。"""
 
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}

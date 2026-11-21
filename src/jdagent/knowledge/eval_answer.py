@@ -1,4 +1,4 @@
-"""Answer and citation eval scoring. Live DeepSeek runs stay opt-in."""
+"""评估回答和证据引用，支持显式启用在线模型评测。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from jdagent.knowledge.eval_gold import locator_covers
 
 @dataclass(frozen=True, slots=True)
 class CitationMetrics:
+    """汇总引用准确率、必引内容覆盖度与无依据内容比例。"""
+
     precision: float
     completeness: float
     unsupported_rate: float
@@ -29,6 +31,7 @@ def score_citations(
     protocol_failed: bool,
     cited_source_keys: tuple[str, ...] | None = None,
 ) -> CitationMetrics:
+    """将回答实际引用的来源和位置与人工标注对照，计算引用评估指标。"""
     if protocol_failed:
         unanswerable = annotation.get("unanswerable") is True
         return CitationMetrics(0.0, 0.0, 1.0 if unanswerable else 0.0)

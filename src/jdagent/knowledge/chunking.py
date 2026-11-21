@@ -1,4 +1,4 @@
-"""Structure-aware parent/child chunking with stable locators."""
+"""将已解析的原文划分为父段和可检索的子片段，保留原文位置。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ FORCED_OVERLAP_CHARS = 80
 
 @dataclass(frozen=True, slots=True)
 class ChildChunk:
+    """用于建立检索索引的小片段，命中后可沿父标识取回较完整的上下文。"""
+
     chunk_id: str
     parent_id: str
     locator: str
@@ -22,6 +24,8 @@ class ChildChunk:
 
 @dataclass(frozen=True, slots=True)
 class ParentSegment:
+    """将相邻结构块组成较大的段落，为命中的子片段提供可引用的上下文。"""
+
     parent_id: str
     locator: str
     text: str
@@ -34,6 +38,7 @@ def chunk_document(
     max_child_chars: int = DEFAULT_CHILD_CHARS,
     overlap_chars: int = FORCED_OVERLAP_CHARS,
 ) -> tuple[ParentSegment, ...]:
+    """按文档结构生成父段和可检索的子片段，使搜索粒度与展示原文的粒度可以不同。"""
     groups = _group_parents(document)
     parents: list[ParentSegment] = []
     for parent_locator, blocks in groups:
@@ -98,6 +103,7 @@ def _children_for(
     max_child_chars: int,
     overlap_chars: int,
 ) -> tuple[ChildChunk, ...]:
+    """按父段中的结构块生成可检索的子片段，单个结构块过长时再拆分。"""
     structural = [
         block
         for block in blocks

@@ -1,4 +1,4 @@
-"""Session-scoped MCP discovery, kept independent of knowledge ingestion and RAG."""
+"""按会话维护 MCP 连接、发现的能力和当前活动。"""
 
 import asyncio
 import hmac
@@ -54,6 +54,8 @@ from jdagent.ports import MCPConnectionPort
 
 @dataclass(slots=True)
 class _Activity:
+    """保存操作的开始时间、最近进度和远程任务状态，供本地状态查询。"""
+
     name: str
     operation: str
     started: float = field(default_factory=time.monotonic)
@@ -74,6 +76,8 @@ class _Activity:
 
 @dataclass(slots=True)
 class _Server:
+    """保存单个服务在当前会话中的配置、连接和目录缓存状态。"""
+
     configuration: MCPServerConfiguration
     generation: str = field(default_factory=lambda: uuid4().hex)
     peer: MCPConnectionPort | None = None
@@ -118,7 +122,7 @@ class _Server:
 
 
 class MCPService:
-    """Own lazy peers and reconstructible directories for each active Session."""
+    """按会话管理按需建立的连接及可重建的能力目录，供发现、搜索和已授权的调用使用。"""
 
     def __init__(
         self,
@@ -139,6 +143,7 @@ class MCPService:
     async def configure(
         self, session_id: str, configurations: tuple[MCPServerConfiguration, ...]
     ) -> None:
+        """根据会话当前生效的服务设置更新连接与缓存，避免沿用过期的服务配置。"""
         current = self._sessions.setdefault(session_id, {})
         definitions = self._definitions.setdefault(
             session_id, MCPDefinitionCache(self._definition_limits)
@@ -177,7 +182,7 @@ class MCPService:
     async def call(
         self, session_id: str, entry: MCPCapability, arguments: JsonObject
     ) -> JsonObject | MCPTask:
-        """Use the previously exposed host route without reconnecting or replaying."""
+        """使用先前已向模型公开的宿主路由执行调用，连接失效时由调用方处理错误。"""
         if not self.capability_allowed(session_id, entry):
             raise MCPFailure("configuration")
         server = self._sessions[session_id][entry.server_id]
@@ -217,7 +222,7 @@ class MCPService:
         *,
         task_status: MCPTaskStatus | None = None,
     ) -> None:
-        """Start one logical wait, including retries and Task polling gaps."""
+        """为一次操作开始计时，包含重试等待和远程任务轮询之间的间隔。"""
         self._sessions[session_id][entry.server_id].activity = _Activity(
             entry.name,
             operation,
@@ -225,7 +230,7 @@ class MCPService:
         )
 
     def end_activity(self, session_id: str, entry: MCPCapability) -> None:
-        """Discard the transient display when this serialized operation ends."""
+        """操作结束时清除仅供状态界面展示的活动信息。"""
         server = self._sessions.get(session_id, {}).get(entry.server_id)
         if server is not None:
             server.activity = None
@@ -238,7 +243,7 @@ class MCPService:
     async def bind_task(
         self, session_id: str, entry: MCPCapability, identity_digest: str
     ) -> MCPCapability:
-        """Reconnect only for explicit control; verify identity before sending a Task ID."""
+        """为显式任务管理取得连接，向远端发送任务标识前核对原来登记的连接身份。"""
         server = self._sessions.get(session_id, {}).get(entry.server_id)
         if server is None or not server.configuration.enabled:
             raise MCPFailure("configuration")
@@ -300,7 +305,7 @@ class MCPService:
         )
 
     def quarantine(self, session_id: str, entry: MCPCapability) -> None:
-        """Forbid reuse immediately while retaining bounded resource-close ownership."""
+        """立即停止复用有问题的连接，同时保留其资源所有权，待清理结束。"""
         server = self._sessions[session_id][entry.server_id]
         if server.generation != entry.generation:
             return
@@ -336,7 +341,7 @@ class MCPService:
         return peer
 
     def material_enabled(self, session_id: str, kind: MCPCapabilityKind) -> bool:
-        """Inspect only host configuration; exposing controls must not connect a peer."""
+        """从本地配置判断能否读取外部材料，调用期间无需连接对端。"""
         return any(
             server.configuration.enabled
             and (
@@ -368,7 +373,7 @@ class MCPService:
     async def resolve_material(
         self, session_id: str, server_id: str, kind: MCPCapabilityKind, name: str
     ) -> MCPCapability:
-        """Resolve Prompt metadata or a concrete remote URI, never a host filesystem path."""
+        """解析目录中的远端提示或资源 URI；资源标识在远端服务的命名空间内解释。"""
         server = self._sessions.get(session_id, {}).get(server_id)
         if (
             server is None
@@ -402,7 +407,7 @@ class MCPService:
         return entry
 
     async def refresh(self, session_id: str, *, server_id: str | None = None) -> None:
-        """Replace idle peers and invalidate their old configuration generation."""
+        """刷新空闲服务的连接及目录，使旧版本的能力定义失效。"""
         servers = self._sessions[session_id]
         if server_id is not None and server_id not in servers:
             raise ValueError("Unknown MCP Server")
@@ -486,7 +491,7 @@ class MCPService:
         offset: int = 0,
         limit: int = 10,
     ) -> MCPSearchResult:
-        """Rank cached names/descriptions with BM25; never call embeddings or RAG."""
+        """在会话目录的名称和描述上使用 BM25 排序，返回匹配能力及分页位置。"""
         self.validate_search(query, offset=offset, limit=limit)
         servers = self._sessions[session_id]
         if server_id is not None and server_id not in servers:
@@ -537,7 +542,7 @@ class MCPService:
 
     @staticmethod
     def validate_search(query: str, *, offset: int, limit: int) -> None:
-        """Reject invalid retrieval input before any peer can be started."""
+        """检查搜索参数，使无效查询在建立远端连接之前就返回错误。"""
         if not query.strip() or len(query) > 512:
             raise ValueError("MCP query must contain 1-512 characters")
         if offset < 0 or not 1 <= limit <= 20:
@@ -614,6 +619,7 @@ class MCPService:
         return True
 
     async def _load(self, server: _Server) -> None:
+        """分页获取服务能力，逐条校验定义和授权，按容量限制发布目录并保留未完整加载的状态。"""
         config = server.configuration
         peer = server.peer or self._connection_factory(config)
         server.peer = peer
@@ -638,6 +644,7 @@ class MCPService:
                 names: set[tuple[MCPCapabilityKind, str]] = set()
                 metadata_bytes = index_bytes = 0
                 partial = False
+                # 各类能力分别分页。服务端若重复返回同一游标，需要结束该类的读取，避免无限循环。
                 for kind, method, key in operations:
                     cursor: str | None = None
                     seen: set[str] = set()

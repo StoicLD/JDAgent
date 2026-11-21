@@ -1,4 +1,4 @@
-"""Explicit JSONL final-record recovery adapter."""
+"""检查会话日志，识别并修复文件末尾未写完整的记录。"""
 
 import asyncio
 import hashlib
@@ -71,6 +71,7 @@ def _repair_locked(
     session_id: str,
     path: Path,
 ) -> PhysicalRecoveryResult:
+    """在会话锁内验证完整前缀。仅当损坏可定位到不完整的最后一条记录时，备份原文件并修复尾部。"""
     if not path.exists():
         raise SessionError(SessionErrorCode.NOT_FOUND, f"Session not found: {session_id}")
     try:
@@ -102,6 +103,7 @@ def _repair_locked(
             )
         return PhysicalRecoveryResult(PhysicalRecovery.NO_REPAIR_NEEDED, events)
 
+    # 只把最后一个换行符之后的内容当作未写完的尾行；此前的记录必须能完整校验。
     offset = raw.rfind(b"\n") + 1
     prefix = raw[:offset]
     try:
@@ -148,7 +150,7 @@ def _repair_locked(
 
 
 class JsonlRecoveryStore:
-    """Storage adapter for explicit, evidence-preserving JSONL repair."""
+    """为显式恢复流程检查 JSONL 文件，保留修复证据，并将存储检查结果交给业务层判断。"""
 
     def __init__(self, directory: Path, session: JsonlSession | None = None) -> None:
         self._directory = directory.resolve(strict=False)

@@ -1,4 +1,4 @@
-"""Explicit management of durable tasks without resuming an Agent workflow."""
+"""提供独立的远程任务查询、结果读取和取消操作。"""
 
 import asyncio
 from collections.abc import Callable
@@ -26,7 +26,7 @@ MCPTaskAction = Literal["query", "result", "cancel"]
 
 
 class MCPTaskManagement:
-    """Use original Session bindings; management facts do not reopen old Turns."""
+    """使用原会话的登记记录管理已有远端任务，管理事件独立于已结束的对话轮次。"""
 
     def __init__(
         self,
@@ -43,6 +43,7 @@ class MCPTaskManagement:
         )
 
     def list_tasks(self, journal: RuntimeJournal) -> tuple[MCPTaskView, ...]:
+        """仅根据本地日志重建任务列表，包括最后一次观察状态以及是否已保存结果。"""
         result: list[MCPTaskView] = []
         for event in journal.events:
             registration = event.payload
@@ -75,6 +76,7 @@ class MCPTaskManagement:
     async def act(
         self, journal: RuntimeJournal, session_id: str, task_ref: str, action: MCPTaskAction
     ) -> ToolOutcome:
+        """先检查原调用与任务关联；按动作读取已保存结果或联系原服务执行查询、取回与取消。"""
         limits = self._limits()
         registration = next(
             (
@@ -91,6 +93,7 @@ class MCPTaskManagement:
                 error_code=ToolErrorCode.TOOL_UNAVAILABLE,
                 message="Task reference does not belong to this Session",
             )
+        # 本地已有业务结果时直接返回，远端任务即使已过期也能读取这份结果。
         if action == "result" and (saved := self._saved(journal, registration)) is not None:
             return saved
         assert isinstance(registration.payload, MCPTaskRegisteredPayload)
@@ -173,8 +176,7 @@ class MCPTaskManagement:
         except asyncio.CancelledError:
             if execution.final_result is None:
                 raise
-            # The reply may already be in hand while its observation is being
-            # committed. Keep that result before returning local cancellation.
+            # 取消可能发生在收到回复、尚未写完记录时；先保存已知结果，再处理本地取消。
             interruption = ToolOutcome(
                 data=execution.details,
                 completed=False,
@@ -197,8 +199,7 @@ class MCPTaskManagement:
             saved = await results.publish_task_result(
                 original_entry, execution.final_result, context, execution.details
             )
-            # Keep the business result separately from this management action's
-            # unsupported-input or cleanup failure, so later result reads work.
+            # 业务结果与本次管理操作的错误分开保存，后续读取仍可取得业务结果。
             return (
                 saved
                 if interruption is None

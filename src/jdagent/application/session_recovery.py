@@ -1,4 +1,4 @@
-"""Classify physical and logical session recovery outcomes."""
+"""分别判断日志文件是否完整，以及上次中断的对话能否安全继续。"""
 
 import json
 from contextlib import AbstractAsyncContextManager
@@ -31,7 +31,7 @@ from jdagent.ports import SessionPort
 
 
 class PhysicalRecovery(StrEnum):
-    """Whether storage needed a provably safe physical repair."""
+    """表示存储末尾是否需要修复，以及能否在保留有效记录的前提下修复。"""
 
     NO_REPAIR_NEEDED = "no_repair_needed"
     REPAIRED_FINAL_PARTIAL_RECORD = "repaired_final_partial_record"
@@ -39,7 +39,7 @@ class PhysicalRecovery(StrEnum):
 
 
 class LogicalRecovery(StrEnum):
-    """Whether the durable event prefix can safely continue."""
+    """表示已有完整事件能否支持安全继续，尤其关注中断时可能已经发生的副作用。"""
 
     CLEAN = "clean"
     INTERRUPTED_SAFE = "interrupted_safe"
@@ -48,6 +48,8 @@ class LogicalRecovery(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class PhysicalRecoveryResult:
+    """保存物理检查的结论，以及成功读取或修复后可用的事件序列。"""
+
     physical: PhysicalRecovery
     events: tuple[RuntimeEvent, ...]
     backup_path: Path | None = None
@@ -56,7 +58,7 @@ class PhysicalRecoveryResult:
 
 
 class RecoveryStorePort(Protocol):
-    """Validate and optionally repair only a storage-level final partial record."""
+    """检查历史记录的物理完整性，可修复文件末尾未写完的记录。"""
 
     async def recover_physical(self, session_id: str) -> PhysicalRecoveryResult: ...
 
@@ -65,6 +67,8 @@ class RecoveryStorePort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RecoveryResult:
+    """汇总存储检查与业务恢复判断，供上层决定继续原会话还是隔离未知操作。"""
+
     physical: PhysicalRecovery
     logical: LogicalRecovery | None
     events: tuple[RuntimeEvent, ...]
@@ -75,7 +79,7 @@ class RecoveryResult:
 
 @dataclass(frozen=True, slots=True)
 class PreparedResume:
-    """The safe session selected for continuation plus user-visible warnings."""
+    """给调用方返回可继续使用的会话标识，以及需要呈现给用户的恢复提示。"""
 
     session_id: str
     warnings: tuple[str, ...] = ()
@@ -87,8 +91,7 @@ def _turn_tail(events: tuple[RuntimeEvent, ...]) -> tuple[RuntimeEvent, ...]:
         (index for index, event in enumerate(events) if event.event_type in terminal_types),
         default=-1,
     )
-    # Idle compaction may retain the last Turn's ID for accounting. Its durable
-    # maintenance facts do not open a second foreground Turn or interrupt one.
+    # 空闲压缩的记账事件可能沿用上一轮标识，判断前台对话是否中断时应跳过这些事件。
     return tuple(
         event
         for event in events[last_terminal + 1 :]
@@ -101,7 +104,7 @@ def _turn_tail(events: tuple[RuntimeEvent, ...]) -> tuple[RuntimeEvent, ...]:
 
 
 def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecovery:
-    """Classify a structurally valid prefix without guessing missing side effects."""
+    """检查最后一轮中已请求、已开始和已完成的操作，判断继续执行是否可能重复副作用。"""
 
     started_all = {
         event.payload.call_id: event.payload.risk
@@ -144,13 +147,13 @@ def classify_logical_recovery(events: tuple[RuntimeEvent, ...]) -> LogicalRecove
 
 
 class SessionRecovery:
-    """Combine physical recovery with a separate logical safety classification."""
+    """先检查会话文件的物理完整性，再根据有效事件判断业务状态。"""
 
     def __init__(self, store: RecoveryStorePort) -> None:
         self._store = store
 
     def ownership(self, session_id: str) -> AbstractAsyncContextManager[None]:
-        """Keep the physical prefix stable through logical recovery publication."""
+        """在检查和写入恢复结果期间持有会话，防止作为判断依据的日志发生变化。"""
         return self._store.ownership(session_id)
 
     async def recover(self, session_id: str) -> RecoveryResult:
@@ -177,7 +180,7 @@ async def create_recovery_session(
     workspace_identity: str,
     new_session_id: str | None = None,
 ) -> str:
-    """Create a standalone recovery snapshot through the last safe terminal event."""
+    """以最后一个安全终态为界创建独立的恢复会话，并在快照中列出仍需核实的操作。"""
 
     if not source_events:
         raise ValueError("Recovery source must contain events")
@@ -263,7 +266,7 @@ async def close_interrupted_turn(
     session: SessionPort,
     events: tuple[RuntimeEvent, ...],
 ) -> RuntimeEvent:
-    """Append one explicit terminal fact for a safe, incomplete turn."""
+    """为可以安全收尾的中断轮次追加一次明确的终态。"""
 
     if classify_logical_recovery(events) is not LogicalRecovery.INTERRUPTED_SAFE:
         raise ValueError("Only a safely interrupted turn can be closed automatically")
@@ -303,7 +306,7 @@ async def prepare_session_resume(
     workspace_identity: str,
     allow_recovery_snapshot: bool,
 ) -> PreparedResume:
-    """Repair safe tails, close safe interruptions, and isolate uncertain writes."""
+    """检查存储尾部与最后一轮，关闭可安全收尾的中断；副作用不明时按调用方许可创建恢复会话。"""
 
     async with recovery.ownership(session_id):
         return await complete_before_cancel(
@@ -325,7 +328,7 @@ async def _prepare_owned_resume(
     workspace_identity: str,
     allow_recovery_snapshot: bool,
 ) -> PreparedResume:
-
+    """在已取得会话所有权后检查上次中断；可安全收尾时沿用原会话，需要隔离未知操作时创建恢复会话。"""
     result = await recovery.recover(session_id)
     if result.physical is PhysicalRecovery.UNRECOVERABLE:
         raise SessionError(

@@ -1,4 +1,4 @@
-"""Bounded UTF-8 file tools with whole-file revisions and exact edit batches."""
+"""提供有读取上限的 UTF-8 文件工具，依据整份文件的版本执行精确编辑。"""
 
 import asyncio
 import hashlib
@@ -38,7 +38,7 @@ _SKIP = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"
 
 
 class FileToolError(ValueError):
-    """A verified rejection before any file mutation."""
+    """表示文件修改开始前已能确定操作被拒绝。"""
 
     def __init__(self, code: ToolErrorCode, message: str) -> None:
         super().__init__(message)
@@ -46,7 +46,7 @@ class FileToolError(ValueError):
 
 
 def checked_path(root: Path, requested: str, *, directory: bool = False) -> Path:
-    """Reject escapes, devices, streams, links and unsupported path aliases."""
+    """校验目标及其路径组成，拒绝越出工作区、指向设备或使用不受支持别名的路径。"""
     supplied = Path(requested)
     if any(
         part != supplied.anchor
@@ -81,6 +81,7 @@ def checked_path(root: Path, requested: str, *, directory: bool = False) -> Path
 
 
 def revision(path: Path, raw: bytes) -> str:
+    """根据规范化的文件路径和完整字节生成版本标识，供编辑前检查文件身份和内容。"""
     return (
         "sha256:" + hashlib.sha256(os.path.normcase(str(path)).encode() + b"\x00" + raw).hexdigest()
     )
@@ -98,7 +99,7 @@ def decode_text(raw: bytes) -> str:
 
 
 def edit_bytes(raw: bytes, edits: list[JsonValue]) -> bytes:
-    """Resolve every match against one original, then preserve untouched bytes."""
+    """以同一份原始内容定位每项编辑并检查匹配范围，保留未被修改的字节。"""
     text = decode_text(raw)
     normalized = text.replace("\r\n", "\n")
     offsets = [0]
@@ -164,6 +165,7 @@ def _read_result(path: Path, args: JsonObject) -> ToolOutcome:
 
 
 def _mutate(path: Path, args: JsonObject, *, create: bool) -> ToolOutcome:
+    """在受保护的文件访问期间核对目标和预期版本，再执行写入或编辑。"""
     if not path.parent.is_dir():
         raise FileToolError(ToolErrorCode.INVALID_ARGUMENTS, "Parent directory must exist")
     content = require_string(args, "content").encode("utf-8") if create else b""
@@ -200,6 +202,7 @@ def _mutate(path: Path, args: JsonObject, *, create: bool) -> ToolOutcome:
 
 
 def _scan(root: Path, args: JsonObject, *, search: bool) -> ToolOutcome:
+    """在规定范围和扫描预算内枚举文件或查找匹配文本，记录未能完整搜索的情况。"""
     directory = checked_path(root, str(args.get("directory", ".")), directory=True)
     include = args.get("include_ignored", False) is True
     limit = require_integer(args, "limit", 100)
@@ -231,6 +234,7 @@ def _scan(root: Path, args: JsonObject, *, search: bool) -> ToolOutcome:
                     )
                 except (OSError, ValueError):
                     skipped += 1
+    # 每个待扫描目录携带从父目录继承的忽略规则，使同名模式在正确的目录范围内生效。
     stack: list[tuple[Path, list[tuple[Path, GitIgnoreSpec]]]] = [(directory, inherited_rules)]
     while stack:
         folder, inherited = stack.pop()
@@ -312,7 +316,7 @@ def _scan(root: Path, args: JsonObject, *, search: bool) -> ToolOutcome:
 
 
 def create_file_tools(workspace: Path) -> tuple[ToolDefinition, ...]:
-    """Build the five bounded file tools for one trusted local workspace."""
+    """为一个工作区装配文件查找、搜索、读取、写入和编辑工具，绑定各自的参数约定和执行函数。"""
     root = workspace.resolve(strict=True)
     path_schema: JsonObject = {"type": "string", "minLength": 1, "maxLength": 4096}
     scan: JsonObject = {
@@ -387,6 +391,8 @@ def create_file_tools(workspace: Path) -> tuple[ToolDefinition, ...]:
         operation: Callable[[JsonObject], ToolOutcome],
         description: str,
     ) -> ToolDefinition:
+        """为单个文件操作装配参数检查和执行函数，让不同的文件工具共用路径校验和取消处理。"""
+
         async def handler(args: JsonObject, context: ToolExecutionContext) -> ToolOutcome:
             del context
 
